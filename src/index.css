@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-qatar-maroon: #8D1B3D;
+  --color-qatar-maroon-dark: #6D112C;
+  --color-qatar-gray-bg: #F4F4F5;
+  --color-qatar-gray-border: #E5E7EB;
+  --color-qatar-gray-text: #6B7280;
+  --color-qatar-gray-dark: #374151;
+}
+
+@layer base {
+  body {
+    @apply bg-qatar-gray-bg text-qatar-gray-dark antialiased;
+    font-family: 'Cairo', sans-serif;
+  }
+}
+
+.arabic-font {
+  font-family: 'Cairo', sans-serif;
+}
+
+/* Custom shadow for cards */
+.qatar-card-shadow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+.qatar-card-shadow:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}

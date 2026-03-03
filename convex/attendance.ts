@@ -1,6 +1,57 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+export const deletePeriodData = mutation({
+    args: {
+        classId: v.id("classes"),
+        date: v.string(),
+        periodNumber: v.number(),
+    },
+    handler: async (ctx, args) => {
+        // Find the period record
+        const period = await ctx.db.query("periods")
+            .withIndex("by_class_date", q =>
+                q.eq("classId", args.classId).eq("date", args.date)
+            )
+            .filter(q => q.eq(q.field("periodNumber"), args.periodNumber))
+            .first();
+
+        if (!period) return { deleted: 0 };
+
+        // Delete all attendance records for this period
+        const records = await ctx.db.query("attendance")
+            .withIndex("by_period", q => q.eq("periodId", period._id))
+            .collect();
+        for (const r of records) await ctx.db.delete(r._id);
+
+        // Delete the period itself
+        await ctx.db.delete(period._id);
+
+        return { deleted: records.length };
+    },
+});
+
+
+export const getPeriodCountsByDate = query({
+    args: { schoolId: v.id("schools"), date: v.string() },
+    handler: async (ctx, args) => {
+        const periods = await ctx.db.query("periods")
+            .filter(q =>
+                q.and(
+                    q.eq(q.field("schoolId"), args.schoolId),
+                    q.eq(q.field("date"), args.date)
+                )
+            )
+            .collect();
+        const counts: Record<string, number> = {};
+        for (const p of periods) {
+            const cid = p.classId as string;
+            counts[cid] = (counts[cid] || 0) + 1;
+        }
+        return counts;
+    },
+});
+
 // Helper for name normalization
 const normalizeName = (name: string) => {
     if (!name) return "";
@@ -186,26 +237,39 @@ export const prepareSinglePeriodAttendance = mutation({
             }
         }
 
-        // Fuzzy Matches
-        const fuzzyMatches: { uploadedName: string; suggestedStudents: { studentId: string; fullName: string }[] }[] = [];
-        const unknownNames: string[] = [];
+        // Unified pending names: fuzzy + unknown, all with candidate list
+        const pendingNames: {
+            uploadedName: string;
+            candidateStudents: { studentId: string; fullName: string }[];
+        }[] = [];
 
         for (const uploadedName of normalizedUploadedNames) {
             if (usedUploadedNames.has(uploadedName)) continue;
 
-            const upWords = getFirstAndLastWords(uploadedName);
-            const suggestions = studentData
-                .filter(s => {
-                    const stWords = getFirstAndLastWords(s.normalized);
-                    return stWords.first === upWords.first && stWords.last === upWords.last;
-                })
-                .map(s => ({ studentId: s.id, fullName: s.fullName }));
+            const upWords = uploadedName.trim().split(/\s+/).filter(Boolean);
+            const upFirst = upWords[0] ?? "";
+            const upLast  = upWords[upWords.length - 1] ?? "";
 
-            if (suggestions.length > 0) {
-                fuzzyMatches.push({ uploadedName, suggestedStudents: suggestions });
-            } else {
-                unknownNames.push(uploadedName);
-            }
+            const candidates = studentData
+                .filter(s => {
+                    const stWords = s.normalized.trim().split(/\s+/).filter(Boolean);
+                    const stFirst = stWords[0] ?? "";
+                    const stLast  = stWords[stWords.length - 1] ?? "";
+
+                    // Condition 1: first+last word both match (original strict fuzzy)
+                    if (upWords.length >= 2 && stFirst === upFirst && stLast === upLast) return true;
+
+                    // Condition 2: first word matches
+                    if (upFirst && stFirst === upFirst) return true;
+
+                    // Condition 3: uploaded name is a single word contained in the student's full name
+                    if (upWords.length === 1 && s.normalized.includes(upFirst)) return true;
+
+                    return false;
+                })
+                .map(s => ({ studentId: s.id as string, fullName: s.fullName }));
+
+            pendingNames.push({ uploadedName, candidateStudents: candidates });
         }
 
         // 5. Construct Grid Model
@@ -218,8 +282,7 @@ export const prepareSinglePeriodAttendance = mutation({
         return {
             periodId,
             students: gridStudents,
-            fuzzyMatches,
-            unknownNames
+            pendingNames,
         };
     }
 });
@@ -300,6 +363,9 @@ export const getDailySummary = query({
         const school = await ctx.db.query("schools").first();
         if (!school) return { classes: [], summary: null };
 
+        // Read the configurable threshold (default 0 = any absence = absent for day)
+        const dailyAbsenceThreshold: number = school.dailyAbsenceThreshold ?? 0;
+
         const classes = await ctx.db.query("classes")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
@@ -334,9 +400,10 @@ export const getDailySummary = query({
                 clsStudents.forEach(st => {
                     const stAtt = clsAtt.filter(a => a.studentId === st._id);
                     if (stAtt.length > 0) {
-                        const hasAbsence = stAtt.some(a => a.status === "absent");
-                        if (hasAbsence) dayAbsent++;
-                        else dayPresent++; // Attended all recorded periods
+                        const absentPeriods = stAtt.filter(a => a.status === "absent").length;
+                        const isAbsentForDay = absentPeriods > dailyAbsenceThreshold;
+                        if (isAbsentForDay) dayAbsent++;
+                        else dayPresent++;
                     }
                 });
             }
@@ -594,17 +661,130 @@ export const toggleAttendance = mutation({
     }
 });
 
+export const getMatrixReport = query({
+    args: {
+        date: v.string(),
+        periodNumber: v.optional(v.number()),
+    },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return null;
+
+        // Read configurable threshold
+        const dailyAbsenceThreshold: number = school.dailyAbsenceThreshold ?? 0;
+
+        const classes = await ctx.db.query("classes")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .filter(q => q.eq(q.field("isActive"), true))
+            .collect();
+
+        const students = await ctx.db.query("students")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .filter(q => q.eq(q.field("isActive"), true))
+            .collect();
+
+        const allPeriods = await ctx.db.query("periods")
+            .filter(q => q.eq(q.field("date"), args.date))
+            .collect();
+
+        const relevantPeriods = args.periodNumber !== undefined
+            ? allPeriods.filter(p => p.periodNumber === args.periodNumber)
+            : allPeriods;
+
+        const periodIdsSet = new Set(relevantPeriods.map(p => p._id.toString()));
+
+        const allAtt = await ctx.db.query("attendance").collect();
+        const dailyAtt = allAtt.filter(a => periodIdsSet.has(a.periodId.toString()));
+
+        const classStats = classes.map(cls => {
+            const clsStudents = students.filter(s => s.classId === cls._id);
+            const totalStudents = clsStudents.length;
+
+            const clsPeriods = relevantPeriods.filter(p => p.classId === cls._id);
+            const clsPeriodIdsSet = new Set(clsPeriods.map(p => p._id.toString()));
+            const clsAtt = dailyAtt.filter(a => clsPeriodIdsSet.has(a.periodId.toString()));
+
+            const hasData = clsPeriods.length > 0;
+            let presentCount = 0;
+
+            if (hasData) {
+                for (const st of clsStudents) {
+                    const stAtt = clsAtt.filter(a => a.studentId === st._id);
+                    if (stAtt.length > 0) {
+                        const absentPeriods = stAtt.filter(a => a.status === "absent").length;
+                        const isPresentForDay = absentPeriods <= dailyAbsenceThreshold;
+                        if (isPresentForDay) presentCount++;
+                    }
+                }
+            }
+
+            const absentCount = hasData ? totalStudents - presentCount : 0;
+            return {
+                classId: cls._id as string,
+                className: cls.name,
+                grade: cls.grade,
+                track: (cls as any).track || "",
+                totalStudents,
+                presentCount,
+                absentCount,
+                presentPct: totalStudents > 0 && hasData ? (presentCount / totalStudents) * 100 : 0,
+                absentPct: totalStudents > 0 && hasData ? (absentCount / totalStudents) * 100 : 0,
+                hasData,
+            };
+        }).sort((a, b) => {
+            if (a.grade !== b.grade) return a.grade - b.grade;
+            const sA = parseInt(a.className.split("-")[1] || "0");
+            const sB = parseInt(b.className.split("-")[1] || "0");
+            return sA - sB;
+        });
+
+        const gradeTotals = [10, 11, 12].map(g => {
+            const gc = classStats.filter(c => c.grade === g);
+            const total = gc.reduce((s, c) => s + c.totalStudents, 0);
+            const present = gc.reduce((s, c) => s + c.presentCount, 0);
+            const absent = total - present;
+            return {
+                grade: g,
+                totalStudents: total,
+                presentCount: present,
+                absentCount: absent,
+                presentPct: total > 0 ? (present / total) * 100 : 0,
+                absentPct: total > 0 ? (absent / total) * 100 : 0,
+            };
+        });
+
+        const schTotal = classStats.reduce((acc, c) => {
+            acc.totalStudents += c.totalStudents;
+            acc.presentCount += c.presentCount;
+            acc.absentCount += c.absentCount;
+            return acc;
+        }, { totalStudents: 0, presentCount: 0, absentCount: 0 });
+
+        const schoolTotal = {
+            ...schTotal,
+            presentPct: schTotal.totalStudents > 0 ? (schTotal.presentCount / schTotal.totalStudents) * 100 : 0,
+            absentPct: schTotal.totalStudents > 0 ? (schTotal.absentCount / schTotal.totalStudents) * 100 : 0,
+        };
+
+        return { classStats, gradeTotals, schoolTotal };
+    }
+});
+
 export const getAttendanceReport = query({
     args: {
         schoolId: v.id("schools"),
         date: v.string(),
-        absentThreshold: v.optional(v.number()), // Default 2
-        presentThreshold: v.optional(v.number()), // Default 1
+        presentThreshold: v.optional(v.number()), // teal table: present in >= N periods = present
     },
     handler: async (ctx, args) => {
         const date = args.date;
-        const absentThreshold = args.absentThreshold ?? 2;
         const presentThreshold = args.presentThreshold ?? 1;
+
+        // Read daily absence threshold from school settings
+        const school = await ctx.db.get(args.schoolId);
+        const absentThreshold: number = (school?.dailyAbsenceThreshold ?? 0) + 1;
+        // dailyAbsenceThreshold = max allowed absent periods still = present
+        // So: absent for day if absentPeriods > dailyAbsenceThreshold  => absentPeriods >= dailyAbsenceThreshold + 1
 
         // 1. Fetch school-specific data
         const allClasses = await ctx.db.query("classes")
@@ -641,16 +821,22 @@ export const getAttendanceReport = query({
         // 5. Build report structure
         const classStats = allClasses.map(cls => {
             const clsStudents = allStudents.filter(s => s.classId === cls._id);
-            let absentInRed = 0;   // absent >= absentThreshold
-            let presentInTeal = 0; // present >= presentThreshold
+            let absentInRed   = 0;
+            let presentInTeal = 0;
+            let studentsWithData = 0;
 
             clsStudents.forEach(st => {
                 const statuses = studentAttMap.get(st._id) || [];
-                const absentCount = statuses.filter(s => s === "absent").length;
+                // Skip students with NO records — don't count as present or absent
+                if (statuses.length === 0) return;
+                studentsWithData++;
+                const absentCount  = statuses.filter(s => s === "absent").length;
                 const presentCount = statuses.filter(s => s === "present").length;
-                if (absentCount >= absentThreshold) absentInRed++;
+                if (absentCount  >= absentThreshold)  absentInRed++;
                 if (presentCount >= presentThreshold) presentInTeal++;
             });
+
+            const hasData = studentsWithData > 0;
 
             return {
                 classId: cls._id,
@@ -658,26 +844,38 @@ export const getAttendanceReport = query({
                 grade: cls.grade,
                 track: cls.track || "عام",
                 total: clsStudents.length,
-                redTable: { absent: absentInRed, present: clsStudents.length - absentInRed },
-                tealTable: { present: presentInTeal, absent: clsStudents.length - presentInTeal },
+                hasData,
+                studentsWithData,
+                // redTable  = criterion: absent if absentPeriods >= absentThreshold
+                redTable:  {
+                    absent:  absentInRed,
+                    present: studentsWithData - absentInRed,
+                },
+                // tealTable = criterion: present if presentPeriods >= presentThreshold
+                tealTable: {
+                    present: presentInTeal,
+                    absent:  studentsWithData - presentInTeal,
+                },
             };
         }).sort((a, b) => {
             if (a.grade !== b.grade) return a.grade - b.grade;
             return a.className.localeCompare(b.className, undefined, { numeric: true });
         });
 
-        // 6. Calculate Grade-Level Totals (The "Complete Section" requirement)
+        // 6. Calculate Grade-Level Totals (based on studentsWithData only)
         const grades = [10, 11, 12];
         const gradeTotals = grades.map(g => {
             const gClasses = classStats.filter(c => c.grade === g);
-            const total = gClasses.reduce((acc, c) => acc + c.total, 0);
-            const redAbsent = gClasses.reduce((acc, c) => acc + c.redTable.absent, 0);
-            const tealPresent = gClasses.reduce((acc, c) => acc + c.tealTable.present, 0);
+            const total              = gClasses.reduce((acc, c) => acc + c.total, 0);
+            const studentsWithData   = gClasses.reduce((acc, c) => acc + c.studentsWithData, 0);
+            const redAbsent          = gClasses.reduce((acc, c) => acc + c.redTable.absent, 0);
+            const tealPresent        = gClasses.reduce((acc, c) => acc + c.tealTable.present, 0);
             return {
                 grade: g,
                 total,
-                red: { absent: redAbsent, present: total - redAbsent },
-                teal: { present: tealPresent, absent: total - tealPresent },
+                studentsWithData,
+                red:  { absent: redAbsent,  present: studentsWithData - redAbsent },
+                teal: { present: tealPresent, absent: studentsWithData - tealPresent },
             };
         });
 

@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --color-qatar-maroon: #8D1B3D;
-  --color-qatar-maroon-dark: #6D112C;
+  --color-qatar-maroon: #9B1239;
+  --color-qatar-maroon-dark: #74092A;
   --color-qatar-gray-bg: #F4F4F5;
   --color-qatar-gray-border: #E5E7EB;
   --color-qatar-gray-text: #6B7280;
@@ -27,4 +27,28 @@
 
 .qatar-card-shadow:hover {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* iOS safe-area support */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Prevent horizontal overflow on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scroll on mobile */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive table scrolling */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

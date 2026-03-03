@@ -1,9 +1,61 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { format } from "date-fns";
-import { Calendar, Layers, Users, UserCheck, UserX, Activity, BarChart3 } from "lucide-react";
+import { Calendar, Users, UserCheck, UserX, Activity, BarChart3, Sigma, Check, X } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
+import StatCard from "../components/StatCard";
+
+function sortClassNameAscending(nameA: string, nameB: string): number {
+    const [gradeA, sectionA] = nameA.split("-").map(Number);
+    const [gradeB, sectionB] = nameB.split("-").map(Number);
+    if (gradeA !== gradeB) return gradeA - gradeB;
+    return sectionA - sectionB;
+}
+
+const GRADE_LABELS: Record<number, string> = {
+    10: "عاشر",
+    11: "حادي عشر",
+    12: "ثاني عشر",
+};
+
+/* ── Badge helpers (styling only) ── */
+function PresentBadge({ value }: { value: number }) {
+    if (value === 0) return <span className="text-slate-300 font-bold text-sm select-none">—</span>;
+    return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm">
+            <Check className="w-3.5 h-3.5" />{value}
+        </span>
+    );
+}
+function AbsentBadge({ value }: { value: number }) {
+    if (value === 0) return <span className="text-slate-300 font-bold text-sm select-none">—</span>;
+    return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-sm">
+            <X className="w-3.5 h-3.5" />{value}
+        </span>
+    );
+}
+function TotalBadge({ value }: { value: number }) {
+    return (
+        <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-black bg-slate-100 text-slate-600 border border-slate-200 shadow-sm">
+            {value}
+        </span>
+    );
+}
+function PctBadge({ pct }: { pct: number }) {
+    if (pct === 0) return <span className="text-slate-300 font-bold text-xs select-none">—</span>;
+    const style = pct >= 90
+        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+        : pct >= 75
+        ? "bg-amber-100 text-amber-800 border-amber-200"
+        : "bg-rose-100 text-rose-800 border-rose-200";
+    return (
+        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-black border shadow-sm ${style}`}>
+            {pct.toFixed(1)}%
+        </span>
+    );
+}
 
 export default function AdminDashboard() {
     const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -15,32 +67,18 @@ export default function AdminDashboard() {
 
         const { classes } = data;
 
-        // Filter classes by selected grade
-        let gradeClasses = classes.filter((c: any) => c.grade === selectedGrade);
-
-        // Sort descending by name so 10-10 is first, 10-1 is last like in the image
-        gradeClasses.sort((a: any, b: any) => {
-            // Very simple numeric sort if the name ends with a number
-            const numA = parseInt(a.name.split('-')[1] || "0", 10);
-            const numB = parseInt(b.name.split('-')[1] || "0", 10);
-            return numB - numA;
-        });
+        const gradeClasses = classes
+            .filter((c: any) => c.grade === selectedGrade)
+            .sort((a: any, b: any) => sortClassNameAscending(a.name, b.name));
 
         const totalStudents = gradeClasses.reduce((acc: number, c: any) => acc + c.totalStudents, 0);
-        const totalPresent = gradeClasses.reduce((acc: number, c: any) => acc + c.dayPresent, 0);
-        const totalAbsent = gradeClasses.reduce((acc: number, c: any) => acc + c.dayAbsent, 0);
-        const percentage = totalStudents > 0 ? (totalPresent / totalStudents) * 100 : 0;
-        const absentPercentage = totalStudents > 0 ? (totalAbsent / totalStudents) * 100 : 0;
+        const totalPresent  = gradeClasses.reduce((acc: number, c: any) => acc + c.dayPresent, 0);
+        const totalAbsent   = gradeClasses.reduce((acc: number, c: any) => acc + c.dayAbsent, 0);
+        const percentage    = totalStudents > 0 ? (totalPresent / totalStudents) * 100 : 0;
 
         return {
             classes: gradeClasses,
-            summary: {
-                totalStudents,
-                totalPresent,
-                totalAbsent,
-                percentage,
-                absentPercentage
-            }
+            summary: { totalStudents, totalPresent, totalAbsent, percentage },
         };
     }, [data, selectedGrade]);
 
@@ -54,98 +92,99 @@ export default function AdminDashboard() {
     }
 
     const { summary, classes } = tableData || { classes: [], summary: null };
-
-
-    // Formatting date
-    const parsedDate = new Date(date);
-    const formattedDate = format(parsedDate, "d/MM/yyyy");
-
-    const gradeLabel = selectedGrade === 10 ? "عاشر" : selectedGrade === 11 ? "حادي عشر" : "ثاني عشر";
+    const formattedDate = format(new Date(date), "d/MM/yyyy");
+    const gradeLabel = GRADE_LABELS[selectedGrade];
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 font-sans transition-all animate-in fade-in duration-500">
+
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-2xl qatar-card-shadow border border-qatar-gray-border">
-                <div className="space-y-2">
-                    <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-                        <div className="w-2 h-8 bg-qatar-maroon rounded-full"></div>
-                        لوحة المتابعة اليومية
-                    </h1>
-                    <p className="text-qatar-gray-text font-medium mr-5">مدرسة ابن تيمية الثانوية للبنين - Ibn Taymiyyah School</p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-3 bg-qatar-gray-bg px-4 py-2 rounded-xl border border-qatar-gray-border">
-                        <Calendar className="w-5 h-5 text-qatar-maroon" />
-                        <input
-                            type="date"
-                            className="bg-transparent border-none outline-none font-black text-slate-700 cursor-pointer"
-                            value={date}
-                            onChange={e => setDate(e.target.value)}
-                        />
+            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
+                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 sm:p-8">
+                    <div className="space-y-1">
+                        <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+                            لوحة المتابعة اليومية
+                        </h1>
+                        <p className="text-white/70 font-medium text-sm">مدرسة ابن تيمية الثانوية للبنين - Ibn Taymiyyah School</p>
                     </div>
-
-                    <div className="flex items-center gap-3 bg-qatar-gray-bg px-4 py-2 rounded-xl border border-qatar-gray-border">
-                        <Layers className="w-5 h-5 text-qatar-maroon" />
-                        <select
-                            className="bg-transparent border-none outline-none font-black text-slate-700 cursor-pointer"
-                            value={selectedGrade}
-                            onChange={(e) => setSelectedGrade(Number(e.target.value))}
-                        >
-                            <option value={10}>الصف العاشر</option>
-                            <option value={11}>الصف الحادي عشر</option>
-                            <option value={12}>الصف الثاني عشر</option>
-                        </select>
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex items-center gap-3 bg-white/15 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/20">
+                            <Calendar className="w-5 h-5 text-white" />
+                            <input
+                                type="date"
+                                className="bg-transparent border-none outline-none font-black text-white cursor-pointer"
+                                value={date}
+                                onChange={e => setDate(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Summary Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-5">
                 <StatCard
                     label="طلاب مكتشفون اليوم"
                     value={data?.summary?.totalStudents || 0}
                     subValue={`من أصل ${data?.summary?.totalCapacity || 0}`}
                     icon={<Users className="w-6 h-6" />}
-                    maroon
+                    color="maroon"
                 />
                 <StatCard
                     label="حاضرون فعلياً"
                     value={data?.summary?.totalPresent || 0}
                     icon={<UserCheck className="w-6 h-6" />}
-                    trend="success"
+                    color="green"
                 />
                 <StatCard
                     label="غائبون فعلياً"
                     value={data?.summary?.totalAbsent || 0}
                     icon={<UserX className="w-6 h-6" />}
-                    trend="danger"
+                    color="rose"
                 />
                 <StatCard
                     label="نسبة الحضور الحقيقية"
                     value={data?.summary?.percentage ? `${data.summary.percentage.toFixed(1)}%` : "0%"}
                     subValue={data?.summary?.totalStudents ? `لـ ${data.summary.totalStudents} طالب` : ""}
                     icon={<Activity className="w-6 h-6" />}
-                    trend={data?.summary?.percentage && data.summary.percentage > 90 ? "success" : "warning"}
+                    color="amber"
                 />
                 <StatCard
                     label="الصفوف المكتملة"
                     value={data?.summary?.classesImported || 0}
                     subValue={`من أصل ${data?.summary?.totalClasses || 0}`}
-                    icon={<Layers className="w-6 h-6" />}
-                    vibrant
+                    icon={<BarChart3 className="w-6 h-6" />}
+                    color="blue"
                 />
+            </div>
+
+            {/* Grade Toggle Buttons */}
+            <div className="flex justify-end gap-2">
+                {([10, 11, 12] as const).map((grade) => (
+                    <button
+                        key={grade}
+                        onClick={() => setSelectedGrade(grade)}
+                        className={`px-5 py-2 rounded-xl font-black text-sm transition-colors border ${
+                            selectedGrade === grade
+                                ? "bg-qatar-maroon text-white border-qatar-maroon"
+                                : "bg-slate-100 text-qatar-maroon border-slate-200 hover:bg-rose-50"
+                        }`}
+                    >
+                        {GRADE_LABELS[grade]}
+                    </button>
+                ))}
             </div>
 
             {/* Main Table Section */}
             <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
-                <div className="bg-qatar-maroon px-8 py-5 flex justify-between items-center">
+                <div className="bg-qatar-maroon px-6 sm:px-8 py-5 flex justify-between items-center">
                     <h2 className="text-xl font-black text-white flex items-center gap-3">
-                        <BarChart3 className="w-6 h-6 text-maroon-100" />
-                        تقرير الحضور والغياب - {gradeLabel}
+                        <BarChart3 className="w-6 h-6 text-white/70" />
+                        تقرير الحضور والغياب - الصف ال{gradeLabel}
                     </h2>
                     <div className="bg-white/10 px-4 py-1 rounded-full text-white/90 text-sm font-bold backdrop-blur-md border border-white/20">
-                        للتاريخ: {formattedDate}
+                        {formattedDate}
                     </div>
                 </div>
 
@@ -155,104 +194,119 @@ export default function AdminDashboard() {
                             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center">
                                 <Users className="w-10 h-10 text-slate-200" />
                             </div>
-                            <h3 className="text-xl font-bold text-slate-400 font-black">لا توجد بيانات لهذا التاريخ</h3>
+                            <h3 className="text-xl font-black text-slate-400">لا توجد بيانات لهذا التاريخ</h3>
                         </div>
                     ) : (
                         <table className="w-full border-collapse text-right">
                             <thead>
-                                <tr className="bg-slate-50 border-b border-qatar-gray-border">
-                                    <th className="py-4 px-6 text-sm font-black text-slate-500 uppercase tracking-wider">صف الدراسة</th>
-                                    <th className="py-4 px-6 text-sm font-black text-slate-500 uppercase tracking-wider">العدد الكلي</th>
-                                    <th className="py-4 px-6 text-sm font-black text-slate-500 uppercase tracking-wider text-teal-600">الحضور</th>
-                                    <th className="py-4 px-6 text-sm font-black text-slate-500 uppercase tracking-wider text-red-600">الغياب</th>
-                                    <th className="py-4 px-6 text-sm font-black text-slate-500 uppercase tracking-wider">نسبة الحضور</th>
+                                <tr style={{ background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }}>
+                                    <th className="py-4 px-6 text-sm font-black text-white text-right">صف دراسي</th>
+                                    <th className="py-4 px-6 text-sm font-black text-slate-300 text-center">العدد الكلي</th>
+                                    <th className="py-4 px-6 text-sm font-black text-emerald-300 text-center">الحضور</th>
+                                    <th className="py-4 px-6 text-sm font-black text-rose-300 text-center">الغياب</th>
+                                    <th className="py-4 px-6 text-sm font-black text-slate-300 text-center">نسبة الحضور</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-qatar-gray-border">
-                                {classes.map((cls: any) => (
-                                    <tr key={cls._id} className="hover:bg-slate-50/50 transition-colors group">
-                                        <td className="py-4 px-6 font-black text-slate-700 group-hover:text-qatar-maroon">{cls.name}</td>
-                                        <td className="py-4 px-6 font-bold text-slate-600">{cls.totalStudents}</td>
-                                        <td className="py-4 px-6 font-black text-teal-700 bg-teal-50/30">{cls.dayPresent}</td>
-                                        <td className="py-4 px-6 font-black text-red-700 bg-red-50/30">{cls.dayAbsent}</td>
-                                        <td className="py-4 px-6">
-                                            <div className="flex items-center gap-3 justify-end">
-                                                <span className={`text-sm font-black ${cls.presentPercentage > 90 ? 'text-teal-600' : 'text-slate-500'}`}>
-                                                    {cls.presentPercentage.toFixed(1)}%
-                                                </span>
-                                                <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
-                                                    <div
-                                                        className={`h-full rounded-full ${cls.presentPercentage > 90 ? 'bg-teal-500' : cls.presentPercentage > 75 ? 'bg-amber-500' : 'bg-red-500'}`}
-                                                        style={{ width: `${cls.presentPercentage}%` }}
-                                                    ></div>
+                            <tbody>
+                                {classes.map((cls: any, idx: number) => {
+                                    const hasActivity = cls.dayPresent > 0 || cls.dayAbsent > 0;
+                                    const hasAbsence  = cls.dayAbsent > 0;
+                                    return (
+                                        <tr
+                                            key={cls._id}
+                                            className={`border-b border-slate-100 transition-all cursor-default group ${
+                                                hasAbsence
+                                                    ? "bg-rose-50/30 hover:bg-rose-50/70"
+                                                    : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/40 hover:bg-slate-50"
+                                            }`}
+                                        >
+                                            {/* Class name */}
+                                            <td className="py-3.5 px-6 text-right">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-transform group-hover:scale-125 ${
+                                                        hasActivity
+                                                            ? hasAbsence ? "bg-rose-400" : "bg-emerald-400"
+                                                            : "bg-slate-200"
+                                                    }`} />
+                                                    <span className="font-black text-slate-700 group-hover:text-qatar-maroon transition-colors text-sm">
+                                                        {cls.name}
+                                                    </span>
                                                 </div>
+                                            </td>
+
+                                            {/* Total */}
+                                            <td className="py-3.5 px-6 text-center">
+                                                <TotalBadge value={cls.totalStudents} />
+                                            </td>
+
+                                            {/* Present */}
+                                            <td className="py-3.5 px-6 text-center">
+                                                <PresentBadge value={cls.dayPresent} />
+                                            </td>
+
+                                            {/* Absent */}
+                                            <td className="py-3.5 px-6 text-center">
+                                                <AbsentBadge value={cls.dayAbsent} />
+                                            </td>
+
+                                            {/* Pct + bar */}
+                                            <td className="py-3.5 px-6">
+                                                <div className="flex flex-col items-center gap-1.5">
+                                                    <PctBadge pct={cls.presentPercentage} />
+                                                    {cls.presentPercentage > 0 && (
+                                                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+                                                            <div
+                                                                className={`h-full rounded-full transition-all duration-700 ${
+                                                                    cls.presentPercentage >= 90 ? "bg-emerald-500"
+                                                                    : cls.presentPercentage >= 75 ? "bg-amber-500"
+                                                                    : "bg-qatar-maroon"
+                                                                }`}
+                                                                style={{ width: `${cls.presentPercentage}%` }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
+                                {/* Grade Total Row */}
+                                {summary && (
+                                    <tr style={{ background: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)" }}
+                                        className="border-t-2 border-rose-200">
+                                        <td className="py-4 px-6 text-right">
+                                            <div className="flex items-center gap-2">
+                                                <Sigma className="w-4 h-4 text-qatar-maroon flex-shrink-0" />
+                                                <span className="font-black text-qatar-maroon text-sm">إجمالي الصف ال{gradeLabel}</span>
                                             </div>
                                         </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-black bg-white text-slate-700 border border-slate-300 shadow-sm">
+                                                {summary.totalStudents}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-black bg-emerald-600 text-white shadow-sm">
+                                                <Check className="w-3.5 h-3.5" />{summary.totalPresent}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-black bg-qatar-maroon text-white shadow-sm">
+                                                <X className="w-3.5 h-3.5" />{summary.totalAbsent}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-6 text-center">
+                                            <PctBadge pct={summary.percentage} />
+                                        </td>
                                     </tr>
-                                ))}
-                                {/* Grade Totals Row */}
-                                <tr className="bg-qatar-gray-bg font-black">
-                                    <td className="py-6 px-6 text-slate-800">إجمالي {gradeLabel}</td>
-                                    <td className="py-6 px-6 text-slate-600 font-black">{summary?.totalStudents}</td>
-                                    <td className="py-6 px-6 text-teal-800 font-black">{summary?.totalPresent}</td>
-                                    <td className="py-6 px-6 text-red-800 font-black">{summary?.totalAbsent}</td>
-                                    <td className="py-6 px-6">
-                                        <span className="bg-qatar-maroon text-white px-3 py-1 rounded-lg text-sm">
-                                            {summary?.percentage.toFixed(1)}%
-                                        </span>
-                                    </td>
-                                </tr>
+                                )}
                             </tbody>
                         </table>
                     )}
                 </div>
             </div>
 
-        </div>
-    );
-}
-
-function StatCard({ label, value, icon, subValue, maroon, vibrant, trend }: {
-    label: string;
-    value: string | number;
-    icon: React.ReactNode;
-    subValue?: string;
-    maroon?: boolean;
-    vibrant?: boolean;
-    trend?: 'success' | 'warning' | 'danger';
-}) {
-    const trendColors = {
-        success: 'text-emerald-600 bg-emerald-50 border-emerald-100',
-        warning: 'text-amber-600 bg-amber-50 border-amber-100',
-        danger: 'text-rose-600 bg-rose-50 border-rose-100',
-    };
-
-    return (
-        <div className="bg-white p-6 rounded-2xl qatar-card-shadow border border-qatar-gray-border flex flex-col gap-4 relative overflow-hidden group">
-            {maroon && <div className="absolute top-0 right-0 left-0 h-1 bg-qatar-maroon"></div>}
-
-            <div className="flex justify-between items-start">
-                <div className={`p-3 rounded-xl ${maroon ? 'bg-qatar-maroon text-white' :
-                    vibrant ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                    {icon}
-                </div>
-                {trend && (
-                    <div className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${trendColors[trend]}`}>
-                        {trend === 'success' ? 'ممتاز' : trend === 'warning' ? 'متوسط' : 'منخفض'}
-                    </div>
-                )}
-            </div>
-
-            <div>
-                <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-1">{label}</p>
-                <div className="flex items-baseline gap-2">
-                    <h3 className="text-2xl font-black text-slate-800">{value}</h3>
-                    {subValue && <span className="text-xs font-bold text-slate-400">{subValue}</span>}
-                </div>
-            </div>
-
-            <div className="absolute -bottom-2 -left-2 w-12 h-12 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10 opacity-50"></div>
         </div>
     );
 }

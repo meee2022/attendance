@@ -6,7 +6,11 @@ export default defineSchema({
         name: v.string(),
         code: v.string(),
         logoUrl: v.optional(v.string()),
-        createdAt: v.string(), // ISO date
+        createdAt: v.string(),
+        periodsPerDay: v.optional(v.number()),
+        currentDate: v.optional(v.string()),
+        adminPin: v.optional(v.string()), // default "1234"
+        dailyAbsenceThreshold: v.optional(v.number()), // max absent periods still = present
     }),
     classes: defineTable({
         schoolId: v.id("schools"),
@@ -53,4 +57,11 @@ export default defineSchema({
         source: v.string(), // "upload", "manual"
         notes: v.optional(v.string()), // For unverified names
     }).index("by_period", ["periodId"]).index("by_student", ["studentId"]),
+    messageTemplates: defineTable({
+        schoolId: v.id("schools"),
+        name: v.string(),
+        type: v.union(v.literal("present"), v.literal("absent")),
+        body: v.string(),
+        isActive: v.boolean(),
+    }).index("by_school", ["schoolId"]),
 });

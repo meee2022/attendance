@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import * as xlsx from "xlsx";
 import { format } from "date-fns";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Layers, Search, Save, RotateCcw, UserCheck, UserX } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Layers, Search, Save, RotateCcw, UserCheck, UserX, BookOpen, Calendar, Hash, Lock, ChevronDown } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import PeriodGridSection from "./PeriodGridSection";
@@ -69,6 +69,9 @@ export default function TeacherUpload() {
     const [selectedClass, setSelectedClass] = useState("");
     const [selectedSubject, setSelectedSubject] = useState("");
     const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+    // Override with locked date from settings as soon as it loads
+    const lockedDate: string | undefined = data?.schools?.[0]?.currentDate;
+    const activeDate = lockedDate ?? date;
     const [periodNumber, setPeriodNumber] = useState("1");
     const [file, setFile] = useState<File | null>(null);
     const [parsedNames, setParsedNames] = useState<string[]>([]);
@@ -82,6 +85,13 @@ export default function TeacherUpload() {
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const uploadedFile = e.target.files?.[0];
         if (!uploadedFile) return;
+
+        if (!selectedClass || !selectedSubject || !periodNumber) {
+            setError("يرجى تحديد الصف والحصة والمادة وتحرَّ الدقة في الاختيار قبل رفع الملف.");
+            e.target.value = "";
+            return;
+        }
+
         setFile(uploadedFile);
         setError("");
         setDraftResult(null);
@@ -157,7 +167,7 @@ export default function TeacherUpload() {
                 schoolId,
                 classId: selectedClass as any,
                 subjectId: selectedSubject as any,
-                date,
+                date: activeDate,
                 periodNumber: parseInt(periodNumber, 10),
                 presentNames: parsedNames
             });
@@ -177,17 +187,6 @@ export default function TeacherUpload() {
         setDraftResult({ ...draftResult, students: newStudents });
     };
 
-    const resolveFuzzyMatch = (uploadedName: string, studentId: string) => {
-        if (!draftResult) return;
-        // Mark the selected student as present
-        const newStudents = draftResult.students.map((s: any) =>
-            s.studentId === studentId ? { ...s, present: true } : s
-        );
-        // Remove this fuzzy match from the list
-        const newFuzzy = draftResult.fuzzyMatches.filter((f: any) => f.uploadedName !== uploadedName);
-        setDraftResult({ ...draftResult, students: newStudents, fuzzyMatches: newFuzzy });
-    };
-
     const handleFinalize = async () => {
         if (!draftResult || !data) return;
 
@@ -202,7 +201,7 @@ export default function TeacherUpload() {
                 schoolId,
                 classId: selectedClass as any,
                 subjectId: selectedSubject as any,
-                date,
+                date: activeDate,
                 periodNumber: parseInt(periodNumber, 10),
                 finalStudents: draftResult.students.map((s: any) => ({
                     studentId: s.studentId,
@@ -228,12 +227,15 @@ export default function TeacherUpload() {
 
     return (
         <div className="max-w-7xl mx-auto space-y-10 font-sans transition-all animate-in fade-in duration-500 pb-20">
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-                    <Upload className="w-8 h-8 text-qatar-maroon" />
-                    رصد حضور الحصص
-                </h1>
-                <p className="text-qatar-gray-text font-medium italic">ارفع ملف حضور Teams أو Excel وسنقوم بمطابقته تلقائياً مع قائمة الصف</p>
+            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
+                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                <div className="flex flex-col gap-1 p-5 sm:p-8">
+                    <h1 className="text-3xl font-black text-white flex items-center gap-3">
+                        <Upload className="w-8 h-8 text-white/80" />
+                        رصد حضور الحصص
+                    </h1>
+                    <p className="text-white/70 font-medium mr-11">ارفع ملف حضور Teams أو Excel وسنقوم بمطابقته تلقائياً مع قائمة الصف</p>
+                </div>
             </div>
 
             {/* Step 1: Configuration & Upload */}
@@ -246,38 +248,98 @@ export default function TeacherUpload() {
                         </h2>
                     </div>
 
-                    <div className="p-8 space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <FormGroup label="الصف الدراسي" icon={<Layers className="w-4 h-4" />}>
-                                <select className="w-full bg-qatar-gray-bg border-qatar-gray-border rounded-xl px-4 py-3 font-black text-slate-700 outline-none appearance-none" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
+                    <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+                            {/* Class */}
+                            <div className={`rounded-2xl border-2 p-4 transition-all ${selectedClass ? 'border-qatar-maroon bg-rose-50' : 'border-rose-200 bg-rose-50/40 hover:border-qatar-maroon/60'}`}>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedClass ? 'bg-qatar-maroon text-white' : 'bg-rose-100 text-qatar-maroon'}`}>
+                                        <Layers className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-xs font-black text-qatar-maroon">الصف الدراسي</span>
+                                    {selectedClass && <span className="mr-auto text-[10px] bg-qatar-maroon text-white px-2 py-0.5 rounded-full font-black">✓ محدد</span>}
+                                </div>
+                                <select
+                                    className={`w-full rounded-xl px-3 py-2.5 font-black text-sm outline-none appearance-none border transition-colors ${selectedClass ? 'bg-white border-qatar-maroon/30 text-qatar-maroon' : 'bg-white/70 border-rose-200 text-slate-500'}`}
+                                    value={selectedClass}
+                                    onChange={e => setSelectedClass(e.target.value)}
+                                >
                                     <option value="">-- اختر الصف --</option>
                                     {data.classes.map((c: any) => (
-                                        <option key={c._id} value={c._id}>{c.name}</option>
+                                        <option key={c._id} value={c._id}>{c.name}{c.track ? ` — ${c.track}` : ""}</option>
                                     ))}
                                 </select>
-                            </FormGroup>
-                            <FormGroup label="المادة" icon={<Layers className="w-4 h-4" />}>
-                                <select className="w-full bg-qatar-gray-bg border-qatar-gray-border rounded-xl px-4 py-3 font-black text-slate-700 outline-none appearance-none" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}>
+                            </div>
+
+                            {/* Subject */}
+                            <div className={`rounded-2xl border-2 p-4 transition-all ${selectedSubject ? 'border-blue-500 bg-blue-50' : 'border-blue-200 bg-blue-50/40 hover:border-blue-400'}`}>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedSubject ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600'}`}>
+                                        <BookOpen className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-xs font-black text-blue-600">المادة</span>
+                                    {selectedSubject && <span className="mr-auto text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-black">✓ محدد</span>}
+                                </div>
+                                <select
+                                    className={`w-full rounded-xl px-3 py-2.5 font-black text-sm outline-none appearance-none border transition-colors ${selectedSubject ? 'bg-white border-blue-300 text-blue-700' : 'bg-white/70 border-blue-200 text-slate-500'}`}
+                                    value={selectedSubject}
+                                    onChange={e => setSelectedSubject(e.target.value)}
+                                >
                                     <option value="">-- اختر المادة --</option>
                                     {data.subjects.map((s: any) => (
                                         <option key={s._id} value={s._id}>{s.name}</option>
                                     ))}
                                 </select>
-                            </FormGroup>
-                            <FormGroup label="تاريخ الحصة" icon={<Layers className="w-4 h-4" />}>
-                                <input type="date" className="w-full bg-qatar-gray-bg border-qatar-gray-border rounded-xl px-4 py-3 font-black text-slate-700 outline-none" value={date} onChange={e => setDate(e.target.value)} />
-                            </FormGroup>
-                            <FormGroup label="رقم الحصة" icon={<Layers className="w-4 h-4" />}>
-                                <select className="w-full bg-qatar-gray-bg border-qatar-gray-border rounded-xl px-4 py-3 font-black text-slate-700 outline-none appearance-none" value={periodNumber} onChange={e => setPeriodNumber(e.target.value)}>
-                                    {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                            </div>
+
+                            {/* Date — locked, read-only */}
+                            <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+                                        <Calendar className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-xs font-black text-emerald-700">تاريخ الحصة</span>
+                                    <span className="mr-auto flex items-center gap-1 text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-black">
+                                        <Lock className="w-2.5 h-2.5" />
+                                        مثبَّت
+                                    </span>
+                                </div>
+                                <div className="w-full rounded-xl px-3 py-2.5 font-black text-sm text-emerald-900 bg-white border border-emerald-300 text-center tracking-widest select-none">
+                                    {activeDate}
+                                </div>
+                                <p className="mt-1.5 text-[10px] text-emerald-600/70 font-bold text-center">يُحدَّد من صفحة الإعدادات فقط</p>
+                            </div>
+
+                            {/* Period Number */}
+                            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 hover:border-amber-400 transition-all">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center">
+                                        <Hash className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-xs font-black text-amber-700">رقم الحصة</span>
+                                    {periodNumber && <span className="mr-auto text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black">ح {periodNumber}</span>}
+                                </div>
+                                <select
+                                    className="w-full rounded-xl px-3 py-2.5 font-black text-sm text-amber-800 bg-white border border-amber-300 outline-none appearance-none"
+                                    value={periodNumber}
+                                    onChange={e => setPeriodNumber(e.target.value)}
+                                >
+                                    {Array.from({ length: data.schools?.[0]?.periodsPerDay ?? 5 }, (_, i) => i + 1).map(num => (
                                         <option key={num} value={num}>الحصة {num}</option>
                                     ))}
                                 </select>
-                            </FormGroup>
+                            </div>
+
                         </div>
 
+                        {/* Upload Area */}
                         <div className="space-y-4">
-                            <div className={`group relative mt-1 flex justify-center px-10 py-12 border-2 border-dashed rounded-2xl transition-all duration-300 ${file ? 'border-qatar-maroon bg-qatar-maroon/5' : 'border-qatar-gray-border hover:bg-slate-50'}`}>
+                        <div className={`relative flex justify-center px-10 py-14 border-2 border-dashed rounded-2xl transition-all duration-300 ${
+                            file
+                                ? 'border-qatar-maroon bg-gradient-to-br from-rose-50 to-white'
+                                : 'border-slate-300 bg-gradient-to-br from-slate-50 to-white hover:border-qatar-maroon/50 hover:from-rose-50/30'
+                        }`}>
                                 <div className="space-y-4 text-center">
                                     <div className={`mx-auto h-20 w-20 rounded-full flex items-center justify-center transition-colors duration-300 ${file ? 'bg-qatar-maroon text-white shadow-lg' : 'bg-slate-100 text-slate-300'}`}>
                                         <FileSpreadsheet className="h-10 w-10" />
@@ -352,53 +414,23 @@ export default function TeacherUpload() {
                         </div>
 
                         <div className="p-8 space-y-12">
-                            {/* Fuzzy Matches Notification / Resolver */}
-                            {draftResult.fuzzyMatches.length > 0 && (
-                                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl overflow-hidden animate-pulse-subtle">
-                                    <div className="bg-amber-600 px-6 py-3 flex items-center gap-3 text-white">
-                                        <AlertCircle className="w-5 h-5" />
-                                        <span className="font-black text-lg">مطابقات غير دقيقة تحتاج تدخل بشري ({draftResult.fuzzyMatches.length})</span>
-                                    </div>
-                                    <div className="p-6 space-y-4">
-                                        {draftResult.fuzzyMatches.map((fm: any, i: number) => (
-                                            <div key={i} className="flex flex-col lg:flex-row lg:items-center justify-between p-5 bg-white rounded-xl border border-amber-100 gap-5 shadow-sm transition-all hover:bg-amber-50/30">
-                                                <div>
-                                                    <p className="text-xs font-black text-amber-600 mb-1 uppercase tracking-widest">المكتشف في الملف:</p>
-                                                    <p className="text-xl font-black text-slate-800 italic underline decoration-qatar-maroon decoration-2 underline-offset-4">{fm.uploadedName}</p>
-                                                </div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {fm.suggestedStudents.map((s: any) => (
-                                                        <button
-                                                            key={s.studentId}
-                                                            onClick={() => resolveFuzzyMatch(fm.uploadedName, s.studentId)}
-                                                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl text-sm font-black shadow-md transition-all active:scale-95"
-                                                        >
-                                                            مطابقة مع: {s.fullName}
-                                                        </button>
-                                                    ))}
-                                                    <button onClick={() => resolveFuzzyMatch(fm.uploadedName, "")} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-5 py-3 rounded-xl text-sm font-black border border-slate-200 transition-colors">
-                                                        تجاهل هذا الاسم
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Unknown Names List */}
-                            {draftResult.unknownNames.length > 0 && (
-                                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
-                                    <div className="flex items-center gap-3 text-slate-500 font-black mb-4 uppercase tracking-widest text-xs">
-                                        <UserX className="w-4 h-4" />
-                                        <span>أسماء مجهولة في الملف (لم يتم التعرف عليها):</span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {draftResult.unknownNames.map((n: string, i: number) => (
-                                            <span key={i} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-black text-slate-400 opacity-70 line-through decoration-rose-400 italic shadow-sm">{n}</span>
-                                        ))}
-                                    </div>
-                                </div>
+                            {/* Ambiguous Names Panel */}
+                            {draftResult.pendingNames?.length > 0 && (
+                                <AmbiguousNamesPanel
+                                    pendingNames={draftResult.pendingNames}
+                                    onConfirm={(studentId) => {
+                                        const newStudents = draftResult.students.map((s: any) =>
+                                            s.studentId === studentId ? { ...s, present: true } : s
+                                        );
+                                        setDraftResult((prev: any) => ({ ...prev, students: newStudents }));
+                                    }}
+                                    onResolve={(uploadedName) => {
+                                        setDraftResult((prev: any) => ({
+                                            ...prev,
+                                            pendingNames: prev.pendingNames.filter((p: any) => p.uploadedName !== uploadedName)
+                                        }));
+                                    }}
+                                />
                             )}
 
                             {/* Verification Grid */}
@@ -455,9 +487,15 @@ export default function TeacherUpload() {
                             </div>
 
                             <div className="flex flex-col items-center gap-6 pt-10 border-t border-qatar-gray-border">
+                                {draftResult.pendingNames?.length > 0 && (
+                                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3 rounded-xl text-sm font-black">
+                                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                        هناك {draftResult.pendingNames.length} {draftResult.pendingNames.length === 1 ? "اسم غير متطابق" : "أسماء غير متطابقة"} لم يتم التعامل معها بعد — ستُتجاهل عند الحفظ.
+                                    </div>
+                                )}
                                 <button
                                     onClick={handleFinalize}
-                                    disabled={isFinalizing || draftResult.fuzzyMatches.length > 0}
+                                    disabled={isFinalizing}
                                     className="group relative overflow-hidden bg-emerald-600 hover:bg-emerald-700 text-white px-20 py-6 rounded-2xl font-black text-2xl shadow-2xl active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none"
                                 >
                                     <span className="relative z-10 flex items-center gap-4">
@@ -474,12 +512,6 @@ export default function TeacherUpload() {
                                         )}
                                     </span>
                                 </button>
-                                {draftResult.fuzzyMatches.length > 0 && (
-                                    <p className="text-rose-600 font-black italic animate-bounce flex items-center gap-2">
-                                        <AlertCircle className="w-4 h-4" />
-                                        يرجى حل جميع المطابقات غير الدقيقة أولاً
-                                    </p>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -526,7 +558,7 @@ export default function TeacherUpload() {
                         <RotateCcw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
                     </button>
                 </div>
-                <PeriodGridSection date={date} />
+                <PeriodGridSection date={activeDate} focusClassId={selectedClass || null} />
             </div>
         </div>
     );
@@ -541,6 +573,116 @@ function FormGroup({ label, children, icon }: { label: string; children: React.R
             </label>
             <div className="relative group">
                 {children}
+            </div>
+        </div>
+    );
+}
+
+/* ─── Ambiguous Names Panel ─── */
+interface PendingEntry {
+    uploadedName: string;
+    candidateStudents: { studentId: string; fullName: string }[];
+}
+
+function AmbiguousNamesPanel({
+    pendingNames,
+    onConfirm,
+    onResolve,
+}: {
+    pendingNames: PendingEntry[];
+    onConfirm: (studentId: string) => void;
+    onResolve: (uploadedName: string) => void;
+}) {
+    // Track the selected candidate per uploaded name
+    const [selections, setSelections] = React.useState<Record<string, string>>({});
+
+    const handleConfirm = (uploadedName: string) => {
+        const studentId = selections[uploadedName];
+        if (!studentId) return;
+        onConfirm(studentId);
+        onResolve(uploadedName);
+    };
+
+    return (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl overflow-hidden">
+            <div className="bg-amber-600 px-6 py-3 flex items-center gap-3 text-white">
+                <AlertCircle className="w-5 h-5" />
+                <span className="font-black text-lg">
+                    أسماء غير متطابقة – تحتاج مراجعة المعلم ({pendingNames.length})
+                </span>
+            </div>
+            <div className="p-6 space-y-4">
+                {pendingNames.map((entry) => (
+                    <div key={entry.uploadedName}
+                        className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5 space-y-4">
+
+                        {/* Uploaded name */}
+                        <div>
+                            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">
+                                الاسم المكتشف في الملف:
+                            </p>
+                            <p className="text-xl font-black text-slate-800 italic">
+                                {entry.uploadedName}
+                            </p>
+                        </div>
+
+                        {entry.candidateStudents.length > 0 ? (
+                            <div className="space-y-3">
+                                <p className="text-xs font-black text-slate-500">
+                                    اختر الطالب المقصود (إن وجد):
+                                </p>
+                                <div className="relative">
+                                    <select
+                                        value={selections[entry.uploadedName] ?? ""}
+                                        onChange={e => setSelections(prev => ({
+                                            ...prev,
+                                            [entry.uploadedName]: e.target.value
+                                        }))}
+                                        className="w-full rounded-xl border-2 border-amber-200 bg-amber-50 px-4 py-3 font-bold text-sm text-slate-700 outline-none appearance-none focus:border-amber-400 cursor-pointer"
+                                    >
+                                        <option value="">-- اختر من القائمة --</option>
+                                        {entry.candidateStudents.map(c => (
+                                            <option key={c.studentId} value={c.studentId}>
+                                                {c.fullName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500 pointer-events-none" />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleConfirm(entry.uploadedName)}
+                                        disabled={!selections[entry.uploadedName]}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+                                    >
+                                        <UserCheck className="w-4 h-4" />
+                                        تأكيد – وضع كحاضر
+                                    </button>
+                                    <button
+                                        onClick={() => onResolve(entry.uploadedName)}
+                                        className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-5 py-2.5 rounded-xl text-sm font-black border border-slate-200 transition-colors active:scale-95 flex items-center gap-2"
+                                    >
+                                        <UserX className="w-4 h-4" />
+                                        تجاهل
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3">
+                                <p className="text-xs text-slate-400 font-bold flex-1 italic">
+                                    لا يوجد طالب مطابق في هذا الصف.
+                                </p>
+                                <button
+                                    onClick={() => onResolve(entry.uploadedName)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-5 py-2.5 rounded-xl text-sm font-black border border-slate-200 transition-colors active:scale-95 flex items-center gap-2"
+                                >
+                                    <UserX className="w-4 h-4" />
+                                    تجاهل
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                ))}
             </div>
         </div>
     );

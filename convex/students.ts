@@ -88,6 +88,35 @@ export const importStudentsFromSheet = mutation({
     }
 });
 
+export const deleteAllStudentsAndAttendance = mutation({
+    args: { schoolId: v.id("schools") },
+    handler: async (ctx, args) => {
+        // Delete all attendance records for the school
+        const allAtt = await ctx.db.query("attendance")
+            .filter(q => q.eq(q.field("schoolId"), args.schoolId))
+            .collect();
+        for (const a of allAtt) await ctx.db.delete(a._id);
+
+        // Delete all periods
+        const allPeriods = await ctx.db.query("periods")
+            .filter(q => q.eq(q.field("schoolId"), args.schoolId))
+            .collect();
+        for (const p of allPeriods) await ctx.db.delete(p._id);
+
+        // Delete all students
+        const allStudents = await ctx.db.query("students")
+            .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
+            .collect();
+        for (const s of allStudents) await ctx.db.delete(s._id);
+
+        return {
+            students: allStudents.length,
+            attendance: allAtt.length,
+            periods: allPeriods.length,
+        };
+    },
+});
+
 export const deleteDummyStudents = mutation({
     args: { schoolId: v.id("schools") },
     handler: async (ctx, args) => {

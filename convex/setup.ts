@@ -141,10 +141,21 @@ export const getInitialData = query({
         const schools = await ctx.db.query("schools").collect();
         const classes = await ctx.db.query("classes").collect();
         const subjects = await ctx.db.query("subjects").collect();
+        // Do NOT load all students — use getStudentCounts for counts
+        return { schools, classes, subjects };
+    },
+});
 
-        // We don't fetch all students upfront if there are many, but for MVP it's fine
+export const getStudentCounts = query({
+    args: {},
+    handler: async (ctx) => {
         const students = await ctx.db.query("students").collect();
-
-        return { schools, classes, subjects, students };
+        const total = students.length;
+        const perClass: Record<string, number> = {};
+        for (const s of students) {
+            const cid = s.classId as string;
+            perClass[cid] = (perClass[cid] || 0) + 1;
+        }
+        return { total, perClass };
     },
 });

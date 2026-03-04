@@ -26,9 +26,11 @@ function getTrack(track: string | undefined) {
 interface PeriodGridSectionProps {
     date: string;
     focusClassId?: string | null;
+    highlightPeriod?: number | null;
+    highlightSubjectName?: string | null;
 }
 
-export default function PeriodGridSection({ date, focusClassId }: PeriodGridSectionProps) {
+export default function PeriodGridSection({ date, focusClassId, highlightPeriod, highlightSubjectName }: PeriodGridSectionProps) {
     const [selectedGrade, setSelectedGrade] = useState<number>(10);
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
@@ -262,6 +264,8 @@ export default function PeriodGridSection({ date, focusClassId }: PeriodGridSect
                         schoolId={schoolId}
                         date={date}
                         periodsPerDay={periodsPerDay}
+                        highlightPeriod={highlightPeriod}
+                        highlightSubjectName={highlightSubjectName}
                     />
                 </div>
             )}

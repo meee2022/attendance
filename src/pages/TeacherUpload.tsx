@@ -558,7 +558,7 @@ export default function TeacherUpload() {
                         <RotateCcw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
                     </button>
                 </div>
-                <PeriodGridSection date={activeDate} focusClassId={selectedClass || null} />
+                <PeriodGridSection date={activeDate} focusClassId={selectedClass || null} highlightPeriod={periodNumber ? parseInt(periodNumber, 10) : null} highlightSubjectName={selectedSubject && data?.subjects ? (data.subjects.find((s: any) => s._id === selectedSubject)?.name ?? null) : null} />
             </div>
         </div>
     );

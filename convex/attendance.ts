@@ -889,3 +889,73 @@ export const getAttendanceReport = query({
         };
     }
 });
+
+export const getFrequentlyAbsentStudents = query({
+    args: { schoolId: v.id("schools"), date: v.string() },
+    handler: async (ctx, args) => {
+        // Get all classes for this school
+        const classes = await ctx.db
+            .query("classes")
+            .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
+            .collect();
+
+        // For each class, get periods on this date, then count absences per student
+        const countMap = new Map<string, number>();
+
+        for (const cls of classes) {
+            // Get all periods for this class on the selected date
+            const periods = await ctx.db
+                .query("periods")
+                .withIndex("by_class_date", q =>
+                    q.eq("classId", cls._id).eq("date", args.date)
+                )
+                .collect();
+
+            if (periods.length === 0) continue;
+
+            // For each period, get attendance records
+            for (const period of periods) {
+                const absentRecs = await ctx.db
+                    .query("attendance")
+                    .withIndex("by_period", q => q.eq("periodId", period._id))
+                    .filter(q => q.eq(q.field("status"), "absent"))
+                    .collect();
+
+                for (const rec of absentRecs) {
+                    if (!rec.studentId) continue;
+                    const id = rec.studentId as string;
+                    countMap.set(id, (countMap.get(id) ?? 0) + 1);
+                }
+            }
+        }
+
+        // Keep only students absent in >= 3 periods, sorted descending
+        const qualified = [...countMap.entries()]
+            .filter(([, count]) => count >= 3)
+            .sort((a, b) => b[1] - a[1]);
+
+        // Resolve student + class info
+        const results: {
+            studentId: string;
+            studentName: string;
+            className: string;
+            phone: string | null;
+            absentCount: number;
+        }[] = [];
+
+        for (const [studentId, count] of qualified) {
+            const student = await ctx.db.get(studentId as any);
+            if (!student) continue;
+            const cls = (student as any).classId ? await ctx.db.get((student as any).classId) : null;
+            results.push({
+                studentId,
+                studentName: (student as any).fullName ?? (student as any).name ?? studentId,
+                className: cls ? (cls as any).name ?? "" : "",
+                phone: (student as any).guardianPhone ?? (student as any).phone ?? null,
+                absentCount: count,
+            });
+        }
+
+        return results;
+    },
+});

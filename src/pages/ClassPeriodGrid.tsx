@@ -11,6 +11,8 @@ interface ClassPeriodGridProps {
     schoolId: string;
     date: string;
     periodsPerDay: number;
+    highlightPeriod?: number | null;
+    highlightSubjectName?: string | null;
 }
 
 /* ── Badge helpers ── */
@@ -43,7 +45,7 @@ function RateBadge({ rate }: { rate: number }) {
     );
 }
 
-export default function ClassPeriodGrid({ classId, schoolId, date, periodsPerDay }: ClassPeriodGridProps) {
+export default function ClassPeriodGrid({ classId, schoolId, date, periodsPerDay, highlightPeriod, highlightSubjectName }: ClassPeriodGridProps) {
     const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
     const [deletedMsg, setDeletedMsg] = useState<string>("");
 
@@ -148,13 +150,22 @@ export default function ClassPeriodGrid({ classId, schoolId, date, periodsPerDay
                                 const pNum = i + 1;
                                 const ps   = periodSummary.find((p: any) => p.periodNumber === pNum);
                                 const hasData = ps && (ps.present + ps.absent) > 0;
+                                const isHighlighted = highlightPeriod === pNum && !!highlightSubjectName;
+                                const periodLabel = PERIOD_LABELS[i] || `ح${pNum}`;
                                 return (
                                     <th key={i}
-                                        className="border border-slate-700/50 min-w-[76px] p-0"
-                                        style={{ background: hasData ? "#9B1239" : "#4b5563" }}
+                                        className="border border-slate-700/50 p-0"
+                                        style={{ background: hasData ? "#9B1239" : "#4b5563", minWidth: isHighlighted ? "110px" : "76px" }}
                                     >
                                         <div className="flex flex-col items-center gap-0.5 py-2 px-1">
-                                            <span className="text-xs font-black text-white">{PERIOD_LABELS[i] || `ح${pNum}`}</span>
+                                            {isHighlighted ? (
+                                                <div className="flex flex-col items-center gap-0.5">
+                                                    <span className="text-[10px] font-black text-white/80">{highlightSubjectName}</span>
+                                                    <span className="text-[9px] font-bold text-white/50">{periodLabel}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs font-black text-white">{periodLabel}</span>
+                                            )}
                                             {hasData ? (
                                                 <button
                                                     onClick={() => setConfirmDelete(pNum)}

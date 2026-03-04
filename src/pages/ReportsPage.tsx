@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useQuery } from "convex/react";
 import { format } from "date-fns";
+import * as XLSX from "xlsx";
 import {
     Calendar, TrendingUp, Users, UserX, UserCheck, Download,
-    TableProperties, BarChart3, Check, X,
+    TableProperties, BarChart3, Check, X, AlertTriangle,
 } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
@@ -52,7 +53,7 @@ function PctBadge({ pct, type }: { pct: number; type: "present" | "absent" }) {
 
 /* ─────────────────── Page ─────────────────── */
 export default function ReportsPage() {
-    const [activeTab, setActiveTab] = useState<"summary" | "matrix">("summary");
+    const [activeTab, setActiveTab] = useState<"summary" | "matrix" | "frequent">("summary");
     const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
     const initData = useQuery(api.setup.getInitialData);
@@ -78,8 +79,9 @@ export default function ReportsPage() {
     const totalRedPresent  = report.gradeTotals.reduce((acc: number, g: any) => acc + g.red.present, 0);
 
     const tabs = [
-        { id: "summary", label: "الملخص الإجمالي",          icon: <BarChart3 className="w-4 h-4" /> },
-        { id: "matrix",  label: "تفصيل الحضور حسب الصفوف", icon: <TableProperties className="w-4 h-4" /> },
+        { id: "summary",  label: "الملخص الإجمالي",          icon: <BarChart3 className="w-4 h-4" /> },
+        { id: "matrix",   label: "تفصيل الحضور حسب الصفوف", icon: <TableProperties className="w-4 h-4" /> },
+        { id: "frequent", label: "الطلاب كثيرو الغياب",      icon: <AlertTriangle className="w-4 h-4" /> },
     ] as const;
 
     return (
@@ -174,6 +176,11 @@ export default function ReportsPage() {
             {/* ─── TAB 2: Matrix ─── */}
             {activeTab === "matrix" && (
                 <MatrixTab date={date} periodsPerDay={periodsPerDay} />
+            )}
+
+            {/* ─── TAB 3: Frequently Absent Students ─── */}
+            {activeTab === "frequent" && schoolId && (
+                <FrequentAbsencesTab schoolId={schoolId} date={date} />
             )}
         </div>
     );
@@ -544,6 +551,151 @@ function MatrixTab({ date, periodsPerDay }: { date: string; periodsPerDay: numbe
                     </div>
                 </div>
             )}
+
+        </div>
+    );
+}
+
+/* ─────────────────── FrequentAbsencesTab ─────────────────── */
+function FrequentAbsencesTab({ schoolId, date }: { schoolId: string; date: string }) {
+    const data = useQuery(api.attendance.getFrequentlyAbsentStudents, { schoolId: schoolId as any, date });
+
+    const handleExport = () => {
+        if (!data || data.length === 0) return;
+        const rows = data.map((s, i) => ({
+            "م":              i + 1,
+            "اسم الطالب":    s.studentName,
+            "الصف":          s.className,
+            "رقم الجوال":   s.phone ?? "—",
+            "عدد الحصص الغائب فيها": s.absentCount,
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows, {
+            header: ["م", "اسم الطالب", "الصف", "رقم الجوال", "عدد الحصص الغائب فيها"],
+        });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "كثيرو الغياب");
+        XLSX.writeFile(wb, `absent_students_${date}.xlsx`);
+    };
+
+    if (data === undefined) {
+        return (
+            <div className="flex items-center justify-center min-h-[300px]">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-qatar-maroon" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-5 animate-in fade-in duration-300">
+            {/* Sub-header */}
+            <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
+                <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
+                     style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 100%)" }}>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+                            <AlertTriangle className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-white font-black text-lg">الطلاب كثيرو الغياب</h2>
+                            <p className="text-white/70 text-xs font-bold">طلاب غابوا في 3 حصص أو أكثر بتاريخ {date}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="bg-white/20 text-white text-sm font-black px-4 py-1.5 rounded-xl border border-white/20">
+                            {data.length} طالب
+                        </span>
+                        <button
+                            onClick={handleExport}
+                            disabled={data.length === 0}
+                            className="flex items-center gap-2 bg-white text-qatar-maroon font-black text-sm px-5 py-2 rounded-xl hover:bg-rose-50 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow"
+                        >
+                            <Download className="w-4 h-4" />
+                            تصدير Excel
+                        </button>
+                    </div>
+                </div>
+
+                {data.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+                        <UserCheck className="w-12 h-12 text-emerald-300" />
+                        <p className="font-black text-lg">لا يوجد طلاب غائبون أكثر من حصتين</p>
+                        <p className="text-sm font-medium">جميع الطلاب ضمن الحد المقبول للغياب</p>
+                    </div>
+                ) : (() => {
+                    // Group by className, sorted ascending (10-1, 10-2, ...)
+                    const grouped: Record<string, typeof data> = {};
+                    for (const row of data) {
+                        const key = row.className || "—";
+                        if (!grouped[key]) grouped[key] = [];
+                        grouped[key].push(row);
+                    }
+                    const sortedClasses = Object.keys(grouped).sort((a, b) => {
+                        const [ga, sa] = a.split("-").map(Number);
+                        const [gb, sb] = b.split("-").map(Number);
+                        if (ga !== gb) return ga - gb;
+                        return sa - sb;
+                    });
+
+                    let globalIdx = 0;
+                    return (
+                        <div className="divide-y divide-slate-100">
+                            {sortedClasses.map(className => {
+                                const classRows = grouped[className];
+                                return (
+                                    <div key={className}>
+                                        {/* Class separator header */}
+                                        <div className="flex items-center gap-3 px-5 py-2.5 bg-slate-50 border-b border-slate-200">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black bg-qatar-maroon text-white shadow-sm">
+                                                {className}
+                                            </span>
+                                            <span className="text-xs font-bold text-slate-400">
+                                                {classRows.length} {classRows.length === 1 ? "طالب" : "طلاب"}
+                                            </span>
+                                            <div className="flex-1 h-px bg-slate-200 mr-1" />
+                                        </div>
+                                        {/* Class rows */}
+                                        <table className="min-w-full border-collapse text-sm font-bold">
+                                            {globalIdx === 0 && (
+                                                <thead>
+                                                    <tr style={{ background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)" }}>
+                                                        <th className="text-slate-300 py-3 px-4 border border-slate-700/40 text-center w-12 font-black text-xs">م</th>
+                                                        <th className="text-white py-3 px-5 border border-slate-700/40 text-right font-black">اسم الطالب</th>
+                                                        <th className="text-slate-300 py-3 px-4 border border-slate-700/40 text-center font-black text-xs">رقم الجوال</th>
+                                                        <th className="text-rose-300 py-3 px-4 border border-slate-700/40 text-center font-black text-xs">عدد الحصص الغائب فيها</th>
+                                                    </tr>
+                                                </thead>
+                                            )}
+                                            <tbody>
+                                                {classRows.map((row, rowIdx) => {
+                                                    globalIdx++;
+                                                    return (
+                                                        <tr key={row.studentId}
+                                                            className={`transition-all group ${rowIdx % 2 === 0 ? "bg-white hover:bg-rose-50/40" : "bg-slate-50/60 hover:bg-rose-50/50"}`}>
+                                                            <td className="py-3 px-4 border border-slate-100 text-slate-400 text-center text-xs">{globalIdx}</td>
+                                                            <td className="py-3 px-5 border border-slate-100 text-slate-800 font-black text-right group-hover:text-qatar-maroon transition-colors">{row.studentName}</td>
+                                                            <td className="py-3 px-4 border border-slate-100 text-center text-slate-500 text-xs" dir="ltr">{row.phone || "—"}</td>
+                                                            <td className="py-3 px-4 border border-slate-100 text-center">
+                                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-black border shadow-sm ${
+                                                                    row.absentCount >= 10 ? "bg-rose-700 text-white border-rose-800" :
+                                                                    row.absentCount >= 5  ? "bg-rose-100 text-rose-800 border-rose-300" :
+                                                                                             "bg-orange-50 text-orange-700 border-orange-200"
+                                                                }`}>
+                                                                    <X className="w-3 h-3" />
+                                                                    {row.absentCount}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
+            </div>
         </div>
     );
 }

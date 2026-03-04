@@ -71,23 +71,22 @@ export const getStudentsForMessages = query({
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
 
+        // 1. Get relevant classes (indexed by school, filter by grade in memory — small set)
         const allClasses = await ctx.db.query("classes")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
-            .filter(q => q.eq(q.field("isActive"), true))
             .collect();
 
-        const filteredClasses = args.grade
-            ? allClasses.filter(c => c.grade === args.grade)
-            : allClasses;
+        const filteredClasses = allClasses.filter(c =>
+            c.isActive !== false &&
+            (args.grade == null || c.grade === args.grade)
+        );
+        if (filteredClasses.length === 0) return [];
 
-        const allPeriods = await ctx.db.query("periods")
-            .filter(q => q.eq(q.field("date"), args.date))
-            .collect();
-
-        const allSubjects = await ctx.db.query("subjects")
+        // 2. Subjects map (small collection — indexed by school)
+        const subjectDocs = await ctx.db.query("subjects")
             .filter(q => q.eq(q.field("schoolId"), school._id))
             .collect();
-        const subjectMap = new Map(allSubjects.map(s => [s._id.toString(), s.name]));
+        const subjectMap = new Map(subjectDocs.map(s => [s._id.toString(), s.name]));
 
         const result: {
             studentId: string;
@@ -98,30 +97,52 @@ export const getStudentsForMessages = query({
             subjects: string;
         }[] = [];
 
+        // 3. Per class: use by_class_date index — no full periods scan
         for (const cls of filteredClasses) {
-            const students = await ctx.db.query("students")
-                .withIndex("by_class", q => q.eq("classId", cls._id))
-                .filter(q => q.eq(q.field("isActive"), true))
+
+            // 3a. Periods for this class on this date (indexed — typically ≤10 records)
+            const classPeriods = await ctx.db.query("periods")
+                .withIndex("by_class_date", q =>
+                    q.eq("classId", cls._id).eq("date", args.date)
+                )
                 .collect();
 
-            const classPeriods = allPeriods.filter(p => p.classId === cls._id);
             if (classPeriods.length === 0) continue;
 
-            for (const student of students) {
-                const periodAttendance: { status: string; subjectId: string }[] = [];
+            // 3b. Attendance for ALL periods of this class at once
+            //     by_period index — one query per period, returns ≤35 records each
+            const studentAttMap = new Map<string, { status: string; subjectId: string }[]>();
 
-                for (const period of classPeriods) {
-                    const att = await ctx.db.query("attendance")
-                        .withIndex("by_period", q => q.eq("periodId", period._id))
-                        .filter(q => q.eq(q.field("studentId"), student._id))
-                        .first();
-                    if (att) {
-                        periodAttendance.push({
-                            status: att.status,
-                            subjectId: period.subjectId.toString(),
-                        });
-                    }
+            for (const period of classPeriods) {
+                const attRecords = await ctx.db.query("attendance")
+                    .withIndex("by_period", q => q.eq("periodId", period._id))
+                    .collect();
+
+                for (const att of attRecords) {
+                    if (!att.studentId) continue;
+                    const key = att.studentId.toString();
+                    if (!studentAttMap.has(key)) studentAttMap.set(key, []);
+                    studentAttMap.get(key)!.push({
+                        status: att.status,
+                        subjectId: period.subjectId.toString(),
+                    });
                 }
+            }
+
+            if (studentAttMap.size === 0) continue;
+
+            // 3c. Students for this class (indexed — typically ≤35 records)
+            const students = await ctx.db.query("students")
+                .withIndex("by_class", q => q.eq("classId", cls._id))
+                .collect();
+
+            for (const student of students) {
+                if (student.isActive === false) continue;
+
+                const periodAttendance = studentAttMap.get(student._id.toString()) ?? [];
+
+                // Students with no records → skip entirely
+                if (periodAttendance.length === 0) continue;
 
                 const isAbsent  = periodAttendance.some(a => a.status === "absent");
                 const isPresent = periodAttendance.some(a => a.status === "present");
@@ -149,12 +170,14 @@ export const getStudentsForMessages = query({
             }
         }
 
-        return result.sort((a, b) => {
-            if (a.grade !== b.grade) return a.grade - b.grade;
-            const sA = parseInt(a.className.split("-")[1] || "0");
-            const sB = parseInt(b.className.split("-")[1] || "0");
-            if (sA !== sB) return sA - sB;
-            return a.studentName.localeCompare(b.studentName, "ar");
-        });
+        return result
+            .slice(0, 5000) // safety cap
+            .sort((a, b) => {
+                if (a.grade !== b.grade) return a.grade - b.grade;
+                const sA = parseInt(a.className.split("-")[1] || "0");
+                const sB = parseInt(b.className.split("-")[1] || "0");
+                if (sA !== sB) return sA - sB;
+                return a.studentName.localeCompare(b.studentName, "ar");
+            });
     },
 });

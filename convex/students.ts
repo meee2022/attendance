@@ -91,28 +91,41 @@ export const importStudentsFromSheet = mutation({
 export const deleteAllStudentsAndAttendance = mutation({
     args: { schoolId: v.id("schools") },
     handler: async (ctx, args) => {
-        // Delete all attendance records for the school
-        const allAtt = await ctx.db.query("attendance")
-            .filter(q => q.eq(q.field("schoolId"), args.schoolId))
+        // Get all classes for this school (indexed)
+        const allClasses = await ctx.db.query("classes")
+            .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
             .collect();
-        for (const a of allAtt) await ctx.db.delete(a._id);
 
-        // Delete all periods
-        const allPeriods = await ctx.db.query("periods")
-            .filter(q => q.eq(q.field("schoolId"), args.schoolId))
-            .collect();
-        for (const p of allPeriods) await ctx.db.delete(p._id);
+        let attendanceCount = 0;
+        let periodsCount = 0;
 
-        // Delete all students
+        // Delete attendance per student using by_student index (no full-table scan)
         const allStudents = await ctx.db.query("students")
             .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
             .collect();
+
+        for (const s of allStudents) {
+            const atts = await ctx.db.query("attendance")
+                .withIndex("by_student", q => q.eq("studentId", s._id))
+                .collect();
+            for (const a of atts) { await ctx.db.delete(a._id); attendanceCount++; }
+        }
+
+        // Delete periods per class using by_class index (no filter scan)
+        for (const cls of allClasses) {
+            const clsPeriods = await ctx.db.query("periods")
+                .withIndex("by_class", q => q.eq("classId", cls._id))
+                .collect();
+            for (const p of clsPeriods) { await ctx.db.delete(p._id); periodsCount++; }
+        }
+
+        // Delete all students
         for (const s of allStudents) await ctx.db.delete(s._id);
 
         return {
             students: allStudents.length,
-            attendance: allAtt.length,
-            periods: allPeriods.length,
+            attendance: attendanceCount,
+            periods: periodsCount,
         };
     },
 });

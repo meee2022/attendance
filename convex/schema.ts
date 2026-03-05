@@ -47,7 +47,9 @@ export default defineSchema({
         date: v.string(), // YYYY-MM-DD local logic mostly
         periodNumber: v.number(),
         status: v.string(), // "open", "uploaded", "finalized"
-    }).index("by_class_date", ["classId", "date"]),
+    }).index("by_class_date", ["classId", "date"])
+      .index("by_class", ["classId"])
+      .index("by_school_date", ["schoolId", "date"]),
     attendance: defineTable({
         schoolId: v.id("schools"),
         classId: v.id("classes"),

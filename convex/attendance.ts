@@ -35,12 +35,10 @@ export const deletePeriodData = mutation({
 export const getPeriodCountsByDate = query({
     args: { schoolId: v.id("schools"), date: v.string() },
     handler: async (ctx, args) => {
+        // Use by_school_date index — no full table scan
         const periods = await ctx.db.query("periods")
-            .filter(q =>
-                q.and(
-                    q.eq(q.field("schoolId"), args.schoolId),
-                    q.eq(q.field("date"), args.date)
-                )
+            .withIndex("by_school_date", q =>
+                q.eq("schoolId", args.schoolId).eq("date", args.date)
             )
             .collect();
         const counts: Record<string, number> = {};
@@ -355,15 +353,9 @@ export const finalizeSinglePeriodAttendance = mutation({
 export const getDailySummary = query({
     args: { date: v.string() },
     handler: async (ctx, args) => {
-        // 1. Collect all periods for the date
-        const periods = await ctx.db.query("periods")
-            .filter(q => q.eq(q.field("date"), args.date))
-            .collect();
-
         const school = await ctx.db.query("schools").first();
         if (!school) return { classes: [], summary: null };
 
-        // Read the configurable threshold (default 0 = any absence = absent for day)
         const dailyAbsenceThreshold: number = school.dailyAbsenceThreshold ?? 0;
 
         const classes = await ctx.db.query("classes")
@@ -374,33 +366,41 @@ export const getDailySummary = query({
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
 
-        // 2. Optimization: Only fetch attendance for the relevant periods
-        const periodIdsArr = periods.map(p => p._id);
-        const periodIdsSet = new Set(periodIdsArr.map(id => id.toString()));
+        // Use new by_school_date index — one query for all periods of this school+date
+        const periods = await ctx.db.query("periods")
+            .withIndex("by_school_date", q => q.eq("schoolId", school._id).eq("date", args.date))
+            .collect();
 
-        // In a real app we'd filter attendance by periodId index, but for simplicity we fetch and filter
-        const allAtt = await ctx.db.query("attendance").collect();
-        const dailyAtt = allAtt.filter(a => periodIdsSet.has(a.periodId.toString()));
+        // Fetch attendance per period using by_period index (no full table scan)
+        // Build: studentId -> list of statuses for today
+        const studentAttMap = new Map<string, string[]>();
+        for (const p of periods) {
+            const attList = await ctx.db.query("attendance")
+                .withIndex("by_period", q => q.eq("periodId", p._id))
+                .collect();
+            for (const a of attList) {
+                if (!a.studentId) continue;
+                const key = a.studentId.toString();
+                const existing = studentAttMap.get(key) ?? [];
+                existing.push(a.status);
+                studentAttMap.set(key, existing);
+            }
+        }
 
         const classStats = classes.map(cls => {
             const clsStudents = students.filter(s => s.classId === cls._id && s.isActive);
             const totalStudents = clsStudents.length;
-
             const clsPeriods = periods.filter(p => p.classId === cls._id);
-            const clsPeriodIdsSet = new Set(clsPeriods.map(p => p._id.toString()));
-
-            // All attendance for this class today
-            const clsAtt = dailyAtt.filter(a => clsPeriodIdsSet.has(a.periodId.toString()));
+            const hasData = clsPeriods.length > 0;
 
             let dayAbsent = 0;
             let dayPresent = 0;
-            const hasData = clsPeriods.length > 0;
 
             if (hasData) {
                 clsStudents.forEach(st => {
-                    const stAtt = clsAtt.filter(a => a.studentId === st._id);
+                    const stAtt = studentAttMap.get(st._id.toString()) ?? [];
                     if (stAtt.length > 0) {
-                        const absentPeriods = stAtt.filter(a => a.status === "absent").length;
+                        const absentPeriods = stAtt.filter(a => a === "absent").length;
                         const isAbsentForDay = absentPeriods > dailyAbsenceThreshold;
                         if (isAbsentForDay) dayAbsent++;
                         else dayPresent++;
@@ -425,14 +425,13 @@ export const getDailySummary = query({
         const totalAccountedFor = classesWithData.reduce((acc, c) => acc + c.totalStudents, 0);
         const totalSchoolPresent = classesWithData.reduce((acc, c) => acc + c.dayPresent, 0);
         const totalSchoolAbsent = classesWithData.reduce((acc, c) => acc + c.dayAbsent, 0);
-
         const realPercentage = totalAccountedFor > 0 ? (totalSchoolPresent / totalAccountedFor) * 100 : 0;
 
         return {
             classes: classStats,
             summary: {
-                totalStudents: totalAccountedFor, // Real-time population
-                totalCapacity: totalSchoolStudents, // Total school size
+                totalStudents: totalAccountedFor,
+                totalCapacity: totalSchoolStudents,
                 totalPresent: totalSchoolPresent,
                 totalAbsent: totalSchoolAbsent,
                 percentage: realPercentage,
@@ -457,13 +456,14 @@ export const getClassDetails = query({
             .withIndex("by_class", q => q.eq("classId", args.classId))
             .collect();
 
-        const periodIds = periods.map(p => p._id);
-        const attendances = await ctx.db.query("attendance")
-            .filter(q => q.neq(q.field("status"), "DUMMY"))
-            .collect();
-
-        // Filter to just periods of today
-        const classAtt = attendances.filter(a => periodIds.includes(a.periodId));
+        // Fetch attendance per period using by_period index (no full table scan)
+        const classAtt: any[] = [];
+        for (const p of periods) {
+            const att = await ctx.db.query("attendance")
+                .withIndex("by_period", q => q.eq("periodId", p._id))
+                .collect();
+            classAtt.push(...att);
+        }
 
         const studentStats = students.map(st => {
             const stAtt = classAtt.filter(a => a.studentId === st._id);
@@ -475,11 +475,7 @@ export const getClassDetails = query({
             };
         });
 
-        return {
-            cls,
-            periods,
-            studentStats
-        };
+        return { cls, periods, studentStats };
     }
 });
 
@@ -684,36 +680,41 @@ export const getMatrixReport = query({
             .collect();
 
         const allPeriods = await ctx.db.query("periods")
-            .filter(q => q.eq(q.field("date"), args.date))
+            .withIndex("by_school_date", q => q.eq("schoolId", school._id).eq("date", args.date))
             .collect();
 
         const relevantPeriods = args.periodNumber !== undefined
             ? allPeriods.filter(p => p.periodNumber === args.periodNumber)
             : allPeriods;
 
-        const periodIdsSet = new Set(relevantPeriods.map(p => p._id.toString()));
-
-        const allAtt = await ctx.db.query("attendance").collect();
-        const dailyAtt = allAtt.filter(a => periodIdsSet.has(a.periodId.toString()));
+        // Fetch attendance per period using by_period index — no full attendance scan
+        const studentAttMap = new Map<string, string[]>();
+        for (const p of relevantPeriods) {
+            const attList = await ctx.db.query("attendance")
+                .withIndex("by_period", q => q.eq("periodId", p._id))
+                .collect();
+            for (const a of attList) {
+                if (!a.studentId) continue;
+                const key = a.studentId.toString();
+                const existing = studentAttMap.get(key) ?? [];
+                existing.push(a.status);
+                studentAttMap.set(key, existing);
+            }
+        }
 
         const classStats = classes.map(cls => {
             const clsStudents = students.filter(s => s.classId === cls._id);
             const totalStudents = clsStudents.length;
-
             const clsPeriods = relevantPeriods.filter(p => p.classId === cls._id);
-            const clsPeriodIdsSet = new Set(clsPeriods.map(p => p._id.toString()));
-            const clsAtt = dailyAtt.filter(a => clsPeriodIdsSet.has(a.periodId.toString()));
-
             const hasData = clsPeriods.length > 0;
             let presentCount = 0;
 
             if (hasData) {
                 for (const st of clsStudents) {
-                    const stAtt = clsAtt.filter(a => a.studentId === st._id);
+                    const stAtt = studentAttMap.get(st._id.toString()) ?? [];
                     if (stAtt.length > 0) {
-                        const absentPeriods = stAtt.filter(a => a.status === "absent").length;
-                        const isPresentForDay = absentPeriods <= dailyAbsenceThreshold;
-                        if (isPresentForDay) presentCount++;
+                        const absentPeriods = stAtt.filter(a => a === "absent").length;
+                        if (absentPeriods <= dailyAbsenceThreshold) presentCount++;
                     }
                 }
             }
@@ -797,25 +798,23 @@ export const getAttendanceReport = query({
             .filter(q => q.eq(q.field("isActive"), true))
             .collect();
 
-        // 2. Fetch periods for the date in this school
+        // 2. Fetch periods for the date using by_school_date index — no full table scan
         const periods = await ctx.db.query("periods")
-            .filter(q => q.eq(q.field("schoolId"), args.schoolId) && q.eq(q.field("date"), date))
+            .withIndex("by_school_date", q => q.eq("schoolId", args.schoolId).eq("date", date))
             .collect();
-        const periodIds = new Set(periods.map(p => p._id));
 
-        // 3. Fetch attendance records for this school
-        const schoolAttendance = await ctx.db.query("attendance")
-            .filter(q => q.eq(q.field("schoolId"), args.schoolId))
-            .collect();
-        const dailyAttendance = schoolAttendance.filter(a => periodIds.has(a.periodId));
-
-        // 4. Group attendance by student
+        // 3. Fetch attendance per period using by_period index — no full attendance scan
         const studentAttMap = new Map<string, string[]>();
-        for (const att of dailyAttendance) {
-            if (!att.studentId) continue;
-            const statuses = studentAttMap.get(att.studentId) || [];
-            statuses.push(att.status);
-            studentAttMap.set(att.studentId, statuses);
+        for (const p of periods) {
+            const attList = await ctx.db.query("attendance")
+                .withIndex("by_period", q => q.eq("periodId", p._id))
+                .collect();
+            for (const att of attList) {
+                if (!att.studentId) continue;
+                const statuses = studentAttMap.get(att.studentId) ?? [];
+                statuses.push(att.status);
+                studentAttMap.set(att.studentId, statuses);
+            }
         }
 
         // 5. Build report structure
@@ -826,7 +825,7 @@ export const getAttendanceReport = query({
             let studentsWithData = 0;
 
             clsStudents.forEach(st => {
-                const statuses = studentAttMap.get(st._id) || [];
+                const statuses = studentAttMap.get(st._id.toString()) ?? [];
                 // Skip students with NO records — don't count as present or absent
                 if (statuses.length === 0) return;
                 studentsWithData++;

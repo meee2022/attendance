@@ -138,18 +138,27 @@ export const ensureAllClasses = mutation({
 export const getInitialData = query({
     args: {},
     handler: async (ctx) => {
-        const schools = await ctx.db.query("schools").collect();
-        const classes = await ctx.db.query("classes").collect();
-        const subjects = await ctx.db.query("subjects").collect();
-        // Do NOT load all students — use getStudentCounts for counts
-        return { schools, classes, subjects };
+        const school = await ctx.db.query("schools").first();
+        if (!school) return { schools: [], classes: [], subjects: [] };
+        const classes = await ctx.db.query("classes")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        const subjects = await ctx.db.query("subjects")
+            .filter(q => q.eq(q.field("schoolId"), school._id))
+            .collect();
+        return { schools: [school], classes, subjects };
     },
 });
 
 export const getStudentCounts = query({
     args: {},
     handler: async (ctx) => {
-        const students = await ctx.db.query("students").collect();
+        const school = await ctx.db.query("schools").first();
+        if (!school) return { total: 0, perClass: {} };
+        // Use by_school index — no full table scan
+        const students = await ctx.db.query("students")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
         const total = students.length;
         const perClass: Record<string, number> = {};
         for (const s of students) {

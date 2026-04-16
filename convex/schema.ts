@@ -38,6 +38,7 @@ export default defineSchema({
         schoolId: v.id("schools"),
         name: v.string(),
         code: v.string(),
+        targetClasses: v.optional(v.array(v.string())), // e.g. ["10-عام", "11-علمي"]
     }),
     periods: defineTable({
         schoolId: v.id("schools"),
@@ -66,4 +67,15 @@ export default defineSchema({
         body: v.string(),
         isActive: v.boolean(),
     }).index("by_school", ["schoolId"]),
+    assessments: defineTable({
+        schoolId: v.id("schools"),
+        classId: v.id("classes"),
+        studentId: v.id("students"),
+        subjectId: v.id("subjects"),
+        isCompleted: v.boolean(),
+    }).index("by_school", ["schoolId"])
+      .index("by_class", ["classId"])
+      .index("by_student", ["studentId"])
+      .index("by_subject", ["subjectId"])
+      .index("by_class_subject_student", ["classId", "subjectId", "studentId"]),
 });

@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 export const importStudentsFromSheet = mutation({
@@ -163,4 +163,84 @@ export const deleteDummyStudents = mutation({
         }
         return { studentCount, attendanceCount };
     },
+});
+
+export const getStudentsByClass = query({
+    args: { classId: v.id("classes") },
+    handler: async (ctx, args) => {
+        return await ctx.db.query("students")
+            .withIndex("by_class", q => q.eq("classId", args.classId))
+            .filter(q => q.eq(q.field("isActive"), true))
+            .collect();
+    }
+});
+
+export const addStudent = mutation({
+    args: {
+        schoolId: v.id("schools"),
+        classId: v.id("classes"),
+        fullName: v.string(),
+        guardianPhone: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        const studentId = await ctx.db.insert("students", {
+            schoolId: args.schoolId,
+            classId: args.classId,
+            fullName: args.fullName.trim(),
+            guardianPhone: args.guardianPhone?.trim() || undefined,
+            isActive: true,
+        });
+        return studentId;
+    }
+});
+
+export const updateStudentClass = mutation({
+    args: {
+        studentId: v.id("students"),
+        newClassId: v.id("classes"),
+    },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.studentId, { classId: args.newClassId });
+        return "تم النقل بنجاح";
+    }
+});
+
+export const updateStudentDetails = mutation({
+    args: {
+        studentId: v.id("students"),
+        fullName: v.string(),
+        guardianPhone: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.studentId, {
+            fullName: args.fullName.trim(),
+            guardianPhone: args.guardianPhone?.trim() || undefined,
+        });
+        return "تم تحديث البيانات";
+    }
+});
+
+export const deleteStudent = mutation({
+    args: { studentId: v.id("students") },
+    handler: async (ctx, args) => {
+        // Delete student's attendance records first
+        const atts = await ctx.db.query("attendance")
+            .withIndex("by_student", q => q.eq("studentId", args.studentId))
+            .collect();
+        for (const a of atts) {
+            await ctx.db.delete(a._id);
+        }
+
+        // Delete student's assessments
+        const assessments = await ctx.db.query("assessments")
+            .filter(q => q.eq(q.field("studentId"), args.studentId))
+            .collect();
+        for (const as of assessments) {
+            await ctx.db.delete(as._id);
+        }
+
+        // Delete the student
+        await ctx.db.delete(args.studentId);
+        return "تم حذف الطالب";
+    }
 });

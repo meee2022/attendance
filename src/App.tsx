@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users } from "lucide-react";
 import { useState } from "react";
 import TeacherUpload from "./pages/TeacherUpload";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -11,15 +11,20 @@ import SettingsPage from "./pages/SettingsPage";
 import MessagesPage from "./pages/MessagesPage";
 import MessageTemplatesPage from "./pages/MessageTemplatesPage";
 import AdminGuard, { clearAdminSession } from "./components/AdminGuard";
+import AssessmentsPage from "./pages/AssessmentsPage";
+import StudentsPage from "./pages/StudentsPage";
+import { FileCheck } from "lucide-react";
 
 const PUBLIC_NAV = [
-    { to: "/",         icon: <LayoutDashboard className="w-5 h-5" />, label: "المتابعة",    admin: false },
-    { to: "/upload",   icon: <Upload className="w-5 h-5" />,          label: "رصد الغياب",  admin: false },
-    { to: "/reports",  icon: <BarChart3 className="w-5 h-5" />,       label: "التقارير",    admin: false },
-    { to: "/messages", icon: <MessageSquare className="w-5 h-5" />,   label: "الرسائل",     admin: false },
+    { to: "/",          icon: <LayoutDashboard className="w-5 h-5" />, label: "المتابعة",      admin: false },
+    { to: "/upload",    icon: <Upload className="w-5 h-5" />,          label: "رصد الغياب",    admin: false },
+    { to: "/assessments",icon: <FileCheck className="w-5 h-5" />,       label: "التطبيقات",     admin: false },
+    { to: "/reports",   icon: <BarChart3 className="w-5 h-5" />,       label: "التقارير",      admin: false },
+    { to: "/messages",  icon: <MessageSquare className="w-5 h-5" />,   label: "الرسائل",       admin: false },
 ];
 
 const ADMIN_NAV = [
+    { to: "/students", icon: <Users className="w-5 h-5" />, label: "إدارة الطلاب", admin: true },
     { to: "/settings", icon: <Settings className="w-5 h-5" />, label: "الإعدادات", admin: true },
 ];
 
@@ -33,10 +38,12 @@ function App() {
         <Routes>
           <Route path="/"                    element={<AdminDashboard />} />
           <Route path="/upload"              element={<TeacherUpload />} />
+          <Route path="/assessments"         element={<AssessmentsPage />} />
           <Route path="/class/:classId"      element={<ClassDetails />} />
           <Route path="/reports"             element={<ReportsPage />} />
           <Route path="/messages"            element={<MessagesPage />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
+          <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />
           <Route path="/message-templates"   element={<AdminGuard><MessageTemplatesPage /></AdminGuard>} />
           <Route path="/seed"                element={<AdminGuard><SeedPage /></AdminGuard>} />

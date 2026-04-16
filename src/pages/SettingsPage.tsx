@@ -565,6 +565,8 @@ function SubjectsSection() {
 
     return (
         <div className="space-y-6">
+            <CurriculumMapping data={data} />
+            
             <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
                 <div className="bg-qatar-maroon px-6 py-4">
                     <h2 className="text-white font-black text-lg">قائمة المواد الدراسية</h2>
@@ -653,6 +655,82 @@ function SubjectsSection() {
                     </button>
                 </div>
                 {addError && <p className="mt-3 text-rose-600 text-sm font-bold">{addError}</p>}
+            </div>
+        </div>
+    );
+}
+
+function CurriculumMapping({ data }: { data: any }) {
+    const toggleTarget = useMutation(api.settings.toggleSubjectTarget);
+    
+    // UI state for assigning subjects
+    const [mapGrade, setMapGrade] = useState<number>(10);
+    const [mapTrack, setMapTrack] = useState<string>("عام");
+    
+    const currentTargetString = `${mapGrade}-${mapTrack}`;
+    
+    const handleToggle = async (subjectId: string) => {
+        await toggleTarget({ subjectId: subjectId as any, targetString: currentTargetString });
+    };
+    
+    if (!data?.subjects || data.subjects.length === 0) return null;
+
+    return (
+        <div className="bg-slate-50 rounded-2xl qatar-card-shadow border border-slate-200 overflow-hidden mt-8 mb-8">
+            <div className="bg-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+                <h2 className="text-white font-black text-lg flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-slate-400" />
+                    تخصيص المواد للمسارات
+                </h2>
+                <div className="flex items-center gap-2">
+                    <select 
+                        value={mapGrade} 
+                        onChange={e => setMapGrade(Number(e.target.value))}
+                        className="bg-slate-700 border-none text-white text-sm font-bold rounded-lg px-3 py-1.5 outline-none"
+                    >
+                        {[10, 11, 12].map(g => <option key={g} value={g}>الصف {g}</option>)}
+                    </select>
+                    <select 
+                        value={mapTrack} 
+                        onChange={e => setMapTrack(e.target.value)}
+                        className="bg-slate-700 border-none text-white text-sm font-bold rounded-lg px-3 py-1.5 outline-none"
+                    >
+                        {TRACKS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </div>
+            </div>
+            
+            <div className="p-6">
+                <p className="text-xs text-slate-500 font-bold mb-4 bg-white p-3 rounded-lg border border-slate-200">
+                    اختر المواد التي تُدرّس في مسار <strong className="text-qatar-maroon">{mapGrade}-{mapTrack}</strong> لكي تظهر تلقائياً في صفحة رصد التطبيقات لهذا المسار.<br/>
+                    <span className="text-[10px] text-slate-400 font-medium">ملاحظة: إذا لم تقم بتحديد أي مسار للمادة، فستظهر لجميع الصفوف بشكل افتراضي.</span>
+                </p>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {data.subjects.map((sub: any) => {
+                        const targets = sub.targetClasses || [];
+                        const isChecked = targets.includes(currentTargetString);
+                        
+                        return (
+                            <button
+                                key={sub._id}
+                                onClick={() => handleToggle(sub._id)}
+                                className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-black transition-all text-right ${
+                                    isChecked 
+                                    ? "bg-qatar-maroon text-white border-qatar-maroon shadow-md scale-[1.02]" 
+                                    : "bg-white text-slate-600 border-slate-200 hover:border-qatar-maroon/50"
+                                }`}
+                            >
+                                <div className={`w-5 h-5 rounded-md flex items-center justify-center border transition-colors ${
+                                    isChecked ? "bg-white border-white" : "bg-slate-100 border-slate-300"
+                                }`}>
+                                    {isChecked && <Check className="w-3.5 h-3.5 text-qatar-maroon" />}
+                                </div>
+                                <span className="flex-1 truncate leading-tight">{sub.name}</span>
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

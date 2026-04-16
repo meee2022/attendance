@@ -147,3 +147,30 @@ export const deleteClass = mutation({
         await ctx.db.delete(args.id);
     }
 });
+
+export const toggleSubjectTarget = mutation({
+    args: {
+        subjectId: v.id("subjects"),
+        targetString: v.string(),
+    },
+    handler: async (ctx, args) => {
+        const subject = await ctx.db.get(args.subjectId);
+        if (!subject) throw new Error("المادة غير موجودة.");
+        
+        let currentTargets = subject.targetClasses || [];
+        
+        if (currentTargets.includes(args.targetString)) {
+            // Remove it
+            currentTargets = currentTargets.filter(t => t !== args.targetString);
+        } else {
+            // Add it
+            currentTargets = [...currentTargets, args.targetString];
+        }
+        
+        await ctx.db.patch(args.subjectId, {
+            targetClasses: currentTargets,
+        });
+        
+        return "تم التحديث.";
+    }
+});

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { CheckCircle2, Layers, XCircle, BarChart3, Users, BookOpen } from "lucide-react";
+import { CheckCircle2, Layers, XCircle, BarChart3, Users, BookOpen, Filter, EyeOff } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import StatCard from "../components/StatCard";
@@ -22,6 +22,7 @@ export default function AssessmentsPage() {
     const initialData = useQuery(api.setup.getInitialData);
     const [selectedGrade, setSelectedGrade] = useState<number>(10);
     const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+    const [hideCompleted, setHideCompleted] = useState(false);
 
     const schoolId = initialData?.schools?.[0]?._id;
     
@@ -190,13 +191,36 @@ export default function AssessmentsPage() {
             {/* Matrix Table */}
             {selectedClassId && classAssessments && (
                 <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden animate-in slide-in-from-bottom-6 duration-700">
-                    <div className="bg-qatar-maroon px-6 sm:px-8 py-5 flex justify-between items-center">
+                    <div className="bg-qatar-maroon px-6 sm:px-8 py-5 flex flex-wrap justify-between items-center gap-3">
                         <h2 className="text-xl font-black text-white flex items-center gap-3">
                             <BookOpen className="w-6 h-6 text-white/70" />
                             جدول رصد التطبيقات - {classAssessments.className}
                         </h2>
+                        <button
+                            onClick={() => setHideCompleted(prev => !prev)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black border transition-all shadow-sm ${
+                                hideCompleted
+                                    ? "bg-white text-qatar-maroon border-white shadow-md"
+                                    : "bg-white/10 text-white border-white/30 hover:bg-white/20"
+                            }`}
+                        >
+                            {hideCompleted ? <EyeOff className="w-4 h-4" /> : <Filter className="w-4 h-4" />}
+                            {hideCompleted ? "إخفاء المكتملين" : "إظهار غير المكتملين فقط"}
+                            {hideCompleted && (
+                                <span className="bg-qatar-maroon text-white text-[10px] px-1.5 py-0.5 rounded-full border border-white/30">
+                                    {classAssessments.students.filter((s: any) => s.remainingCount > 0).length}
+                                </span>
+                            )}
+                        </button>
                     </div>
 
+                    {hideCompleted && classAssessments.students.filter((s: any) => s.remainingCount > 0).length === 0 && (
+                        <div className="flex flex-col items-center gap-3 py-10 text-center">
+                            <CheckCircle2 className="w-14 h-14 text-emerald-400" />
+                            <p className="text-emerald-700 font-black text-lg">🎉 جميع الطلاب أكملوا جميع التطبيقات!</p>
+                            <p className="text-slate-400 text-sm">لا يوجد طلاب متبقيون.</p>
+                        </div>
+                    )}
                     <div className="overflow-x-auto">
                         {classAssessments.students.length === 0 ? (
                             <div className="p-10 text-center">
@@ -241,7 +265,9 @@ export default function AssessmentsPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {classAssessments.students.map((student: any, idx: number) => (
+                                    {classAssessments.students
+                                        .filter((student: any) => !hideCompleted || student.remainingCount > 0)
+                                        .map((student: any, idx: number) => (
                                         <tr key={student.studentId} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
                                             <td className="py-3 px-4 font-black text-slate-800 text-sm sticky right-0 bg-inherit border-l border-slate-200 shadow-[1px_0_5px_rgba(0,0,0,0.02)] whitespace-nowrap">
                                                 {student.studentName}

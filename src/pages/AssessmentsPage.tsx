@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { CheckCircle2, Layers, XCircle, BarChart3, Users, BookOpen, Filter, EyeOff } from "lucide-react";
+import { CheckCircle2, Layers, XCircle, BarChart3, Users, BookOpen, Filter, EyeOff, UserMinus, UserCheck } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import StatCard from "../components/StatCard";
@@ -31,8 +31,21 @@ export default function AssessmentsPage() {
         (schoolId && selectedClassId) ? { schoolId, classId: selectedClassId as any } : "skip" as any
     );
 
+    const gradeSummary = useQuery(api.assessments.getGradeAssessmentsSummary,
+        (schoolId && selectedGrade) ? { schoolId, grade: selectedGrade } : "skip" as any
+    );
+
     const toggleAssessment = useMutation(api.assessments.toggleAssessment);
     const toggleSubjectForAll = useMutation(api.assessments.toggleSubjectForAll);
+    const toggleExemption = useMutation(api.assessments.toggleExemption);
+
+    const handleToggleExemption = async (studentId: string) => {
+        try {
+            await toggleExemption({ studentId: studentId as any });
+        } catch (e) {
+            console.error("Failed to toggle exemption", e);
+        }
+    };
 
     const handleToggleAll = async (subjectId: string, isCompleted: boolean) => {
         if (!schoolId || !selectedClassId) return;
@@ -164,6 +177,33 @@ export default function AssessmentsPage() {
                 </div>
             </div>
 
+            {/* Grade General Stats */}
+            {gradeSummary && (
+                <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-6 qatar-card-shadow text-white flex flex-col sm:flex-row items-center justify-between gap-6 animate-in slide-in-from-bottom-2">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/10 rounded-full flex items-center justify-center border border-white/20">
+                            <BarChart3 className="w-7 h-7 text-amber-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-white">النسبة العامة للمرحلة ({GRADE_SHORT[selectedGrade]})</h3>
+                            <p className="text-slate-300 text-sm mt-1">إجمالي إنجاز التطبيقات لجميع صفوف المرحلة</p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-6">
+                        <div className="text-center">
+                            <p className="text-3xl font-black text-amber-400">{gradeSummary.overallPercentage.toFixed(1)}%</p>
+                            <p className="text-xs text-slate-400 mt-1">نسبة الإنجاز</p>
+                        </div>
+                        <div className="w-px h-12 bg-white/20 hidden sm:block"></div>
+                        <div className="text-center">
+                            <p className="text-xl font-bold text-white">{gradeSummary.totalCompleted} <span className="text-sm text-slate-400">/ {gradeSummary.totalPossible}</span></p>
+                            <p className="text-xs text-slate-400 mt-1">التطبيقات المنجزة</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Stats Cards */}
             {selectedClassId && classAssessments && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 animate-in slide-in-from-bottom-4 duration-500">
@@ -268,58 +308,69 @@ export default function AssessmentsPage() {
                                     {classAssessments.students
                                         .filter((student: any) => !hideCompleted || student.remainingCount > 0)
                                         .map((student: any, idx: number) => (
-                                        <tr key={student.studentId} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
+                                        <tr key={student.studentId} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${student.isExempt ? "bg-slate-100 opacity-60" : idx % 2 === 0 ? "bg-white" : "bg-slate-50/30"}`}>
                                             <td className="py-3 px-4 font-black text-slate-800 text-sm sticky right-0 bg-inherit border-l border-slate-200 shadow-[1px_0_5px_rgba(0,0,0,0.02)] whitespace-nowrap">
-                                                {student.studentName}
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => handleToggleExemption(student.studentId)} title={student.isExempt ? "إلغاء الاستبعاد" : "استبعاد الطالب"} className={`p-1.5 rounded-lg transition-colors ${student.isExempt ? "bg-slate-300 text-slate-600 hover:bg-slate-400" : "bg-rose-100 text-rose-500 hover:bg-rose-500 hover:text-white"}`}>
+                                                        {student.isExempt ? <UserCheck className="w-4 h-4" /> : <UserMinus className="w-4 h-4" />}
+                                                    </button>
+                                                    <span className={student.isExempt ? "line-through text-slate-500" : ""}>{student.studentName}</span>
+                                                </div>
                                             </td>
                                             
                                             {/* Subjects toggles */}
                                             {student.statuses.map((status: any) => (
                                                 <td key={status.subjectId} className="py-2 px-2 text-center border-l border-slate-100">
                                                     <button
-                                                        onClick={() => handleToggle(student.studentId, status.subjectId)}
+                                                        onClick={() => !student.isExempt && handleToggle(student.studentId, status.subjectId)}
+                                                        disabled={student.isExempt}
                                                         className={`w-10 h-10 mx-auto rounded-xl flex items-center justify-center transition-all ${
+                                                            student.isExempt ? "bg-slate-200 text-slate-400 cursor-not-allowed" :
                                                             status.isCompleted
                                                                 ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-200"
                                                                 : "bg-slate-100 text-slate-300 hover:bg-slate-200 hover:text-slate-500"
                                                         }`}
                                                     >
-                                                        {status.isCompleted ? <CheckCircle2 className="w-6 h-6" /> : <span className="font-black text-xs">❌</span>}
+                                                        {status.isCompleted && !student.isExempt ? <CheckCircle2 className="w-6 h-6" /> : student.isExempt ? "-" : <span className="font-black text-xs">❌</span>}
                                                     </button>
                                                 </td>
                                             ))}
 
                                             {/* Aggregations */}
                                             <td className="py-3 px-3 text-center border-l border-slate-100">
-                                                <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-lg text-sm font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm">
-                                                    {student.completedCount}
+                                                <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-lg text-sm font-black border shadow-sm ${student.isExempt ? "bg-slate-200 text-slate-500 border-slate-300" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+                                                    {student.isExempt ? "-" : student.completedCount}
                                                 </span>
                                             </td>
                                             <td className="py-3 px-3 text-center border-l border-slate-100">
-                                                <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-lg text-sm font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-sm">
-                                                    {student.remainingCount}
+                                                <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-lg text-sm font-black border shadow-sm ${student.isExempt ? "bg-slate-200 text-slate-500 border-slate-300" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
+                                                    {student.isExempt ? "-" : student.remainingCount}
                                                 </span>
                                             </td>
                                             <td className="py-3 px-3 text-center">
-                                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                                    <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-black border shadow-sm ${
-                                                        student.completionPercentage >= 90 ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                                        : student.completionPercentage >= 50 ? "bg-amber-100 text-amber-800 border-amber-200"
-                                                        : "bg-rose-100 text-rose-800 border-rose-200"
-                                                    }`}>
-                                                        {student.completionPercentage.toFixed(0)}%
-                                                    </span>
-                                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                        <div
-                                                            className={`h-full rounded-full transition-all duration-500 ${
-                                                                student.completionPercentage >= 90 ? "bg-emerald-500"
-                                                                : student.completionPercentage >= 50 ? "bg-amber-500"
-                                                                : "bg-rose-500"
-                                                            }`}
-                                                            style={{ width: `${student.completionPercentage}%` }}
-                                                        />
+                                                {student.isExempt ? (
+                                                    <span className="text-xs font-black text-slate-400">مستبعد</span>
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center gap-1.5">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-black border shadow-sm ${
+                                                            student.completionPercentage >= 90 ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                                            : student.completionPercentage >= 50 ? "bg-amber-100 text-amber-800 border-amber-200"
+                                                            : "bg-rose-100 text-rose-800 border-rose-200"
+                                                        }`}>
+                                                            {student.completionPercentage.toFixed(0)}%
+                                                        </span>
+                                                        <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full transition-all duration-500 ${
+                                                                    student.completionPercentage >= 90 ? "bg-emerald-500"
+                                                                    : student.completionPercentage >= 50 ? "bg-amber-500"
+                                                                    : "bg-rose-500"
+                                                                }`}
+                                                                style={{ width: `${student.completionPercentage}%` }}
+                                                            />
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}

@@ -26,6 +26,7 @@ export default defineSchema({
         nationalId: v.optional(v.string()),
         guardianPhone: v.optional(v.string()),
         isActive: v.boolean(),
+        isExempt: v.optional(v.boolean()),
     }).index("by_class", ["classId"]).index("by_school", ["schoolId"]),
     teachers: defineTable({
         schoolId: v.id("schools"),

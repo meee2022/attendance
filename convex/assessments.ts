@@ -59,6 +59,7 @@ export const getClassAssessments = query({
             return {
                 studentId: student._id,
                 studentName: student.fullName,
+                isExempt: student.isExempt || false,
                 statuses: subjectStatuses,
                 completedCount,
                 remainingCount,
@@ -67,9 +68,18 @@ export const getClassAssessments = query({
         });
 
         // Summary for class
-        const totalStudents = students.length;
-        const totalPossibleAssessments = totalStudents * subjects.length;
-        const totalCompletedAssessments = assessments.filter(a => a.isCompleted).length;
+        let totalStudents = 0;
+        let totalPossibleAssessments = 0;
+        let totalCompletedAssessments = 0;
+
+        for (const s of studentRows) {
+            if (!s.isExempt) {
+                totalStudents++;
+                totalPossibleAssessments += subjects.length;
+                totalCompletedAssessments += s.completedCount;
+            }
+        }
+
         const overallPercentage = totalPossibleAssessments > 0 ? (totalCompletedAssessments / totalPossibleAssessments) * 100 : 0;
 
         return {
@@ -166,5 +176,90 @@ export const toggleSubjectForAll = mutation({
             }
         }
         return "تم تحديث الكل";
+    }
+});
+
+// Get overall assessment summary for an entire grade
+export const getGradeAssessmentsSummary = query({
+    args: {
+        schoolId: v.id("schools"),
+        grade: v.number(),
+    },
+    handler: async (ctx, args) => {
+        // Find all active classes in this grade
+        const classes = await ctx.db.query("classes")
+            .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
+            .filter(q => q.eq(q.field("grade"), args.grade))
+            .filter(q => q.eq(q.field("isActive"), true))
+            .collect();
+
+        const classIds = classes.map(c => c._id);
+        if (classIds.length === 0) return { overallPercentage: 0, totalCompleted: 0, totalPossible: 0 };
+
+        const allSubjects = await ctx.db.query("subjects")
+            .filter(q => q.eq(q.field("schoolId"), args.schoolId))
+            .collect();
+
+        // Precompute subjects applicable to each class
+        const subjectsPerClass = new Map();
+        for (const cls of classes) {
+            const targetString = `${cls.grade}-${cls.track || "عام"}`;
+            const classSubjects = allSubjects.filter(sub => 
+                sub.targetClasses && sub.targetClasses.includes(targetString)
+            );
+            subjectsPerClass.set(cls._id, classSubjects);
+        }
+
+        // Get active students to calculate total possible assessments
+        const allStudents = await ctx.db.query("students")
+            .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
+            .filter(q => q.eq(q.field("isActive"), true))
+            .collect();
+            
+        let totalPossible = 0;
+        const validStudentIds = new Set();
+        for (const student of allStudents) {
+            if (student.isExempt) continue;
+            validStudentIds.add(student._id);
+            if (classIds.includes(student.classId)) {
+                const classSubjects = subjectsPerClass.get(student.classId) || [];
+                totalPossible += classSubjects.length;
+            }
+        }
+
+        // Count completed assessments for these classes, only for non-exempt
+        let totalCompleted = 0;
+        for (const clsId of classIds) {
+            const classAssessments = await ctx.db.query("assessments")
+                .withIndex("by_class", q => q.eq("classId", clsId))
+                .filter(q => q.eq(q.field("isCompleted"), true))
+                .collect();
+            
+            for (const a of classAssessments) {
+                if (validStudentIds.has(a.studentId)) {
+                    totalCompleted++;
+                }
+            }
+        }
+
+        const overallPercentage = totalPossible > 0 ? (totalCompleted / totalPossible) * 100 : 0;
+
+        return {
+            overallPercentage,
+            totalCompleted,
+            totalPossible
+        };
+    }
+});
+
+// Toggle exemption for a student (exclude from assessments entirely)
+export const toggleExemption = mutation({
+    args: { studentId: v.id("students") },
+    handler: async (ctx, args) => {
+        const student = await ctx.db.get(args.studentId);
+        if (!student) throw new Error("الطالب غير موجود");
+        const newStatus = !student.isExempt;
+        await ctx.db.patch(args.studentId, { isExempt: newStatus });
+        return newStatus;
     }
 });

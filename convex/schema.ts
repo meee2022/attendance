@@ -79,4 +79,49 @@ export default defineSchema({
       .index("by_student", ["studentId"])
       .index("by_subject", ["subjectId"])
       .index("by_class_subject_student", ["classId", "subjectId", "studentId"]),
+
+    surveys: defineTable({
+        schoolId: v.id("schools"),
+        title: v.string(),
+        description: v.optional(v.string()),
+        academicYear: v.string(),
+        ratingLabels: v.array(v.string()),
+        sections: v.array(v.object({
+            id: v.string(),
+            title: v.string(),
+            color: v.optional(v.string()),
+            questions: v.array(v.object({
+                id: v.string(),
+                text: v.string(),
+                type: v.union(v.literal("rating"), v.literal("multicheck"), v.literal("textarea")),
+                options: v.optional(v.array(v.string())),
+            })),
+        })),
+        isActive: v.boolean(),
+    }).index("by_school", ["schoolId"]),
+
+    surveyRespondents: defineTable({
+        schoolId: v.id("schools"),
+        surveyId: v.id("surveys"),
+        name: v.string(),
+        department: v.optional(v.string()),
+        hasResponded: v.boolean(),
+    }).index("by_survey", ["surveyId"])
+      .index("by_school", ["schoolId"]),
+
+    surveyResponses: defineTable({
+        schoolId: v.id("schools"),
+        surveyId: v.id("surveys"),
+        respondentId: v.id("surveyRespondents"),
+        teacherName: v.string(),
+        department: v.optional(v.string()),
+        subject: v.optional(v.string()),
+        yearsExperience: v.optional(v.string()),
+        qualification: v.optional(v.string()),
+        responseDate: v.optional(v.string()),
+        answers: v.string(), // JSON: { [questionId]: number | string[] | string }
+        submittedAt: v.number(),
+    }).index("by_survey", ["surveyId"])
+      .index("by_respondent", ["respondentId"])
+      .index("by_school", ["schoolId"]),
 });

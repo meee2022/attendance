@@ -11,6 +11,10 @@ export default defineSchema({
         currentDate: v.optional(v.string()),
         adminPin: v.optional(v.string()), // default "1234"
         dailyAbsenceThreshold: v.optional(v.number()), // max absent periods still = present
+        // Supervision role PINs
+        coordinatorPin: v.optional(v.string()), // افتراضي "1111"
+        supervisorPin: v.optional(v.string()),  // افتراضي "2222"
+        deputyPin: v.optional(v.string()),      // افتراضي "3333"
     }),
     classes: defineTable({
         schoolId: v.id("schools"),
@@ -125,4 +129,72 @@ export default defineSchema({
     }).index("by_survey", ["surveyId"])
       .index("by_respondent", ["respondentId"])
       .index("by_school", ["schoolId"]),
+
+    // ── Classroom Supervision (الإشراف الصفي) ──────────────────────────────
+    supervisionCriteria: defineTable({
+        schoolId: v.id("schools"),
+        domain: v.union(
+            v.literal("planning"),       // التخطيط
+            v.literal("execution"),      // تنفيذ الدرس
+            v.literal("evaluation"),     // التقويم
+            v.literal("management"),     // الإدارة الصفية
+        ),
+        text: v.string(),
+        order: v.number(),
+        isActive: v.boolean(),
+    }).index("by_school", ["schoolId"])
+      .index("by_school_domain", ["schoolId", "domain"]),
+
+    supervisors: defineTable({
+        schoolId: v.id("schools"),
+        fullName: v.string(),
+        role: v.union(
+            v.literal("coordinator"),   // المنسق
+            v.literal("supervisor"),    // الموجه
+            v.literal("deputy"),        // النائب الأكاديمي
+        ),
+        subjects: v.array(v.string()),  // قائمة المواد التي يغطيها
+        email: v.optional(v.string()),
+        pin: v.optional(v.string()),    // PIN خاص بالزائر (اختياري - افتراضياً موحد لكل دور)
+        isActive: v.boolean(),
+    }).index("by_school", ["schoolId"])
+      .index("by_role", ["schoolId", "role"]),
+
+    supervisionVisits: defineTable({
+        schoolId: v.id("schools"),
+        // الزائر
+        visitorRole: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy")),
+        visitorId: v.optional(v.id("supervisors")),
+        visitorName: v.string(),
+        // المعلم المُقَيَّم
+        teacherName: v.string(),
+        teacherDepartment: v.string(),
+        // تفاصيل الحصة
+        subjectName: v.string(),
+        className: v.string(),       // e.g. "حادي عشر 1"
+        lessonTopic: v.string(),
+        visitDate: v.string(),       // YYYY-MM-DD
+        followUpType: v.union(v.literal("full"), v.literal("partial")),
+        visitNumber: v.number(),     // رقم الزيارة
+        // التقييمات: { [criterionId]: 0|1|2|3|"not_measured" }
+        ratings: v.string(),         // JSON
+        // المعدل
+        averageScore: v.number(),    // 0..1
+        domainAverages: v.string(),  // JSON { planning, execution, evaluation, management }
+        // التوصيات
+        planningRec: v.optional(v.string()),
+        executionRec: v.optional(v.string()),
+        evalMgmtRec: v.optional(v.string()),
+        notes: v.optional(v.string()),
+        // الحالة والتوقيع
+        status: v.union(v.literal("draft"), v.literal("submitted")),
+        submittedAt: v.optional(v.number()),
+        teacherSignedAt: v.optional(v.number()),
+        teacherSignedNote: v.optional(v.string()),
+        createdAt: v.number(),
+    }).index("by_school", ["schoolId"])
+      .index("by_teacher", ["schoolId", "teacherName"])
+      .index("by_role", ["schoolId", "visitorRole"])
+      .index("by_subject", ["schoolId", "subjectName"])
+      .index("by_date", ["schoolId", "visitDate"]),
 });

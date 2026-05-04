@@ -10,7 +10,20 @@
       "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 CONVEX_DEPLOY_KEY=\"prod:hidden-badger-532|eyJ2MiI6IjJjODU0MzI4ZmQ3NjRhNDFiNzUxODFhNzI4NTdlMmVkIn0=\" npx convex deploy --yes)",
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__browser_batch",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit *)",
+      "Bash(npx tsc *)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex deploy --yes)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --head claude/vigorous-volhard-dfae4e --title 'إعادة تصميم الاستبانات: عرض المعلم + لوحة المسؤول + تحليل بيانات بـ charts' --body ' *)",
+      "Bash(cp \"/d/OneDrive - Ministry of Education and Higher Education/الخاص/الزيارات ابو ذر/فيصل زاهد الملحم - 00-الزيارة الصفية 2026/فيصل زاهد الملحم - 00-الزيارة الصفية 2026/استمارة الإشراف على أداء معلم1.xlsm\" /tmp/supervision.xlsm)",
+      "Read(//tmp/**)",
+      "Bash(node /tmp/analyze.mjs)",
+      "Bash(cp /tmp/supervision.xlsm \"/c/Users/M/AppData/Local/Temp/supervision.xlsm\")",
+      "Bash(node _analyze.mjs)",
+      "Bash(sed -n '1,80p' /tmp/an2.txt)",
+      "Bash(sed -n '80,180p' /tmp/an2.txt)"
     ]
   }
 }

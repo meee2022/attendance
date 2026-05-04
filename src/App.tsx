@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users } from "lucide-react";
+import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck } from "lucide-react";
 import { useState } from "react";
 import TeacherUpload from "./pages/TeacherUpload";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -15,6 +15,8 @@ import AssessmentsPage from "./pages/AssessmentsPage";
 import StudentsPage from "./pages/StudentsPage";
 import { FileCheck, ClipboardList } from "lucide-react";
 import SurveysPage from "./pages/SurveysPage";
+import SupervisionPage from "./pages/SupervisionPage";
+import SupervisionPrint from "./pages/SupervisionPrint";
 
 const PUBLIC_NAV = [
     { to: "/",          icon: <LayoutDashboard className="w-5 h-5" />, label: "المتابعة",      admin: false },
@@ -23,6 +25,7 @@ const PUBLIC_NAV = [
     { to: "/reports",   icon: <BarChart3 className="w-5 h-5" />,       label: "التقارير",      admin: false },
     { to: "/messages",  icon: <MessageSquare className="w-5 h-5" />,   label: "الرسائل",       admin: false },
     { to: "/surveys",   icon: <ClipboardList className="w-5 h-5" />,   label: "الاستبانات",    admin: false },
+    { to: "/supervision",icon: <ClipboardCheck className="w-5 h-5" />,  label: "الإشراف الصفي",  admin: false },
 ];
 
 const ADMIN_NAV = [
@@ -45,6 +48,8 @@ function App() {
           <Route path="/reports"             element={<ReportsPage />} />
           <Route path="/messages"            element={<MessagesPage />} />
           <Route path="/surveys"             element={<SurveysPage />} />
+          <Route path="/supervision"         element={<SupervisionPage />} />
+          <Route path="/supervision/print/:id" element={<SupervisionPrint />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />

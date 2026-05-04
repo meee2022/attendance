@@ -14,6 +14,15 @@ type ManageSubTab = "teachers" | "survey";
 type Survey = NonNullable<ReturnType<typeof useQuery<typeof api.surveys.getActiveSurvey>>>;
 type Respondent = Awaited<ReturnType<typeof useQuery<typeof api.surveys.getRespondents>>>[number];
 
+const RATING_OPTS = [
+    { val: 1, label: "لا أحتاج",     color: "#6b7280" },
+    { val: 2, label: "منخفض",        color: "#10b981" },
+    { val: 3, label: "متوسط",         color: "#f59e0b" },
+    { val: 4, label: "مرتفع",         color: "#ef4444" },
+    { val: 5, label: "مرتفع جداً",   color: "#7c3aed" },
+] as const;
+
+const MCOL_COLORS = ["#9B1239", "#1e40af", "#065f46"] as const;
 
 // ── Survey Form ────────────────────────────────────────────────────────────
 function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
@@ -23,7 +32,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
     onSubmitted: () => void;
 }) {
     const submitResponse = useMutation(api.surveys.submitResponse);
-    const [answers, setAnswers] = useState<Record<string, string[] | string>>(() => {
+    const [answers, setAnswers] = useState<Record<string, number | string[] | string>>(() => {
         if (existingResponse?.answers) { try { return JSON.parse(existingResponse.answers); } catch { return {}; } }
         return {};
     });
@@ -39,6 +48,10 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
     const axisSections = survey.sections.filter(s => s.questions.some(q => q.type === "rating"));
     const questionSections = survey.sections.filter(s => !s.questions.some(q => q.type === "rating"));
 
+    const allRatingQs = axisSections.flatMap(s => s.questions.filter(q => q.type === "rating"));
+    const answeredCount = allRatingQs.filter(q => typeof answers[q.id] === "number").length;
+
+    const setRate = (qId: string, val: number) => setAnswers(p => ({ ...p, [qId]: val }));
     const setCheck = (qId: string, opt: string, checked: boolean) =>
         setAnswers(p => { const cur = (p[qId] as string[]) ?? []; return { ...p, [qId]: checked ? [...cur, opt] : cur.filter(o => o !== opt) }; });
 
@@ -50,8 +63,6 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             setTimeout(onSubmitted, 1200);
         } finally { setSaving(false); }
     };
-
-    const MCOL_COLORS = ["#9B1239","#1e40af","#065f46"];
 
     return (
         <div className="space-y-4 animate-in fade-in duration-300">
@@ -71,8 +82,27 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
                     </div>
                     {existingResponse
                         ? <span className="flex items-center gap-1.5 text-xs font-black bg-white/20 text-white px-3 py-1.5 rounded-full border border-white/30"><CheckCircle2 className="w-3.5 h-3.5"/>تم الإرسال</span>
-                        : <span className="text-xs font-bold text-white/60">يرجى ملء الاستبانة</span>
+                        : <span className="text-xs font-bold text-white/60">{answeredCount}/{allRatingQs.length} سؤال</span>
                     }
+                </div>
+                {/* Progress bar */}
+                <div className="px-5 pb-3">
+                    <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                        <div className="h-full bg-white/80 rounded-full transition-all duration-500"
+                            style={{ width: `${allRatingQs.length > 0 ? (answeredCount / allRatingQs.length) * 100 : 0}%` }} />
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Scale legend ── */}
+            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-3">
+                <div className="grid grid-cols-5 gap-1.5 text-center">
+                    {RATING_OPTS.map(o => (
+                        <div key={o.val} className="rounded-xl py-1.5 px-1" style={{ background: o.color + "18" }}>
+                            <p className="text-base font-black" style={{ color: o.color }}>{o.val}</p>
+                            <p className="text-[9px] font-bold leading-tight" style={{ color: o.color }}>{o.label}</p>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -108,37 +138,59 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
                 </div>
             </div>
 
-            {/* ── Axes — read only ── */}
-            {axisSections.length > 0 && (
-                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                    <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center gap-3"
-                        style={{ background: "linear-gradient(135deg,#1e293b,#334155)" }}>
-                        <span className="font-black text-white text-sm">محاور الاستبانة</span>
-                        <span className="text-xs font-black text-white/40 mr-auto">②</span>
+            {/* ── Rating sections ── */}
+            {axisSections.map((section, sIdx) => {
+                const ratingQs = section.questions.filter(q => q.type === "rating");
+                const sectionAnswered = ratingQs.filter(q => typeof answers[q.id] === "number").length;
+                return (
+                    <div key={section.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
+                        <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between"
+                            style={{ borderRight: `4px solid ${section.color}` }}>
+                            <span className="text-xs font-black text-slate-400">{sectionAnswered}/{ratingQs.length}</span>
+                            <span className="font-black text-slate-800 text-sm text-right">{section.title}</span>
+                        </div>
+                        <div className="p-3 space-y-2">
+                            {ratingQs.map((q, qi) => {
+                                const cur = answers[q.id] as number | undefined;
+                                return (
+                                    <div key={q.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                        <div className="flex items-start gap-2 mb-2.5">
+                                            <p className="text-xs font-bold text-slate-700 text-right leading-relaxed flex-1">{q.text}</p>
+                                            <span className="w-5 h-5 rounded flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 mt-0.5"
+                                                style={{ background: section.color }}>{qi + 1}</span>
+                                        </div>
+                                        <div className="grid grid-cols-5 gap-1">
+                                            {RATING_OPTS.map(o => {
+                                                const sel = cur === o.val;
+                                                return (
+                                                    <button key={o.val} onClick={() => setRate(q.id, o.val)}
+                                                        className={`py-1.5 rounded-lg text-[9px] font-black text-center transition-all border leading-tight ${
+                                                            sel ? "text-white border-transparent shadow-sm" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                                                        }`}
+                                                        style={sel ? { background: o.color } : {}}>
+                                                        {o.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <div className="divide-y divide-slate-100">
-                        {axisSections.map((section, idx) => (
-                            <div key={section.id}
-                                className={`flex items-center gap-3 px-5 py-3.5 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                                <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
-                                    style={{ background: section.color || "#9B1239" }}>{idx + 1}</span>
-                                <span className="text-sm font-bold text-slate-700 text-right flex-1">{section.title}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                );
+            })}
 
-            {/* ── Questions (multicheck / textarea) ── */}
-            {questionSections.map((section, secIdx) => {
+            {/* ── Multicheck / Textarea sections ── */}
+            {questionSections.map(section => {
                 const multichecks = section.questions.filter(q => q.type === "multicheck");
                 const textareas = section.questions.filter(q => q.type === "textarea");
                 const multiCol = multichecks.length > 1;
                 return (
                     <div key={section.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                        <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between bg-slate-50"
+                        <div className="px-5 py-3 border-b border-qatar-gray-border bg-slate-50"
                             style={{ borderRight: `4px solid ${section.color || "#9B1239"}` }}>
-                            <span className="font-black text-slate-800 text-sm text-right">{section.title}</span>
+                            <span className="font-black text-slate-800 text-sm text-right block">{section.title}</span>
                         </div>
                         <div className="p-4 space-y-4">
                             {multichecks.length > 0 && (
@@ -159,9 +211,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
                                                     return (
                                                         <label key={opt}
                                                             className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all text-sm font-bold border-2 ${
-                                                                checked
-                                                                    ? "text-white border-transparent"
-                                                                    : "bg-white border-slate-100 text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                                                                checked ? "text-white border-transparent" : "bg-white border-slate-100 text-slate-600 hover:border-slate-200 hover:bg-slate-50"
                                                             }`}
                                                             style={checked ? { background: MCOL_COLORS[qi % MCOL_COLORS.length] } : {}}>
                                                             <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${checked ? "bg-white/30 border-white/60" : "border-slate-300"}`}>
@@ -695,6 +745,8 @@ function SurveyEditor({ survey }: { survey: Survey }) {
 
 // ── Analytics Tab ──────────────────────────────────────────────────────────
 const MCOL_COLORS_A = ["#9B1239", "#1e40af", "#065f46"];
+const RATING_COLORS_A = ["#6b7280", "#10b981", "#f59e0b", "#ef4444", "#7c3aed"];
+const RATING_LABELS_A = ["لا أحتاج", "منخفض", "متوسط", "مرتفع", "مرتفع جداً"];
 
 function AnalyticsTab({ survey }: { survey: Survey }) {
     const responses = useQuery(api.surveys.getAllResponses, { surveyId: survey._id }) ?? [];
@@ -709,8 +761,24 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
         selectedDept === "all" ? responses : responses.filter(r => (r.department || "بدون قسم") === selectedDept),
         [responses, selectedDept]);
 
+    const axisSectionsA = survey.sections.filter(s => s.questions.some(q => q.type === "rating"));
     const multicheckSections = survey.sections.filter(s => s.questions.some(q => q.type === "multicheck"));
     const textareaSections = survey.sections.filter(s => s.questions.some(q => q.type === "textarea"));
+
+    const sectionStats = useMemo(() =>
+        axisSectionsA.map(section => {
+            const ratingQs = section.questions.filter(q => q.type === "rating");
+            let totalSum = 0, totalCount = 0;
+            const qStats = ratingQs.map(q => {
+                let sum = 0, cnt = 0;
+                for (const resp of filteredResponses) {
+                    try { const ans = JSON.parse(resp.answers); const v = ans[q.id]; if (typeof v === "number" && v >= 1 && v <= 5) { sum += v; cnt++; totalSum += v; totalCount++; } } catch {}
+                }
+                return { q, avg: cnt > 0 ? sum / cnt : 0, cnt };
+            });
+            return { section, qStats, overallAvg: totalCount > 0 ? totalSum / totalCount : 0 };
+        }).sort((a, b) => b.overallAvg - a.overallAvg),
+        [axisSectionsA, filteredResponses]);
 
     const multicheckStats = useMemo(() =>
         multicheckSections.map(section => ({
@@ -808,6 +876,52 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
                                 {d}
                             </button>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Section averages (sorted by highest need) ── */}
+            {sectionStats.some(s => s.overallAvg > 0) && (
+                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
+                    <div className="px-5 py-3 flex items-center gap-3 border-b border-qatar-gray-border"
+                        style={{ background: "linear-gradient(135deg,#1e293b,#334155)" }}>
+                        <BarChart3 className="w-4 h-4 text-white/60 flex-shrink-0" />
+                        <span className="font-black text-white text-sm">تحليل المحاور — مرتبة حسب الأولوية</span>
+                    </div>
+                    <div className="p-4 space-y-5">
+                        {sectionStats.map(({ section, qStats, overallAvg }) => {
+                            if (overallAvg === 0) return null;
+                            const ci = Math.min(4, Math.max(0, Math.ceil(overallAvg) - 1));
+                            const color = RATING_COLORS_A[ci];
+                            const topQs = [...qStats].sort((a, b) => b.avg - a.avg).slice(0, 3);
+                            return (
+                                <div key={section.id}>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                        <span className="text-xs font-black flex-shrink-0" style={{ color }}>
+                                            {overallAvg.toFixed(2)} — {RATING_LABELS_A[ci]}
+                                        </span>
+                                        <span className="font-black text-slate-700 text-sm text-right flex-1">{section.title}</span>
+                                    </div>
+                                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                        <div className="h-full rounded-full transition-all duration-700"
+                                            style={{ width: `${(overallAvg / 5) * 100}%`, background: color }} />
+                                    </div>
+                                    <div className="space-y-1 pr-2">
+                                        {topQs.map(({ q, avg }) => {
+                                            if (avg === 0) return null;
+                                            const qci = Math.min(4, Math.max(0, Math.ceil(avg) - 1));
+                                            return (
+                                                <div key={q.id} className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-black w-7 flex-shrink-0 text-center"
+                                                        style={{ color: RATING_COLORS_A[qci] }}>{avg.toFixed(1)}</span>
+                                                    <p className="text-[10px] text-slate-500 font-bold text-right flex-1 leading-snug">{q.text}</p>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}

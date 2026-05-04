@@ -2,10 +2,12 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare } from "lucide-react";
+import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3 } from "lucide-react";
 import ImportStudents from "./ImportStudents";
 import MessageTemplatesPage from "./MessageTemplatesPage";
 import SeedPage from "./SeedPage";
+import { ManageTab, AnalyticsTab } from "./SurveysPage";
+import type { Survey } from "./SurveysPage";
 
 const TRACKS = ["عام", "علمي", "أدبي", "تكنولوجي"];
 const GRADE_LABELS: Record<number, string> = { 10: "عاشر", 11: "حادي عشر", 12: "ثاني عشر" };
@@ -16,7 +18,7 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "settings" | "students" | "messages" | "seed";
+type MainTab = "settings" | "students" | "messages" | "seed" | "surveys";
 
 export default function SettingsPage() {
     const [mainTab, setMainTab] = useState<MainTab>("settings");
@@ -26,6 +28,7 @@ export default function SettingsPage() {
         { id: "settings",  label: "الإعدادات العامة",  icon: <Settings className="w-4 h-4" /> },
         { id: "students",  label: "بيانات الطلاب",     icon: <Users className="w-4 h-4" /> },
         { id: "messages",  label: "إعدادات الرسائل",   icon: <MessagesSquare className="w-4 h-4" /> },
+        { id: "surveys",   label: "الاستبانات",         icon: <ClipboardList className="w-4 h-4" /> },
         { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" /> },
     ];
 
@@ -77,7 +80,57 @@ export default function SettingsPage() {
 
             {mainTab === "students" && <ImportStudents />}
             {mainTab === "messages" && <MessageTemplatesPage />}
+            {mainTab === "surveys"  && <SurveysAdminSection />}
             {mainTab === "seed"     && <SeedPage />}
+        </div>
+    );
+}
+
+function SurveysAdminSection() {
+    const survey = useQuery(api.surveys.getActiveSurvey) as Survey | null | undefined;
+    const [adminTab, setAdminTab] = useState<"manage" | "analytics">("manage");
+
+    if (survey === undefined) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-qatar-maroon"/>
+            </div>
+        );
+    }
+
+    if (!survey) {
+        return (
+            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow flex flex-col items-center py-16 gap-4">
+                <ClipboardList className="w-10 h-10 text-slate-300"/>
+                <p className="font-black text-slate-500">لا توجد استبانة نشطة</p>
+                <p className="text-xs text-slate-400 font-bold">يمكن إنشاؤها من صفحة الاستبانات</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
+                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between">
+                    <div className="flex gap-2">
+                        <button onClick={() => setAdminTab("manage")}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${adminTab === "manage" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
+                            <Users className="w-3.5 h-3.5"/>المعلمون
+                        </button>
+                        <button onClick={() => setAdminTab("analytics")}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${adminTab === "analytics" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
+                            <BarChart3 className="w-3.5 h-3.5"/>التحليل
+                        </button>
+                    </div>
+                    <span className="font-black text-white text-sm flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-white/60"/>إدارة الاستبانات
+                    </span>
+                </div>
+                <div className="p-5">
+                    {adminTab === "manage"    && <ManageTab survey={survey}/>}
+                    {adminTab === "analytics" && <AnalyticsTab survey={survey}/>}
+                </div>
+            </div>
         </div>
     );
 }

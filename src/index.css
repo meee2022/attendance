@@ -13,6 +13,8 @@
   body {
     @apply bg-qatar-gray-bg text-qatar-gray-dark antialiased;
     font-family: 'Cairo', sans-serif;
+    direction: rtl;
+    text-align: right;
   }
 }
 

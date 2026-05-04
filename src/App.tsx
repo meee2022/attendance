@@ -13,7 +13,8 @@ import MessageTemplatesPage from "./pages/MessageTemplatesPage";
 import AdminGuard, { clearAdminSession } from "./components/AdminGuard";
 import AssessmentsPage from "./pages/AssessmentsPage";
 import StudentsPage from "./pages/StudentsPage";
-import { FileCheck } from "lucide-react";
+import { FileCheck, ClipboardList } from "lucide-react";
+import SurveysPage from "./pages/SurveysPage";
 
 const PUBLIC_NAV = [
     { to: "/",          icon: <LayoutDashboard className="w-5 h-5" />, label: "المتابعة",      admin: false },
@@ -21,6 +22,7 @@ const PUBLIC_NAV = [
     { to: "/assessments",icon: <FileCheck className="w-5 h-5" />,       label: "التطبيقات",     admin: false },
     { to: "/reports",   icon: <BarChart3 className="w-5 h-5" />,       label: "التقارير",      admin: false },
     { to: "/messages",  icon: <MessageSquare className="w-5 h-5" />,   label: "الرسائل",       admin: false },
+    { to: "/surveys",   icon: <ClipboardList className="w-5 h-5" />,   label: "الاستبانات",    admin: false },
 ];
 
 const ADMIN_NAV = [
@@ -42,6 +44,7 @@ function App() {
           <Route path="/class/:classId"      element={<ClassDetails />} />
           <Route path="/reports"             element={<ReportsPage />} />
           <Route path="/messages"            element={<MessagesPage />} />
+          <Route path="/surveys"             element={<SurveysPage />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />

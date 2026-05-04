@@ -120,9 +120,9 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
                         {axisSections.map((section, idx) => (
                             <div key={section.id}
                                 className={`flex items-center gap-3 px-5 py-3.5 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                                <span className="text-sm font-bold text-slate-700 text-right flex-1">{section.title}</span>
                                 <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
                                     style={{ background: section.color || "#9B1239" }}>{idx + 1}</span>
+                                <span className="text-sm font-bold text-slate-700 text-right flex-1">{section.title}</span>
                             </div>
                         ))}
                     </div>
@@ -241,7 +241,7 @@ function AnswerTab({ survey }: { survey: Survey }) {
                     <div className="bg-qatar-maroon px-5 py-3.5 flex items-center justify-between">
                         <button onClick={() => setSelectedDept(null)}
                             className="flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-black transition-colors">
-                            <span className="text-base">←</span> الأقسام
+                            <span className="text-base">→</span> الأقسام
                         </button>
                         <div className="text-right">
                             <p className="font-black text-white text-sm">{selectedDept}</p>
@@ -313,7 +313,7 @@ function AnswerTab({ survey }: { survey: Survey }) {
                     <div className="h-full rounded-full transition-all duration-700"
                         style={{ width: `${respondents.length > 0 ? Math.round((totalDone / respondents.length) * 100) : 0}%`, background: "linear-gradient(90deg,#9B1239,#C0184C)" }} />
                 </div>
-                <p className="text-[10px] text-slate-400 font-bold mt-1 text-left">
+                <p className="text-[10px] text-slate-400 font-bold mt-1 text-right">
                     {respondents.length > 0 ? Math.round((totalDone / respondents.length) * 100) : 0}% نسبة الاستجابة الكلية
                 </p>
             </div>
@@ -827,7 +827,7 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
                                 })}
                                 {total===0 && <div className="flex-1 bg-slate-100"/>}
                             </div>
-                            <p className="text-[10px] text-slate-400 font-bold mt-1 text-left">{total} إجابة</p>
+                            <p className="text-[10px] text-slate-400 font-bold mt-1 text-right">{total} إجابة</p>
                         </div>
                     ))}
                 </div>

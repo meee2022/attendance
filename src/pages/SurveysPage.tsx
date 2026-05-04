@@ -12,7 +12,7 @@ export type { Survey };
 type ManageSubTab = "teachers" | "survey";
 
 type Survey = NonNullable<ReturnType<typeof useQuery<typeof api.surveys.getActiveSurvey>>>;
-type Respondent = Awaited<ReturnType<typeof useQuery<typeof api.surveys.getRespondents>>>[number];
+type Respondent = NonNullable<ReturnType<typeof useQuery<typeof api.surveys.getRespondents>>>[number];
 
 const RATING_OPTS = [
     { val: 1, label: "لا أحتاج",     color: "#6b7280" },
@@ -983,7 +983,7 @@ export function AnalyticsTab({ survey }: { survey: Survey }) {
         const all: { sectionTitle: string; sectionColor: string; q: any; avg: number; cnt: number }[] = [];
         for (const { section, qStats } of sectionStats) {
             for (const qs of qStats) {
-                if (qs.avg > 0) all.push({ sectionTitle: section.title, sectionColor: section.color, q: qs.q, avg: qs.avg, cnt: qs.cnt });
+                if (qs.avg > 0) all.push({ sectionTitle: section.title, sectionColor: section.color ?? "#9B1239", q: qs.q, avg: qs.avg, cnt: qs.cnt });
             }
         }
         return all.sort((a, b) => b.avg - a.avg).slice(0, 10);

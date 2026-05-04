@@ -313,6 +313,26 @@ export const updateRespondent = mutation({
     },
 });
 
+export const toggleRespondentParticipation = mutation({
+    args: { respondentId: v.id("surveyRespondents"), isParticipating: v.boolean() },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.respondentId, { isParticipating: args.isParticipating });
+    },
+});
+
+export const setBulkParticipation = mutation({
+    args: { surveyId: v.id("surveys"), department: v.optional(v.string()), isParticipating: v.boolean() },
+    handler: async (ctx, args) => {
+        const all = await ctx.db.query("surveyRespondents")
+            .withIndex("by_survey", q => q.eq("surveyId", args.surveyId))
+            .collect();
+        const filtered = args.department ? all.filter(r => r.department === args.department) : all;
+        for (const r of filtered) {
+            await ctx.db.patch(r._id, { isParticipating: args.isParticipating });
+        }
+    },
+});
+
 const SCHOOL_TEACHERS: { name: string; department: string }[] = [
     { name: "محمد ابراهيم محمد كمال", department: "منسق المشاريع الالكترونية" },
     { name: "مهدي بن محمد الخماسي", department: "مهندس مختبرات العلوم والتكنولوجيا" },

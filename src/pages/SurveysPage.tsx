@@ -5,10 +5,10 @@ import { api } from "../../convex/_generated/api";
 import {
     ClipboardList, Users, BarChart3, Plus, Trash2, ChevronDown, ChevronUp,
     CheckCircle2, Clock, Shield, Eye, EyeOff, Send, RotateCcw, BookOpen,
-    Pencil, X, Download, Check,
+    Pencil, X, Download, Check, UserCheck, UserX,
 } from "lucide-react";
 
-type Tab = "answer" | "manage" | "analytics";
+export type { Survey };
 type ManageSubTab = "teachers" | "survey";
 
 type Survey = NonNullable<ReturnType<typeof useQuery<typeof api.surveys.getActiveSurvey>>>;
@@ -95,26 +95,30 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             </div>
 
             {/* ── Scale legend ── */}
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-3">
-                <div className="grid grid-cols-5 gap-1.5 text-center">
-                    {RATING_OPTS.map(o => (
-                        <div key={o.val} className="rounded-xl py-1.5 px-1" style={{ background: o.color + "18" }}>
-                            <p className="text-base font-black" style={{ color: o.color }}>{o.val}</p>
-                            <p className="text-[9px] font-bold leading-tight" style={{ color: o.color }}>{o.label}</p>
+            <div className="rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-end gap-1.5">
+                    <span className="text-[11px] font-black text-slate-400">مقياس التقييم</span>
+                </div>
+                <div className="grid grid-cols-5 text-center">
+                    {RATING_OPTS.map((o, i) => (
+                        <div key={o.val} className={`py-3 px-1 ${i < RATING_OPTS.length - 1 ? "border-l border-slate-100" : ""}`}
+                            style={{ background: o.color + "10" }}>
+                            <p className="text-lg font-black" style={{ color: o.color }}>{o.val}</p>
+                            <p className="text-[9px] font-bold leading-tight mt-0.5" style={{ color: o.color }}>{o.label}</p>
                         </div>
                     ))}
                 </div>
             </div>
 
             {/* ── Basic info ── */}
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between"
-                    style={{ borderRight: "4px solid #9B1239" }}>
+            <div className="rounded-2xl overflow-hidden shadow-sm border border-slate-100">
+                <div className="px-5 py-3.5 flex items-center justify-between"
+                    style={{ background: "linear-gradient(135deg,#9B123922 0%,#9B12390a 100%)", borderRight: "4px solid #9B1239" }}>
+                    <span className="font-black text-slate-800 text-sm">بيانات المعلم</span>
                     <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-400">المعلومات الأساسية</span>
                         <BookOpen className="w-4 h-4 text-qatar-maroon" />
-                        <span className="font-black text-slate-700 text-sm">بيانات المعلم</span>
                     </div>
-                    <span className="text-xs font-black text-slate-400">① المعلومات الأساسية</span>
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-3">
                     {([
@@ -142,32 +146,43 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             {axisSections.map((section, sIdx) => {
                 const ratingQs = section.questions.filter(q => q.type === "rating");
                 const sectionAnswered = ratingQs.filter(q => typeof answers[q.id] === "number").length;
+                const pct = ratingQs.length > 0 ? sectionAnswered / ratingQs.length : 0;
                 return (
-                    <div key={section.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                        <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between"
-                            style={{ borderRight: `4px solid ${section.color}` }}>
-                            <span className="text-xs font-black text-slate-400">{sectionAnswered}/{ratingQs.length}</span>
-                            <span className="font-black text-slate-800 text-sm text-right">{section.title}</span>
+                    <div key={section.id} className="rounded-2xl overflow-hidden shadow-sm border border-slate-100">
+                        {/* Header */}
+                        <div className="px-5 py-3.5 flex items-center justify-between"
+                            style={{ background: `linear-gradient(135deg, ${section.color}22 0%, ${section.color}0a 100%)`, borderRight: `4px solid ${section.color}` }}>
+                            <span className="font-black text-slate-800 text-sm">{section.title}</span>
+                            <div className="flex items-center gap-2">
+                                <div className="w-16 h-1.5 rounded-full bg-white/60 overflow-hidden">
+                                    <div className="h-full rounded-full transition-all duration-500"
+                                        style={{ width: `${pct * 100}%`, background: section.color }} />
+                                </div>
+                                <span className="text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-sm"
+                                    style={{ background: section.color }}>{sectionAnswered}/{ratingQs.length}</span>
+                            </div>
                         </div>
-                        <div className="p-3 space-y-2">
+                        {/* Questions */}
+                        <div className="bg-white p-3 space-y-2">
                             {ratingQs.map((q, qi) => {
                                 const cur = answers[q.id] as number | undefined;
                                 return (
-                                    <div key={q.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                    <div key={q.id} className="rounded-xl p-3 border transition-all"
+                                        style={{ background: cur ? `${section.color}08` : "#f8fafc", borderColor: cur ? `${section.color}30` : "#f1f5f9" }}>
                                         <div className="flex items-start gap-2 mb-2.5">
-                                            <p className="text-xs font-bold text-slate-700 text-right leading-relaxed flex-1">{q.text}</p>
-                                            <span className="w-5 h-5 rounded flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 mt-0.5"
+                                            <span className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-black flex-shrink-0"
                                                 style={{ background: section.color }}>{qi + 1}</span>
+                                            <p className="text-[13px] font-bold text-slate-700 leading-relaxed flex-1">{q.text}</p>
                                         </div>
-                                        <div className="grid grid-cols-5 gap-1">
+                                        <div className="grid grid-cols-5 gap-1.5">
                                             {RATING_OPTS.map(o => {
                                                 const sel = cur === o.val;
                                                 return (
                                                     <button key={o.val} onClick={() => setRate(q.id, o.val)}
-                                                        className={`py-1.5 rounded-lg text-[9px] font-black text-center transition-all border leading-tight ${
-                                                            sel ? "text-white border-transparent shadow-sm" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                                                        className={`py-2 rounded-xl text-[10px] font-black text-center transition-all border leading-tight ${
+                                                            sel ? "text-white border-transparent shadow-md scale-105" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200 hover:bg-slate-50"
                                                         }`}
-                                                        style={sel ? { background: o.color } : {}}>
+                                                        style={sel ? { background: o.color, boxShadow: `0 4px 12px ${o.color}40` } : {}}>
                                                         {o.label}
                                                     </button>
                                                 );
@@ -185,54 +200,68 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             {questionSections.map(section => {
                 const multichecks = section.questions.filter(q => q.type === "multicheck");
                 const textareas = section.questions.filter(q => q.type === "textarea");
-                const multiCol = multichecks.length > 1;
+                const sectionColor = section.color || "#9B1239";
                 return (
-                    <div key={section.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                        <div className="px-5 py-3 border-b border-qatar-gray-border bg-slate-50"
-                            style={{ borderRight: `4px solid ${section.color || "#9B1239"}` }}>
-                            <span className="font-black text-slate-800 text-sm text-right block">{section.title}</span>
+                    <div key={section.id} className="rounded-2xl overflow-hidden shadow-sm border border-slate-100">
+                        {/* Header */}
+                        <div className="px-5 py-3.5"
+                            style={{ background: `linear-gradient(135deg, ${sectionColor}22 0%, ${sectionColor}0a 100%)`, borderRight: `4px solid ${sectionColor}` }}>
+                            <span className="font-black text-slate-800 text-sm block">{section.title}</span>
                         </div>
-                        <div className="p-4 space-y-4">
+                        <div className="bg-white p-4 space-y-4">
                             {multichecks.length > 0 && (
-                                <div className={multiCol ? "grid grid-cols-1 sm:grid-cols-3 gap-3" : ""}>
-                                    {multichecks.map((q, qi) => (
-                                        <div key={q.id} className="space-y-2">
-                                            {q.text && (
-                                                <div className="flex items-center justify-end gap-2 pb-2 border-b-2 border-slate-100">
-                                                    <span className="text-xs font-black text-white px-2 py-1 rounded-lg"
-                                                        style={{ background: MCOL_COLORS[qi % MCOL_COLORS.length] }}>
-                                                        {q.text}
-                                                    </span>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {multichecks.map((q, qi) => {
+                                        const colColor = MCOL_COLORS[qi % MCOL_COLORS.length];
+                                        return (
+                                            <div key={q.id} className="rounded-xl border border-slate-100 overflow-hidden">
+                                                {/* Column header */}
+                                                {q.text && (
+                                                    <div dir="rtl" className="px-3 py-2.5 flex items-center justify-start gap-2"
+                                                        style={{ background: `${colColor}15`, borderBottom: `2px solid ${colColor}30` }}>
+                                                        <span className="w-2 h-2 rounded-full flex-shrink-0"
+                                                            style={{ background: colColor }} />
+                                                        <span className="text-xs font-black"
+                                                            style={{ color: colColor }}>{q.text}</span>
+                                                    </div>
+                                                )}
+                                                <div className="p-2 space-y-1.5">
+                                                    {q.options?.map(opt => {
+                                                        const checked = ((answers[q.id] as string[]) ?? []).includes(opt);
+                                                        return (
+                                                            <label key={opt}
+                                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all text-sm font-bold border ${
+                                                                    checked ? "text-white border-transparent shadow-sm" : "bg-slate-50 border-slate-100 text-slate-600 hover:border-slate-200 hover:bg-white"
+                                                                }`}
+                                                                style={checked ? { background: colColor, boxShadow: `0 2px 8px ${colColor}40` } : {}}>
+                                                                <input type="checkbox" checked={checked} onChange={e => setCheck(q.id, opt, e.target.checked)} className="hidden" />
+                                                                <span className="flex-1">{opt}</span>
+                                                                <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${checked ? "bg-white/30 border-white/60" : "border-slate-300"}`}>
+                                                                    {checked && <Check className="w-2.5 h-2.5 text-white" />}
+                                                                </span>
+                                                            </label>
+                                                        );
+                                                    })}
                                                 </div>
-                                            )}
-                                            <div className="space-y-1.5">
-                                                {q.options?.map(opt => {
-                                                    const checked = ((answers[q.id] as string[]) ?? []).includes(opt);
-                                                    return (
-                                                        <label key={opt}
-                                                            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all text-sm font-bold border-2 ${
-                                                                checked ? "text-white border-transparent" : "bg-white border-slate-100 text-slate-600 hover:border-slate-200 hover:bg-slate-50"
-                                                            }`}
-                                                            style={checked ? { background: MCOL_COLORS[qi % MCOL_COLORS.length] } : {}}>
-                                                            <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${checked ? "bg-white/30 border-white/60" : "border-slate-300"}`}>
-                                                                {checked && <Check className="w-3 h-3 text-white" />}
-                                                            </span>
-                                                            <input type="checkbox" checked={checked} onChange={e => setCheck(q.id, opt, e.target.checked)} className="hidden" />
-                                                            <span className="text-right flex-1">{opt}</span>
-                                                        </label>
-                                                    );
-                                                })}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                             {textareas.map(q => (
                                 <div key={q.id}>
-                                    {q.text && <p className="text-sm font-black text-slate-600 mb-2 text-right">{q.text}</p>}
+                                    {q.text && (
+                                        <div className="flex items-center gap-2 mb-2.5">
+                                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: sectionColor }} />
+                                            <p className="text-sm font-black" style={{ color: sectionColor }}>{q.text}</p>
+                                        </div>
+                                    )}
                                     <textarea value={(answers[q.id] as string) ?? ""} onChange={e => setAnswers(p => ({ ...p, [q.id]: e.target.value }))}
                                         rows={5} placeholder="اكتب هنا..."
-                                        className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-qatar-maroon resize-none text-right bg-slate-50 transition-colors font-bold text-slate-700 leading-relaxed" />
+                                        className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-none resize-none bg-slate-50 transition-colors font-bold text-slate-700 leading-relaxed"
+                                        style={{ outlineColor: sectionColor }}
+                                        onFocus={e => e.target.style.borderColor = sectionColor}
+                                        onBlur={e => e.target.style.borderColor = ""} />
                                 </div>
                             ))}
                         </div>
@@ -254,7 +283,9 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
 
 // ── Answer Tab ─────────────────────────────────────────────────────────────
 function AnswerTab({ survey }: { survey: Survey }) {
-    const respondents = useQuery(api.surveys.getRespondents, { surveyId: survey._id }) ?? [];
+    const allRespondents = useQuery(api.surveys.getRespondents, { surveyId: survey._id }) ?? [];
+    // Only participating teachers see the survey
+    const respondents = useMemo(() => allRespondents.filter(r => r.isParticipating !== false), [allRespondents]);
     const [selectedDept, setSelectedDept] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -288,14 +319,14 @@ function AnswerTab({ survey }: { survey: Survey }) {
                 {/* Back + dept header */}
                 <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
                     <div className="bg-qatar-maroon px-5 py-3.5 flex items-center justify-between">
-                        <button onClick={() => setSelectedDept(null)}
-                            className="flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-black transition-colors">
-                            <span className="text-base">→</span> الأقسام
-                        </button>
-                        <div className="text-right">
+                        <div>
                             <p className="font-black text-white text-sm">{selectedDept}</p>
                             <p className="text-white/60 text-xs font-bold">{members.length} معلم · {done.length} أجابوا</p>
                         </div>
+                        <button onClick={() => setSelectedDept(null)}
+                            className="flex items-center gap-1.5 text-white/80 hover:text-white text-sm font-black transition-colors">
+                            الأقسام <span className="text-base">←</span>
+                        </button>
                     </div>
                 </div>
 
@@ -303,8 +334,8 @@ function AnswerTab({ survey }: { survey: Survey }) {
                 {pending.length > 0 && (
                     <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
                         <div className="px-5 py-2.5 bg-slate-50 border-b border-qatar-gray-border flex items-center justify-between">
-                            <span className="bg-amber-100 text-amber-700 text-xs font-black px-2 py-0.5 rounded-full">{pending.length}</span>
                             <span className="text-xs font-black text-slate-500">لم يجيبوا بعد</span>
+                            <span className="bg-amber-100 text-amber-700 text-xs font-black px-2 py-0.5 rounded-full">{pending.length}</span>
                         </div>
                         <div className="divide-y divide-qatar-gray-border">
                             {pending.map(r => (
@@ -324,8 +355,8 @@ function AnswerTab({ survey }: { survey: Survey }) {
                 {done.length > 0 && (
                     <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
                         <div className="px-5 py-2.5 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between">
-                            <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">{done.length}</span>
                             <span className="text-xs font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/>أجابوا — يمكن التعديل</span>
+                            <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2 py-0.5 rounded-full">{done.length}</span>
                         </div>
                         <div className="divide-y divide-qatar-gray-border">
                             {done.map(r => (
@@ -351,11 +382,11 @@ function AnswerTab({ survey }: { survey: Survey }) {
             {/* Stats banner */}
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4">
                 <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-black text-slate-400">اختر قسمك أولاً</span>
                     <div className="flex gap-3 text-xs font-bold">
                         <span className="flex items-center gap-1 text-emerald-600"><CheckCircle2 className="w-3.5 h-3.5"/>{totalDone} أجابوا</span>
                         <span className="flex items-center gap-1 text-amber-600"><Clock className="w-3.5 h-3.5"/>{totalPending} لم يجيبوا</span>
                     </div>
-                    <span className="text-xs font-black text-slate-400">اختر قسمك أولاً</span>
                 </div>
                 {/* Overall progress */}
                 <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
@@ -379,13 +410,13 @@ function AnswerTab({ survey }: { survey: Survey }) {
                             <button key={dept} onClick={() => setSelectedDept(dept)}
                                 className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4 text-right hover:border-qatar-maroon/30 hover:shadow-md transition-all group">
                                 <div className="flex items-start justify-between mb-3">
-                                    <div className={`flex items-center gap-1 text-xs font-black px-2 py-1 rounded-lg ${allDone ? "bg-emerald-100 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                                        {allDone ? <CheckCircle2 className="w-3 h-3"/> : <Clock className="w-3 h-3"/>}
-                                        {deptDone}/{members.length}
-                                    </div>
                                     <div>
                                         <p className="font-black text-slate-800 text-sm group-hover:text-qatar-maroon transition-colors">{dept}</p>
                                         <p className="text-xs text-slate-400 font-bold mt-0.5">{members.length} معلم</p>
+                                    </div>
+                                    <div className={`flex items-center gap-1 text-xs font-black px-2 py-1 rounded-lg ${allDone ? "bg-emerald-100 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                                        {allDone ? <CheckCircle2 className="w-3 h-3"/> : <Clock className="w-3 h-3"/>}
+                                        {deptDone}/{members.length}
                                     </div>
                                 </div>
                                 <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -430,7 +461,7 @@ function RespondentForm({ survey, respondentId, onBack }: { survey: Survey; resp
 }
 
 // ── Manage Tab ─────────────────────────────────────────────────────────────
-function ManageTab({ survey }: { survey: Survey }) {
+export function ManageTab({ survey }: { survey: Survey }) {
     const [authed, setAuthed] = useState(sessionStorage.getItem("qatar_admin_auth") === "true");
     const [pin, setPin] = useState("");
     const [showPin, setShowPin] = useState(false);
@@ -500,6 +531,8 @@ function TeachersManager({ survey }: { survey: Survey }) {
     const removeRespondent = useMutation(api.surveys.removeRespondent);
     const updateRespondent = useMutation(api.surveys.updateRespondent);
     const importSchoolTeachers = useMutation(api.surveys.importSchoolTeachers);
+    const toggleParticipation = useMutation(api.surveys.toggleRespondentParticipation);
+    const setBulkParticipation = useMutation(api.surveys.setBulkParticipation);
     const [name, setName] = useState("");
     const [dept, setDept] = useState("");
     const [adding, setAdding] = useState(false);
@@ -583,11 +616,12 @@ function TeachersManager({ survey }: { survey: Survey }) {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-2">
                 {[
                     { label: "إجمالي", val: respondents.length, color: "text-slate-700", bg: "bg-slate-50" },
+                    { label: "مشاركون", val: respondents.filter(r=>r.isParticipating !== false).length, color: "text-blue-600", bg: "bg-blue-50" },
                     { label: "أجابوا", val: respondents.filter(r=>r.hasResponded).length, color: "text-emerald-600", bg: "bg-emerald-50" },
-                    { label: "لم يجيبوا", val: respondents.filter(r=>!r.hasResponded).length, color: "text-amber-600", bg: "bg-amber-50" },
+                    { label: "لم يجيبوا", val: respondents.filter(r=>!r.hasResponded && r.isParticipating !== false).length, color: "text-amber-600", bg: "bg-amber-50" },
                 ].map(s => (
                     <div key={s.label} className={`${s.bg} rounded-xl border border-qatar-gray-border p-3 text-center`}>
                         <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
@@ -599,9 +633,21 @@ function TeachersManager({ survey }: { survey: Survey }) {
             {/* List by dept */}
             {Object.entries(byDept).map(([deptKey, members]) => (
                 <div key={deptKey} className="rounded-xl border border-qatar-gray-border overflow-hidden">
-                    <div className="bg-slate-100 px-4 py-2 flex items-center justify-between border-b border-qatar-gray-border">
-                        <span className="text-xs text-slate-400 font-black">{members.length} معلم</span>
-                        <span className="font-black text-slate-600 text-sm">{deptKey}</span>
+                    <div dir="rtl" className="bg-slate-100 px-4 py-2 flex items-center justify-between border-b border-qatar-gray-border gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="font-black text-slate-600 text-sm truncate">{deptKey}</span>
+                            <span className="text-[10px] text-slate-400 font-black bg-white px-1.5 py-0.5 rounded">{members.filter(m => m.isParticipating !== false).length}/{members.length}</span>
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                            <button onClick={() => setBulkParticipation({ surveyId: survey._id, department: deptKey === "بدون قسم" ? undefined : deptKey, isParticipating: true })}
+                                className="text-[10px] font-black text-emerald-600 hover:bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                تشارك الكل
+                            </button>
+                            <button onClick={() => setBulkParticipation({ surveyId: survey._id, department: deptKey === "بدون قسم" ? undefined : deptKey, isParticipating: false })}
+                                className="text-[10px] font-black text-slate-500 hover:bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                                استبعاد الكل
+                            </button>
+                        </div>
                     </div>
                     <div className="divide-y divide-qatar-gray-border bg-white">
                         {members.map(r => (
@@ -622,20 +668,25 @@ function TeachersManager({ survey }: { survey: Survey }) {
                                             className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-qatar-maroon text-right bg-white" placeholder="الاسم"/>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center justify-between px-4 py-3">
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => { setEditId(r._id); setEditName(r.name); setEditDept(r.department ?? ""); }}
-                                                className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-500 transition-colors">
-                                                <Pencil className="w-3.5 h-3.5"/>
+                                    <div dir="rtl" className={`flex items-center justify-between px-4 py-3 transition-colors ${r.isParticipating === false ? "bg-slate-50/60 opacity-60" : ""}`}>
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${r.hasResponded ? "bg-emerald-500" : "bg-amber-400"}`}/>
+                                            <p className={`text-sm font-bold truncate ${r.isParticipating === false ? "text-slate-400 line-through" : "text-slate-700"}`}>{r.name}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                            <button onClick={() => toggleParticipation({ respondentId: r._id as any, isParticipating: r.isParticipating === false })}
+                                                title={r.isParticipating === false ? "تفعيل المشاركة" : "استبعاد من الاستبانة"}
+                                                className={`p-1.5 rounded-lg transition-colors ${r.isParticipating === false ? "text-slate-300 hover:bg-emerald-50 hover:text-emerald-600" : "text-emerald-500 hover:bg-slate-50 hover:text-slate-400"}`}>
+                                                {r.isParticipating === false ? <UserX className="w-3.5 h-3.5"/> : <UserCheck className="w-3.5 h-3.5"/>}
                                             </button>
                                             <button onClick={async () => { if (confirm(`حذف ${r.name}؟`)) await removeRespondent({ respondentId: r._id as any }); }}
                                                 className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors">
                                                 <Trash2 className="w-3.5 h-3.5"/>
                                             </button>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-bold text-slate-700">{r.name}</p>
-                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${r.hasResponded ? "bg-emerald-500" : "bg-amber-400"}`}/>
+                                            <button onClick={() => { setEditId(r._id); setEditName(r.name); setEditDept(r.department ?? ""); }}
+                                                className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-300 hover:text-blue-500 transition-colors">
+                                                <Pencil className="w-3.5 h-3.5"/>
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -748,10 +799,125 @@ const MCOL_COLORS_A = ["#9B1239", "#1e40af", "#065f46"];
 const RATING_COLORS_A = ["#6b7280", "#10b981", "#f59e0b", "#ef4444", "#7c3aed"];
 const RATING_LABELS_A = ["لا أحتاج", "منخفض", "متوسط", "مرتفع", "مرتفع جداً"];
 
-function AnalyticsTab({ survey }: { survey: Survey }) {
-    const responses = useQuery(api.surveys.getAllResponses, { surveyId: survey._id }) ?? [];
-    const respondents = useQuery(api.surveys.getRespondents, { surveyId: survey._id }) ?? [];
+// ── SVG Chart components ───────────────────────────────────────────────────
+function RadarChart({ data, size = 280 }: { data: { label: string; value: number; color: string }[]; size?: number }) {
+    if (data.length < 3) return null;
+    const cx = size / 2, cy = size / 2;
+    const r = size * 0.35;
+    const angleFor = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / data.length;
+    const point = (i: number, val: number) => {
+        const a = angleFor(i);
+        const dist = (val / 5) * r;
+        return [cx + Math.cos(a) * dist, cy + Math.sin(a) * dist];
+    };
+    const polygon = data.map((d, i) => point(i, d.value).join(",")).join(" ");
+    return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            {[1, 2, 3, 4, 5].map(level => {
+                const pts = data.map((_, i) => {
+                    const a = angleFor(i);
+                    const dist = (level / 5) * r;
+                    return [cx + Math.cos(a) * dist, cy + Math.sin(a) * dist].join(",");
+                }).join(" ");
+                return <polygon key={level} points={pts} fill="none" stroke="#e2e8f0" strokeWidth="1" />;
+            })}
+            {data.map((_, i) => {
+                const [x, y] = point(i, 5);
+                return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
+            })}
+            <polygon points={polygon} fill="#9B123933" stroke="#9B1239" strokeWidth="2" />
+            {data.map((d, i) => {
+                const [px, py] = point(i, d.value);
+                return <circle key={i} cx={px} cy={py} r="4" fill={d.color} stroke="#fff" strokeWidth="2" />;
+            })}
+            {data.map((d, i) => {
+                const a = angleFor(i);
+                const lx = cx + Math.cos(a) * (r + 22);
+                const ly = cy + Math.sin(a) * (r + 22);
+                const short = d.label.length > 14 ? d.label.slice(0, 14) + "…" : d.label;
+                return (
+                    <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                        fontSize="9" fontWeight="900" fill="#475569" direction="rtl">
+                        {short}
+                    </text>
+                );
+            })}
+        </svg>
+    );
+}
+
+function DistributionBars({ counts, total }: { counts: number[]; total: number }) {
+    const maxC = Math.max(...counts, 1);
+    return (
+        <div dir="rtl" className="flex items-end gap-1 h-16">
+            {counts.map((c, i) => {
+                const h = total > 0 ? (c / maxC) * 100 : 0;
+                const pct = total > 0 ? Math.round((c / total) * 100) : 0;
+                return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-0.5" title={`${RATING_LABELS_A[i]}: ${c} (${pct}%)`}>
+                        <span className="text-[9px] font-black" style={{ color: RATING_COLORS_A[i] }}>{c}</span>
+                        <div className="w-full rounded-t transition-all" style={{ height: `${h}%`, minHeight: c > 0 ? "3px" : "0", background: RATING_COLORS_A[i] }} />
+                        <span className="text-[8px] font-bold text-slate-400">{i + 1}</span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function HBarChart({ items }: { items: { label: string; value: number; color: string; max: number; sub?: string }[] }) {
+    return (
+        <div dir="rtl" className="space-y-2.5">
+            {items.map((item, i) => {
+                const pct = item.max > 0 ? (item.value / item.max) * 100 : 0;
+                return (
+                    <div key={i}>
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                            <span className="text-[11px] font-bold text-slate-700 truncate flex-1">{item.label}</span>
+                            <span className="text-[11px] font-black flex-shrink-0" style={{ color: item.color }}>
+                                {item.value.toFixed(2)}{item.sub && <span className="text-slate-400 mr-1 font-bold">{item.sub}</span>}
+                            </span>
+                        </div>
+                        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${item.color}, ${item.color}dd)` }} />
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function Donut({ value, max, color, label, size = 80 }: { value: number; max: number; color: string; label: string; size?: number }) {
+    const r = size / 2 - 6;
+    const cx = size / 2, cy = size / 2;
+    const circ = 2 * Math.PI * r;
+    const pct = max > 0 ? value / max : 0;
+    const dash = pct * circ;
+    return (
+        <div className="flex flex-col items-center">
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round"
+                    strokeDasharray={`${dash} ${circ}`} />
+            </svg>
+            <p className="text-base font-black mt-[-50px]" style={{ color }}>{value.toFixed(1)}</p>
+            <p className="text-[9px] font-bold text-slate-400 mt-9">{label}</p>
+        </div>
+    );
+}
+
+export function AnalyticsTab({ survey }: { survey: Survey }) {
+    const allResponsesRaw = useQuery(api.surveys.getAllResponses, { surveyId: survey._id }) ?? [];
+    const allRespondents = useQuery(api.surveys.getRespondents, { surveyId: survey._id }) ?? [];
     const [selectedDept, setSelectedDept] = useState<string>("all");
+
+    // Only consider participating teachers (isParticipating !== false)
+    const respondents = useMemo(() => allRespondents.filter(r => r.isParticipating !== false), [allRespondents]);
+    const participatingIds = useMemo(() => new Set(respondents.map(r => r._id)), [respondents]);
+    // Only count responses from teachers who are still participating
+    const responses = useMemo(() => allResponsesRaw.filter(r => participatingIds.has(r.respondentId)), [allResponsesRaw, participatingIds]);
 
     const departments = useMemo(() =>
         Array.from(new Set(respondents.map(r => r.department || "بدون قسم"))),
@@ -769,16 +935,67 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
         axisSectionsA.map(section => {
             const ratingQs = section.questions.filter(q => q.type === "rating");
             let totalSum = 0, totalCount = 0;
+            const dist = [0, 0, 0, 0, 0]; // count of 1, 2, 3, 4, 5 ratings
             const qStats = ratingQs.map(q => {
                 let sum = 0, cnt = 0;
                 for (const resp of filteredResponses) {
-                    try { const ans = JSON.parse(resp.answers); const v = ans[q.id]; if (typeof v === "number" && v >= 1 && v <= 5) { sum += v; cnt++; totalSum += v; totalCount++; } } catch {}
+                    try {
+                        const ans = JSON.parse(resp.answers);
+                        const v = ans[q.id];
+                        if (typeof v === "number" && v >= 1 && v <= 5) {
+                            sum += v; cnt++; totalSum += v; totalCount++;
+                            dist[v - 1]++;
+                        }
+                    } catch {}
                 }
                 return { q, avg: cnt > 0 ? sum / cnt : 0, cnt };
             });
-            return { section, qStats, overallAvg: totalCount > 0 ? totalSum / totalCount : 0 };
+            return { section, qStats, overallAvg: totalCount > 0 ? totalSum / totalCount : 0, dist, totalCount };
         }).sort((a, b) => b.overallAvg - a.overallAvg),
         [axisSectionsA, filteredResponses]);
+
+    // Department comparison: avg rating per dept
+    const deptComparison = useMemo(() => {
+        const byDept: Record<string, { sum: number; cnt: number }> = {};
+        for (const resp of responses) {
+            const dept = resp.department || "بدون قسم";
+            try {
+                const ans = JSON.parse(resp.answers);
+                for (const s of axisSectionsA) {
+                    for (const q of s.questions.filter(q => q.type === "rating")) {
+                        const v = ans[q.id];
+                        if (typeof v === "number" && v >= 1 && v <= 5) {
+                            if (!byDept[dept]) byDept[dept] = { sum: 0, cnt: 0 };
+                            byDept[dept].sum += v;
+                            byDept[dept].cnt++;
+                        }
+                    }
+                }
+            } catch {}
+        }
+        return Object.entries(byDept)
+            .map(([dept, { sum, cnt }]) => ({ dept, avg: cnt > 0 ? sum / cnt : 0, cnt }))
+            .sort((a, b) => b.avg - a.avg);
+    }, [responses, axisSectionsA]);
+
+    // Top priority questions (highest avg = most needed)
+    const topQuestions = useMemo(() => {
+        const all: { sectionTitle: string; sectionColor: string; q: any; avg: number; cnt: number }[] = [];
+        for (const { section, qStats } of sectionStats) {
+            for (const qs of qStats) {
+                if (qs.avg > 0) all.push({ sectionTitle: section.title, sectionColor: section.color, q: qs.q, avg: qs.avg, cnt: qs.cnt });
+            }
+        }
+        return all.sort((a, b) => b.avg - a.avg).slice(0, 10);
+    }, [sectionStats]);
+
+    const overallAverage = useMemo(() => {
+        let sum = 0, cnt = 0;
+        for (const s of sectionStats) {
+            if (s.totalCount > 0) { sum += s.overallAvg * s.totalCount; cnt += s.totalCount; }
+        }
+        return cnt > 0 ? sum / cnt : 0;
+    }, [sectionStats]);
 
     const multicheckStats = useMemo(() =>
         multicheckSections.map(section => ({
@@ -830,48 +1047,64 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
 
     const responseRate = respondents.length > 0 ? Math.round((responses.length / respondents.length) * 100) : 0;
 
+    const overallCi = Math.min(4, Math.max(0, Math.ceil(overallAverage) - 1));
+    const overallColor = overallAverage > 0 ? RATING_COLORS_A[overallCi] : "#94a3b8";
+
     return (
-        <div className="space-y-5 animate-in fade-in duration-300">
+        <div dir="rtl" className="space-y-5 animate-in fade-in duration-300">
 
-            {/* ── Stats ── */}
-            <div className="grid grid-cols-3 gap-3">
-                {[
-                    { label: "نسبة الاستجابة", val: `${responseRate}%`, color: "text-qatar-maroon", bg: "bg-rose-50" },
-                    { label: "أجابوا", val: responses.length, color: "text-emerald-600", bg: "bg-emerald-50" },
-                    { label: "الإجمالي", val: respondents.length, color: "text-slate-700", bg: "bg-slate-50" },
-                ].map(s => (
-                    <div key={s.label} className={`${s.bg} rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4 text-center`}>
-                        <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
-                        <p className="text-xs text-slate-400 font-bold mt-0.5">{s.label}</p>
+            {/* ── KPI Stats ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-1">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500"/>
+                        <span className="text-[10px] font-black text-slate-400">نسبة الاستجابة</span>
                     </div>
-                ))}
-            </div>
-
-            {/* ── Overall progress bar ── */}
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-black text-slate-400">{responseRate}%</span>
-                    <span className="text-xs font-black text-slate-600">نسبة الاستجابة الكلية</span>
+                    <p className="text-2xl font-black text-emerald-600">{responseRate}%</p>
+                    <p className="text-[10px] text-slate-400 font-bold">{responses.length} من {respondents.length}</p>
                 </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${responseRate}%`, background: "linear-gradient(90deg,#9B1239,#C0184C)" }} />
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-1">
+                        <BarChart3 className="w-4 h-4" style={{ color: overallColor }}/>
+                        <span className="text-[10px] font-black text-slate-400">المتوسط العام</span>
+                    </div>
+                    <p className="text-2xl font-black" style={{ color: overallColor }}>{overallAverage.toFixed(2)}</p>
+                    <p className="text-[10px] font-bold" style={{ color: overallColor }}>{overallAverage > 0 ? RATING_LABELS_A[overallCi] : "—"}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-1">
+                        <Users className="w-4 h-4 text-blue-500"/>
+                        <span className="text-[10px] font-black text-slate-400">عدد الأقسام</span>
+                    </div>
+                    <p className="text-2xl font-black text-blue-600">{departments.length}</p>
+                    <p className="text-[10px] text-slate-400 font-bold">قسم</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-1">
+                        <ClipboardList className="w-4 h-4 text-qatar-maroon"/>
+                        <span className="text-[10px] font-black text-slate-400">المحاور المُقيَّمة</span>
+                    </div>
+                    <p className="text-2xl font-black text-qatar-maroon">{sectionStats.filter(s => s.overallAvg > 0).length}</p>
+                    <p className="text-[10px] text-slate-400 font-bold">من {axisSectionsA.length}</p>
                 </div>
             </div>
 
             {/* ── Dept filter ── */}
             {departments.length > 1 && (
-                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4">
-                    <p className="text-xs font-black text-slate-500 mb-2 text-right">تصفية حسب القسم</p>
-                    <div className="flex flex-wrap gap-2 justify-end">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                    <div className="flex items-center justify-between mb-2.5">
+                        <span className="text-[10px] font-black text-slate-400">{filteredResponses.length} إجابة</span>
+                        <p className="text-xs font-black text-slate-600">تصفية حسب القسم</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
                         <button onClick={() => setSelectedDept("all")}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === "all" ? "text-white border-transparent" : "bg-white border-qatar-gray-border text-slate-600 hover:border-slate-300"}`}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === "all" ? "text-white border-transparent shadow-sm" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
                             style={selectedDept === "all" ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
                             الكل
                         </button>
                         {departments.map(d => (
                             <button key={d} onClick={() => setSelectedDept(d)}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === d ? "text-white border-transparent" : "bg-white border-qatar-gray-border text-slate-600 hover:border-slate-300"}`}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === d ? "text-white border-transparent shadow-sm" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
                                 style={selectedDept === d ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
                                 {d}
                             </button>
@@ -880,45 +1113,168 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
                 </div>
             )}
 
-            {/* ── Section averages (sorted by highest need) ── */}
-            {sectionStats.some(s => s.overallAvg > 0) && (
-                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                    <div className="px-5 py-3 flex items-center gap-3 border-b border-qatar-gray-border"
-                        style={{ background: "linear-gradient(135deg,#1e293b,#334155)" }}>
-                        <BarChart3 className="w-4 h-4 text-white/60 flex-shrink-0" />
-                        <span className="font-black text-white text-sm">تحليل المحاور — مرتبة حسب الأولوية</span>
+            {/* ── Radar chart: axes overview ── */}
+            {sectionStats.length >= 3 && sectionStats.some(s => s.overallAvg > 0) && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between"
+                        style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
+                        <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{filteredResponses.length} مشارك</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-white text-sm">رادار المحاور</span>
+                            <BarChart3 className="w-4 h-4 text-white/60"/>
+                        </div>
                     </div>
-                    <div className="p-4 space-y-5">
-                        {sectionStats.map(({ section, qStats, overallAvg }) => {
-                            if (overallAvg === 0) return null;
+                    <div className="p-4 flex flex-col sm:flex-row items-center gap-4">
+                        <div className="flex-shrink-0">
+                            <RadarChart data={sectionStats.map(s => {
+                                const ci = Math.min(4, Math.max(0, Math.ceil(s.overallAvg) - 1));
+                                return { label: s.section.title.replace(/^المحور [^:]+:\s*/, ""), value: s.overallAvg, color: RATING_COLORS_A[ci] };
+                            })} />
+                        </div>
+                        <div className="flex-1 grid grid-cols-5 gap-1 w-full">
+                            {RATING_OPTS.map(o => (
+                                <div key={o.val} className="rounded-lg py-1.5 px-1 text-center" style={{ background: o.color + "15" }}>
+                                    <p className="text-sm font-black" style={{ color: o.color }}>{o.val}</p>
+                                    <p className="text-[8px] font-bold leading-tight" style={{ color: o.color }}>{o.label}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Axes Ranking — sorted by priority ── */}
+            {sectionStats.some(s => s.overallAvg > 0) && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between"
+                        style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
+                        <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">مرتبة تنازلياً</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-white text-sm">ترتيب المحاور حسب الأولوية</span>
+                            <BarChart3 className="w-4 h-4 text-white/60"/>
+                        </div>
+                    </div>
+                    <div className="p-4">
+                        <HBarChart items={sectionStats.filter(s => s.overallAvg > 0).map(s => {
+                            const ci = Math.min(4, Math.max(0, Math.ceil(s.overallAvg) - 1));
+                            return {
+                                label: s.section.title,
+                                value: s.overallAvg,
+                                max: 5,
+                                color: RATING_COLORS_A[ci],
+                                sub: ` · ${RATING_LABELS_A[ci]}`,
+                            };
+                        })} />
+                    </div>
+                </div>
+            )}
+
+            {/* ── Top 10 priority questions ── */}
+            {topQuestions.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between"
+                        style={{ background: "linear-gradient(135deg,#7c2d12,#9B1239)" }}>
+                        <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{topQuestions.length}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-white text-sm">أعلى الاحتياجات أولوية</span>
+                            <ClipboardList className="w-4 h-4 text-white/60"/>
+                        </div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {topQuestions.map((tq, idx) => {
+                            const ci = Math.min(4, Math.max(0, Math.ceil(tq.avg) - 1));
+                            const color = RATING_COLORS_A[ci];
+                            return (
+                                <div key={idx} className="px-4 py-3 flex items-start gap-3">
+                                    <div className="flex flex-col items-center flex-shrink-0">
+                                        <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white"
+                                            style={{ background: color }}>{idx + 1}</span>
+                                        <span className="text-[10px] font-black mt-1" style={{ color }}>{tq.avg.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[9px] font-black px-2 py-0.5 rounded inline-block mb-1"
+                                            style={{ background: tq.sectionColor + "20", color: tq.sectionColor }}>
+                                            {tq.sectionTitle}
+                                        </span>
+                                        <p className="text-xs font-bold text-slate-700 leading-snug">{tq.q.text}</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Department comparison ── */}
+            {selectedDept === "all" && deptComparison.length > 1 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between"
+                        style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
+                        <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{deptComparison.length} قسم</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-white text-sm">مقارنة الأقسام</span>
+                            <Users className="w-4 h-4 text-white/60"/>
+                        </div>
+                    </div>
+                    <div className="p-4">
+                        <HBarChart items={deptComparison.map(d => {
+                            const ci = Math.min(4, Math.max(0, Math.ceil(d.avg) - 1));
+                            return {
+                                label: d.dept,
+                                value: d.avg,
+                                max: 5,
+                                color: RATING_COLORS_A[ci],
+                                sub: ` · ${RATING_LABELS_A[ci]}`,
+                            };
+                        })} />
+                    </div>
+                </div>
+            )}
+
+            {/* ── Per-axis distribution + details ── */}
+            {sectionStats.some(s => s.overallAvg > 0) && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between"
+                        style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
+                        <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">تفصيل</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-white text-sm">توزيع التقييمات لكل محور</span>
+                            <BarChart3 className="w-4 h-4 text-white/60"/>
+                        </div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {sectionStats.filter(s => s.overallAvg > 0).map(({ section, qStats, overallAvg, dist, totalCount }) => {
                             const ci = Math.min(4, Math.max(0, Math.ceil(overallAvg) - 1));
                             const color = RATING_COLORS_A[ci];
-                            const topQs = [...qStats].sort((a, b) => b.avg - a.avg).slice(0, 3);
+                            const topQs = [...qStats].filter(q => q.avg > 0).sort((a, b) => b.avg - a.avg).slice(0, 3);
                             return (
-                                <div key={section.id}>
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <span className="text-xs font-black flex-shrink-0" style={{ color }}>
-                                            {overallAvg.toFixed(2)} — {RATING_LABELS_A[ci]}
-                                        </span>
-                                        <span className="font-black text-slate-700 text-sm text-right flex-1">{section.title}</span>
+                                <div key={section.id} className="p-4">
+                                    <div className="flex items-start justify-between gap-3 mb-3">
+                                        <div className="flex flex-col items-center flex-shrink-0">
+                                            <Donut value={overallAvg} max={5} color={color} label={RATING_LABELS_A[ci]} size={70}/>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-black text-slate-800 text-sm mb-2">{section.title}</p>
+                                            <DistributionBars counts={dist} total={totalCount} />
+                                        </div>
                                     </div>
-                                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-                                        <div className="h-full rounded-full transition-all duration-700"
-                                            style={{ width: `${(overallAvg / 5) * 100}%`, background: color }} />
-                                    </div>
-                                    <div className="space-y-1 pr-2">
-                                        {topQs.map(({ q, avg }) => {
-                                            if (avg === 0) return null;
-                                            const qci = Math.min(4, Math.max(0, Math.ceil(avg) - 1));
-                                            return (
-                                                <div key={q.id} className="flex items-center gap-2">
-                                                    <span className="text-[10px] font-black w-7 flex-shrink-0 text-center"
-                                                        style={{ color: RATING_COLORS_A[qci] }}>{avg.toFixed(1)}</span>
-                                                    <p className="text-[10px] text-slate-500 font-bold text-right flex-1 leading-snug">{q.text}</p>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                    {topQs.length > 0 && (
+                                        <div className="space-y-1.5 mt-3 pt-3 border-t border-dashed border-slate-100">
+                                            <p className="text-[10px] font-black text-slate-400">أعلى ٣ احتياجات في هذا المحور:</p>
+                                            {topQs.map(({ q, avg, cnt }) => {
+                                                const qci = Math.min(4, Math.max(0, Math.ceil(avg) - 1));
+                                                return (
+                                                    <div key={q.id} className="flex items-start gap-2">
+                                                        <div className="flex flex-col items-center flex-shrink-0 pt-0.5">
+                                                            <span className="text-[10px] font-black" style={{ color: RATING_COLORS_A[qci] }}>{avg.toFixed(1)}</span>
+                                                            <span className="text-[8px] text-slate-400">{cnt}</span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-600 font-bold leading-snug flex-1">{q.text}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -1010,12 +1366,9 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
     );
 }
 
-// ── Main Page ──────────────────────────────────────────────────────────────
+// ── Main Page (Teacher View) ───────────────────────────────────────────────
 export default function SurveysPage() {
     const survey = useQuery(api.surveys.getActiveSurvey);
-    const seedDefaultSurvey = useMutation(api.surveys.seedDefaultSurvey);
-    const [tab, setTab] = useState<Tab>("answer");
-    const [seeding, setSeeding] = useState(false);
 
     if (survey === undefined) {
         return (
@@ -1027,82 +1380,49 @@ export default function SurveysPage() {
 
     if (!survey) {
         return (
-            <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+            <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-500">
                 <div className="rounded-2xl overflow-hidden qatar-card-shadow"
                     style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
                     <div className="p-5 sm:p-8">
-                        <h1 className="text-3xl font-black text-white flex items-center gap-3">
-                            <ClipboardList className="w-8 h-8 text-white/80"/>الاستبانات
+                        <h1 className="text-2xl font-black text-white flex items-center gap-3">
+                            <ClipboardList className="w-7 h-7 text-white/80"/>الاستبانات
                         </h1>
-                        <p className="text-white/70 font-medium mr-11">حصر الاحتياجات التدريبية والمهنية للمعلمين</p>
+                        <p className="text-white/70 font-medium text-sm mt-1">حصر الاحتياجات التدريبية والمهنية للمعلمين</p>
                     </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow flex flex-col items-center py-16 gap-5">
-                    <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-qatar-maroon/20 flex items-center justify-center">
-                        <ClipboardList className="w-8 h-8 text-qatar-maroon"/>
+                    <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-qatar-maroon/20 flex items-center justify-center">
+                        <ClipboardList className="w-7 h-7 text-qatar-maroon"/>
                     </div>
                     <div className="text-center">
-                        <p className="font-black text-slate-700 text-lg">لا توجد استبانة نشطة</p>
-                        <p className="text-sm text-slate-400 mt-1 max-w-sm">أنشئ استبانة حصر الاحتياجات التدريبية للمعلمين بنقرة واحدة</p>
+                        <p className="font-black text-slate-700 text-lg">لا توجد استبانة نشطة حالياً</p>
+                        <p className="text-sm text-slate-400 mt-1">يرجى التواصل مع المسؤول لتفعيل الاستبانة</p>
                     </div>
-                    <button onClick={async () => { setSeeding(true); try { await seedDefaultSurvey({}); } finally { setSeeding(false); } }}
-                        disabled={seeding}
-                        className="flex items-center gap-2 px-6 py-3 rounded-2xl text-white font-black text-sm hover:opacity-90 disabled:opacity-50 qatar-card-shadow"
-                        style={{ background: "linear-gradient(135deg, #9B1239, #C0184C)" }}>
-                        {seeding ? <><RotateCcw className="w-4 h-4 animate-spin"/>جارٍ الإنشاء...</> : <><Plus className="w-4 h-4"/>إنشاء الاستبانة</>}
-                    </button>
                 </div>
             </div>
         );
     }
 
-    const TABS: { key: Tab; label: string; icon: JSX.Element }[] = [
-        { key: "answer", label: "الإجابة", icon: <ClipboardList className="w-4 h-4"/> },
-        { key: "manage", label: "الإدارة", icon: <Users className="w-4 h-4"/> },
-        { key: "analytics", label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
-    ];
-
     return (
-        <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
-            {/* Gradient Header */}
+        <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
+            {/* Header */}
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 sm:p-8">
-                    <div>
-                        <h1 className="text-2xl font-black text-white flex items-center gap-3">
-                            <ClipboardList className="w-7 h-7 text-white/80"/>الاستبانات
-                        </h1>
-                        <p className="text-white/70 font-medium text-sm mt-0.5 mr-10">{survey.title}</p>
-                        <div className="flex gap-3 mt-2 mr-10 text-white/60 text-xs font-bold flex-wrap">
-                            <span>{survey.academicYear}</span>
-                            <span>·</span>
-                            <span>{survey.sections.length} محاور</span>
-                            <span>·</span>
-                            <span>{survey.sections.reduce((a,s)=>a+s.questions.length,0)} سؤال</span>
-                        </div>
-                    </div>
-                    {/* Tab buttons inside header */}
-                    <div className="flex gap-2 mr-10 sm:mr-0">
-                        {TABS.map(({ key, label, icon }) => (
-                            <button key={key} onClick={() => setTab(key)}
-                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-sm transition-all border ${
-                                    tab === key
-                                        ? "bg-white text-qatar-maroon border-white shadow"
-                                        : "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                                }`}>
-                                {icon}{label}
-                            </button>
-                        ))}
+                <div className="p-5 sm:p-7">
+                    <h1 className="text-2xl font-black text-white flex items-center gap-3">
+                        <ClipboardList className="w-7 h-7 text-white/80"/>الاستبانات
+                    </h1>
+                    <p className="text-white/80 font-bold text-sm mt-1">{survey.title}</p>
+                    <div className="flex gap-3 mt-2 text-white/50 text-xs font-bold flex-wrap">
+                        <span>{survey.academicYear}</span>
+                        <span>·</span>
+                        <span>{survey.sections.reduce((a,s)=>a+s.questions.length,0)} سؤال</span>
                     </div>
                 </div>
             </div>
 
-            {/* Tab Content */}
-            <div className="max-w-3xl mx-auto">
-                {tab === "answer" && <AnswerTab survey={survey}/>}
-                {tab === "manage" && <ManageTab survey={survey}/>}
-                {tab === "analytics" && <AnalyticsTab survey={survey}/>}
-            </div>
+            {/* Direct survey answer flow */}
+            <AnswerTab survey={survey}/>
         </div>
     );
 }

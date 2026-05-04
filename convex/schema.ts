@@ -106,6 +106,7 @@ export default defineSchema({
         name: v.string(),
         department: v.optional(v.string()),
         hasResponded: v.boolean(),
+        isParticipating: v.optional(v.boolean()), // default true; if false, hidden from teacher view
     }).index("by_survey", ["surveyId"])
       .index("by_school", ["schoolId"]),
 

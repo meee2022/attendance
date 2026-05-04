@@ -14,7 +14,6 @@ type ManageSubTab = "teachers" | "survey";
 type Survey = NonNullable<ReturnType<typeof useQuery<typeof api.surveys.getActiveSurvey>>>;
 type Respondent = Awaited<ReturnType<typeof useQuery<typeof api.surveys.getRespondents>>>[number];
 
-const RATING_COLORS = ["#10b981","#3b82f6","#f59e0b","#f97316","#ef4444"];
 
 // ── Survey Form ────────────────────────────────────────────────────────────
 function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
@@ -81,11 +80,11 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
                 <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between"
                     style={{ borderRight: "4px solid #9B1239" }}>
-                    <span className="text-xs font-black text-slate-400">① المعلومات الأساسية</span>
                     <div className="flex items-center gap-2">
                         <BookOpen className="w-4 h-4 text-qatar-maroon" />
                         <span className="font-black text-slate-700 text-sm">بيانات المعلم</span>
                     </div>
+                    <span className="text-xs font-black text-slate-400">① المعلومات الأساسية</span>
                 </div>
                 <div className="p-4 grid grid-cols-2 gap-3">
                     {([
@@ -93,16 +92,17 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
                         { key: "yearsExperience", label: "سنوات الخبرة", placeholder: "مثال: 5" },
                         { key: "qualification", label: "المؤهل العلمي", placeholder: "مثال: بكالوريوس تربية خاصة" },
                     ] as const).map(f => (
-                        <div key={f.key} className={f.key === "qualification" ? "col-span-2 sm:col-span-1" : "col-span-2 sm:col-span-1"}>
-                            <label className="block text-xs font-black text-slate-500 mb-1.5">{f.label}</label>
+                        <div key={f.key} className="col-span-2 sm:col-span-1">
+                            <label className="block text-xs font-black text-slate-500 mb-1.5 text-right">{f.label}</label>
                             <input value={basicInfo[f.key]} onChange={e => setBasicInfo(p => ({ ...p, [f.key]: e.target.value }))}
                                 placeholder={f.placeholder}
                                 className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 text-right transition-colors font-bold text-slate-700" />
                         </div>
                     ))}
                     <div className="col-span-2 sm:col-span-1">
-                        <label className="block text-xs font-black text-slate-500 mb-1.5">التاريخ</label>
+                        <label className="block text-xs font-black text-slate-500 mb-1.5 text-right">التاريخ</label>
                         <input type="date" value={basicInfo.responseDate} onChange={e => setBasicInfo(p => ({ ...p, responseDate: e.target.value }))}
+                            dir="ltr"
                             className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 transition-colors" />
                     </div>
                 </div>
@@ -111,10 +111,10 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             {/* ── Axes — read only ── */}
             {axisSections.length > 0 && (
                 <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                    <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between"
+                    <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center gap-3"
                         style={{ background: "linear-gradient(135deg,#1e293b,#334155)" }}>
-                        <span className="text-xs font-black text-white/50">② محاور الاستبانة</span>
                         <span className="font-black text-white text-sm">محاور الاستبانة</span>
+                        <span className="text-xs font-black text-white/40 mr-auto">②</span>
                     </div>
                     <div className="divide-y divide-slate-100">
                         {axisSections.map((section, idx) => (
@@ -138,8 +138,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
                     <div key={section.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
                         <div className="px-5 py-3 border-b border-qatar-gray-border flex items-center justify-between bg-slate-50"
                             style={{ borderRight: `4px solid ${section.color || "#9B1239"}` }}>
-                            <span className="text-xs font-black text-slate-400">③</span>
-                            <span className="font-black text-slate-800 text-sm">{section.title}</span>
+                            <span className="font-black text-slate-800 text-sm text-right">{section.title}</span>
                         </div>
                         <div className="p-4 space-y-4">
                             {multichecks.length > 0 && (
@@ -695,38 +694,61 @@ function SurveyEditor({ survey }: { survey: Survey }) {
 }
 
 // ── Analytics Tab ──────────────────────────────────────────────────────────
+const MCOL_COLORS_A = ["#9B1239", "#1e40af", "#065f46"];
+
 function AnalyticsTab({ survey }: { survey: Survey }) {
     const responses = useQuery(api.surveys.getAllResponses, { surveyId: survey._id }) ?? [];
     const respondents = useQuery(api.surveys.getRespondents, { surveyId: survey._id }) ?? [];
     const [selectedDept, setSelectedDept] = useState<string>("all");
 
-    const departments = useMemo(() => Array.from(new Set(respondents.map(r => r.department||"بدون قسم"))), [respondents]);
+    const departments = useMemo(() =>
+        Array.from(new Set(respondents.map(r => r.department || "بدون قسم"))),
+        [respondents]);
 
     const filteredResponses = useMemo(() =>
-        selectedDept === "all" ? responses : responses.filter(r => (r.department||"بدون قسم") === selectedDept),
+        selectedDept === "all" ? responses : responses.filter(r => (r.department || "بدون قسم") === selectedDept),
         [responses, selectedDept]);
 
-    const ratingSections = survey.sections.filter(s => s.questions.some(q=>q.type==="rating"));
+    const multicheckSections = survey.sections.filter(s => s.questions.some(q => q.type === "multicheck"));
+    const textareaSections = survey.sections.filter(s => s.questions.some(q => q.type === "textarea"));
 
-    const sectionAverages = useMemo(() => ratingSections.map(section => {
-        const qIds = section.questions.filter(q=>q.type==="rating").map(q=>q.id);
-        const deptData: Record<string, {sum:number;count:number}> = {};
-        for (const resp of filteredResponses) {
-            let ans: Record<string,any> = {}; try { ans = JSON.parse(resp.answers); } catch { continue; }
-            const d = resp.department||"بدون قسم";
-            if (!deptData[d]) deptData[d]={sum:0,count:0};
-            for (const qId of qIds) { const v=ans[qId]; if(typeof v==="number"&&v>=1&&v<=5){deptData[d].sum+=v;deptData[d].count++;} }
-        }
-        let ts=0,tc=0; for(const {sum,count} of Object.values(deptData)){ts+=sum;tc+=count;}
-        return { section, deptData, overallAvg: tc>0?ts/tc:0 };
-    }), [ratingSections, filteredResponses]);
+    const multicheckStats = useMemo(() =>
+        multicheckSections.map(section => ({
+            section,
+            questions: section.questions.filter(q => q.type === "multicheck").map((q, qi) => {
+                const counts: Record<string, number> = {};
+                for (const opt of q.options ?? []) counts[opt] = 0;
+                for (const resp of filteredResponses) {
+                    try {
+                        const ans = JSON.parse(resp.answers);
+                        for (const opt of (ans[q.id] as string[]) ?? [])
+                            if (opt in counts) counts[opt]++;
+                    } catch {}
+                }
+                const maxCount = Math.max(...Object.values(counts), 1);
+                const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                const total = Object.values(counts).reduce((a, b) => a + b, 0);
+                return { q, qi, sorted, maxCount, total };
+            }),
+        })),
+        [multicheckSections, filteredResponses]);
 
-    const sectionDists = useMemo(() => ratingSections.map(section => {
-        const qIds = section.questions.filter(q=>q.type==="rating").map(q=>q.id);
-        const dist=[0,0,0,0,0];
-        for(const resp of filteredResponses){let ans:Record<string,any>={};try{ans=JSON.parse(resp.answers);}catch{continue;}for(const qId of qIds){const v=ans[qId];if(typeof v==="number"&&v>=1&&v<=5)dist[v-1]++;}}
-        return { section, dist, total: dist.reduce((a,b)=>a+b,0) };
-    }), [ratingSections, filteredResponses]);
+    const textareaStats = useMemo(() =>
+        textareaSections.map(section => ({
+            section,
+            questions: section.questions.filter(q => q.type === "textarea").map(q => {
+                const items: { name: string; dept?: string; text: string }[] = [];
+                for (const resp of filteredResponses) {
+                    try {
+                        const ans = JSON.parse(resp.answers);
+                        const text = (ans[q.id] as string) ?? "";
+                        if (text.trim()) items.push({ name: resp.teacherName, dept: resp.department, text });
+                    } catch {}
+                }
+                return { q, items };
+            }),
+        })),
+        [textareaSections, filteredResponses]);
 
     if (responses.length === 0) {
         return (
@@ -738,11 +760,12 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
         );
     }
 
-    const responseRate = respondents.length > 0 ? Math.round((responses.length/respondents.length)*100) : 0;
+    const responseRate = respondents.length > 0 ? Math.round((responses.length / respondents.length) * 100) : 0;
 
     return (
         <div className="space-y-5 animate-in fade-in duration-300">
-            {/* Stats */}
+
+            {/* ── Stats ── */}
             <div className="grid grid-cols-3 gap-3">
                 {[
                     { label: "نسبة الاستجابة", val: `${responseRate}%`, color: "text-qatar-maroon", bg: "bg-rose-50" },
@@ -756,20 +779,32 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
                 ))}
             </div>
 
-            {/* Dept filter */}
+            {/* ── Overall progress bar ── */}
+            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-black text-slate-400">{responseRate}%</span>
+                    <span className="text-xs font-black text-slate-600">نسبة الاستجابة الكلية</span>
+                </div>
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${responseRate}%`, background: "linear-gradient(90deg,#9B1239,#C0184C)" }} />
+                </div>
+            </div>
+
+            {/* ── Dept filter ── */}
             {departments.length > 1 && (
                 <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow p-4">
-                    <p className="text-xs font-black text-slate-500 mb-2">تصفية حسب القسم</p>
-                    <div className="flex flex-wrap gap-2">
+                    <p className="text-xs font-black text-slate-500 mb-2 text-right">تصفية حسب القسم</p>
+                    <div className="flex flex-wrap gap-2 justify-end">
                         <button onClick={() => setSelectedDept("all")}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept==="all"?"text-white border-transparent":"bg-white border-qatar-gray-border text-slate-600 hover:border-slate-300"}`}
-                            style={selectedDept==="all"?{background:"linear-gradient(135deg,#9B1239,#C0184C)"}:{}}>
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === "all" ? "text-white border-transparent" : "bg-white border-qatar-gray-border text-slate-600 hover:border-slate-300"}`}
+                            style={selectedDept === "all" ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
                             الكل
                         </button>
                         {departments.map(d => (
                             <button key={d} onClick={() => setSelectedDept(d)}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept===d?"text-white border-transparent":"bg-white border-qatar-gray-border text-slate-600 hover:border-slate-300"}`}
-                                style={selectedDept===d?{background:"linear-gradient(135deg,#9B1239,#C0184C)"}:{}}>
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === d ? "text-white border-transparent" : "bg-white border-qatar-gray-border text-slate-600 hover:border-slate-300"}`}
+                                style={selectedDept === d ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
                                 {d}
                             </button>
                         ))}
@@ -777,97 +812,85 @@ function AnalyticsTab({ survey }: { survey: Survey }) {
                 </div>
             )}
 
-            {/* Section averages */}
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-white/60"/>
-                    <span className="font-black text-white text-sm">متوسط الاحتياج لكل محور (1-5)</span>
-                </div>
-                <div className="p-5 space-y-4">
-                    {[...sectionAverages].sort((a,b)=>b.overallAvg-a.overallAvg).map(({section, overallAvg}) => {
-                        const ci = overallAvg<=0?0:overallAvg<=1?0:overallAvg<=2?1:overallAvg<=3?2:overallAvg<=4?3:4;
-                        return (
-                            <div key={section.id}>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-xs font-black" style={{color:RATING_COLORS[ci]}}>
-                                        {overallAvg.toFixed(2)} — {survey.ratingLabels[ci]}
-                                    </span>
-                                    <span className="text-xs font-black text-slate-600 text-right">{section.title}</span>
-                                </div>
-                                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full transition-all duration-700"
-                                        style={{ width:`${(overallAvg/5)*100}%`, background: RATING_COLORS[ci] }}/>
+            {/* ── Multicheck analytics ── */}
+            {multicheckStats.map(({ section, questions }) => (
+                <div key={section.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
+                    <div className="px-5 py-3 flex items-center gap-3 border-b border-qatar-gray-border"
+                        style={{ background: "linear-gradient(135deg,#1e293b,#334155)" }}>
+                        <BarChart3 className="w-4 h-4 text-white/60 flex-shrink-0" />
+                        <span className="font-black text-white text-sm">{section.title}</span>
+                        <span className="mr-auto bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">
+                            {filteredResponses.length} مشارك
+                        </span>
+                    </div>
+                    <div className={`p-4 ${questions.length > 1 ? "grid grid-cols-1 sm:grid-cols-3 gap-4" : ""}`}>
+                        {questions.map(({ q, qi, sorted, maxCount, total }) => (
+                            <div key={q.id} className="space-y-3">
+                                {q.text && (
+                                    <div className="flex items-center justify-end gap-2 pb-2 border-b-2 border-slate-100">
+                                        <span className="text-xs font-black text-white px-2.5 py-1 rounded-lg"
+                                            style={{ background: MCOL_COLORS_A[qi % MCOL_COLORS_A.length] }}>
+                                            {q.text}
+                                        </span>
+                                    </div>
+                                )}
+                                <p className="text-[10px] font-black text-slate-400 text-right">{total} اختيار إجمالاً</p>
+                                <div className="space-y-2.5">
+                                    {sorted.map(([opt, count]) => {
+                                        const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+                                        const color = MCOL_COLORS_A[qi % MCOL_COLORS_A.length];
+                                        return (
+                                            <div key={opt}>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs font-bold text-slate-700 text-right flex-1">{opt}</span>
+                                                    <span className="text-xs font-black flex-shrink-0 w-6 text-center"
+                                                        style={{ color }}>{count}</span>
+                                                </div>
+                                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className="h-full rounded-full transition-all duration-500"
+                                                        style={{ width: `${pct}%`, background: color }} />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        );
-                    })}
+                        ))}
+                    </div>
                 </div>
-            </div>
+            ))}
 
-            {/* Distributions */}
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-white/60"/>
-                    <span className="font-black text-white text-sm">توزيع التقييمات لكل محور</span>
-                </div>
-                <div className="p-5 space-y-5">
-                    {sectionDists.map(({section, dist, total}) => (
-                        <div key={section.id}>
-                            <p className="text-xs font-black text-slate-600 mb-2 text-right">{section.title}</p>
-                            <div className="flex h-7 rounded-xl overflow-hidden gap-px">
-                                {dist.map((count,i) => {
-                                    const pct = total>0?(count/total)*100:0;
-                                    return pct>0 ? (
-                                        <div key={i} title={`${survey.ratingLabels[i]}: ${count}`}
-                                            className="flex items-center justify-center text-white text-[9px] font-black"
-                                            style={{width:`${pct}%`,background:RATING_COLORS[i]}}>
-                                            {pct>8?count:""}
-                                        </div>
-                                    ) : null;
-                                })}
-                                {total===0 && <div className="flex-1 bg-slate-100"/>}
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-bold mt-1 text-right">{total} إجابة</p>
+            {/* ── Textarea responses ── */}
+            {textareaStats.map(({ section, questions }) =>
+                questions.map(({ q, items }) => items.length > 0 && (
+                    <div key={q.id} className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
+                        <div className="px-5 py-3 flex items-center gap-3 border-b border-qatar-gray-border"
+                            style={{ background: "linear-gradient(135deg,#1e293b,#334155)" }}>
+                            <ClipboardList className="w-4 h-4 text-white/60 flex-shrink-0" />
+                            <span className="font-black text-white text-sm">{section.title}</span>
+                            <span className="mr-auto bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full">
+                                {items.length} إجابة
+                            </span>
                         </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Dept comparison table */}
-            {departments.length > 1 && (
-                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                    <div className="bg-slate-700 px-5 py-3 flex items-center gap-2">
-                        <Users className="w-4 h-4 text-white/60"/>
-                        <span className="font-black text-white text-sm">مقارنة الأقسام</span>
+                        <div className="divide-y divide-slate-100">
+                            {items.map((item, i) => (
+                                <div key={i} className="px-5 py-4">
+                                    {/* teacher info: avatar RIGHT, name, dept LEFT — RTL DOM order */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="w-7 h-7 rounded-full bg-qatar-maroon/10 border border-qatar-maroon/20 flex items-center justify-center flex-shrink-0">
+                                            <span className="text-[10px] font-black text-qatar-maroon">{item.name[0]}</span>
+                                        </div>
+                                        <span className="text-sm font-black text-slate-700">{item.name}</span>
+                                        {item.dept && (
+                                            <span className="text-xs text-slate-400 font-bold border border-slate-200 px-2 py-0.5 rounded-lg">{item.dept}</span>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-slate-600 leading-relaxed text-right bg-slate-50 rounded-xl px-4 py-3 font-medium">{item.text}</p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-xs" dir="rtl">
-                            <thead>
-                                <tr className="border-b border-qatar-gray-border bg-slate-50">
-                                    <th className="text-right px-4 py-2.5 font-black text-slate-500 whitespace-nowrap">المحور</th>
-                                    {departments.map(d => <th key={d} className="px-3 py-2.5 font-black text-slate-500 text-center whitespace-nowrap">{d}</th>)}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sectionAverages.map(({section, deptData}) => (
-                                    <tr key={section.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                                        <td className="px-4 py-3 font-bold text-slate-600 text-right text-xs">{section.title.replace(/المحور [^:]+: /,"")}</td>
-                                        {departments.map(d => {
-                                            const {sum,count} = deptData[d]??{sum:0,count:0};
-                                            const avg = count>0?sum/count:0;
-                                            const ci = avg<=0?-1:avg<=1?0:avg<=2?1:avg<=3?2:avg<=4?3:4;
-                                            return (
-                                                <td key={d} className="px-3 py-3 text-center font-black" style={{color:ci>=0?RATING_COLORS[ci]:"#cbd5e1"}}>
-                                                    {avg>0?avg.toFixed(1):"—"}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                ))
             )}
         </div>
     );

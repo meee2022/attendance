@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9B1239"/>
+      <stop offset="50%" stop-color="#C0184C"/>
+      <stop offset="100%" stop-color="#74092A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="600" cy="315" r="420" fill="url(#glow)"/>
+
+  <!-- Decorative pattern -->
+  <g opacity="0.08" fill="white">
+    <circle cx="100" cy="100" r="3"/>
+    <circle cx="200" cy="80" r="2"/>
+    <circle cx="1100" cy="120" r="3"/>
+    <circle cx="1050" cy="200" r="2"/>
+    <circle cx="150" cy="500" r="3"/>
+    <circle cx="1080" cy="520" r="2"/>
+  </g>
+
+  <!-- School logo badge -->
+  <g transform="translate(600, 200)">
+    <circle r="90" fill="white" opacity="0.1"/>
+    <circle r="70" fill="white"/>
+    <g transform="translate(-50, -45)">
+      <!-- Book icon -->
+      <path d="M0 30 L50 22 L100 30 L100 78 L50 70 L0 78 Z" fill="#9B1239"/>
+      <line x1="50" y1="22" x2="50" y2="70" stroke="white" stroke-width="2"/>
+      <line x1="10" y1="40" x2="45" y2="36" stroke="white" stroke-width="2"/>
+      <line x1="10" y1="48" x2="45" y2="44" stroke="white" stroke-width="2"/>
+      <line x1="10" y1="56" x2="45" y2="52" stroke="white" stroke-width="2"/>
+      <line x1="55" y1="36" x2="90" y2="40" stroke="white" stroke-width="2"/>
+      <line x1="55" y1="44" x2="90" y2="48" stroke="white" stroke-width="2"/>
+      <line x1="55" y1="52" x2="90" y2="56" stroke="white" stroke-width="2"/>
+    </g>
+  </g>
+
+  <!-- School name -->
+  <text x="600" y="370" text-anchor="middle" fill="white" font-size="56" font-weight="900" font-family="'Cairo', 'Tahoma', sans-serif" direction="rtl">
+    مدرسة ابن تيمية الثانوية للبنين
+  </text>
+
+  <!-- System name -->
+  <text x="600" y="440" text-anchor="middle" fill="white" opacity="0.9" font-size="36" font-weight="700" font-family="'Cairo', 'Tahoma', sans-serif" direction="rtl">
+    النظام الإلكتروني للحضور والإشراف الصفي
+  </text>
+
+  <!-- Features -->
+  <g transform="translate(600, 510)" font-family="'Cairo', 'Tahoma', sans-serif" font-size="22" font-weight="700" fill="white" opacity="0.85">
+    <text x="0" y="0" text-anchor="middle">الحضور · التقارير · الاستبانات · الإشراف الصفي · التحليل</text>
+  </g>
+
+  <!-- Bottom bar -->
+  <rect x="0" y="600" width="1200" height="30" fill="white" opacity="0.1"/>
+  <text x="600" y="620" text-anchor="middle" fill="white" opacity="0.7" font-size="16" font-weight="700" font-family="'Cairo', 'Tahoma', sans-serif">
+    Ibn Taymiyyah Secondary School · 2025–2026
+  </text>
+</svg>

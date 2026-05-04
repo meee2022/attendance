@@ -155,7 +155,7 @@ export default function ClassPeriodGrid({ classId, schoolId, date, periodsPerDay
                                 return (
                                     <th key={i}
                                         className="border border-slate-700/50 p-0"
-                                        style={{ background: hasData ? "#9B1239" : "#4b5563", minWidth: isHighlighted ? "110px" : "76px" }}
+                                        style={{ background: hasData ? "#5C1A1B" : "#4b5563", minWidth: isHighlighted ? "110px" : "76px" }}
                                     >
                                         <div className="flex flex-col items-center gap-0.5 py-2 px-1">
                                             {isHighlighted ? (

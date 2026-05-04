@@ -2,13 +2,14 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck } from "lucide-react";
+import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap } from "lucide-react";
 import ImportStudents from "./ImportStudents";
 import MessageTemplatesPage from "./MessageTemplatesPage";
 import SeedPage from "./SeedPage";
 import { ManageTab, AnalyticsTab } from "./SurveysPage";
 import type { Survey } from "./SurveysPage";
 import SupervisionAdmin from "./SupervisionAdmin";
+import GradesAdmin from "./GradesAdmin";
 
 const TRACKS = ["عام", "علمي", "أدبي", "تكنولوجي"];
 const GRADE_LABELS: Record<number, string> = { 10: "عاشر", 11: "حادي عشر", 12: "ثاني عشر" };
@@ -19,7 +20,7 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "settings" | "students" | "messages" | "seed" | "surveys" | "supervision";
+type MainTab = "settings" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades";
 
 export default function SettingsPage() {
     const [mainTab, setMainTab] = useState<MainTab>("settings");
@@ -31,6 +32,7 @@ export default function SettingsPage() {
         { id: "messages",  label: "إعدادات الرسائل",   icon: <MessagesSquare className="w-4 h-4" /> },
         { id: "surveys",   label: "الاستبانات",         icon: <ClipboardList className="w-4 h-4" /> },
         { id: "supervision", label: "الإشراف الصفي",   icon: <ClipboardCheck className="w-4 h-4" /> },
+        { id: "grades",    label: "إدارة الدرجات",     icon: <GraduationCap className="w-4 h-4" /> },
         { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" /> },
     ];
 
@@ -38,7 +40,7 @@ export default function SettingsPage() {
         <div className="max-w-5xl mx-auto space-y-6 font-sans animate-in fade-in duration-500 pb-20">
             {/* Page Header */}
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="flex items-center gap-4 p-6 sm:p-8">
                     <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-white border border-white/20">
                         <Settings className="w-6 h-6" />
@@ -84,6 +86,7 @@ export default function SettingsPage() {
             {mainTab === "messages" && <MessageTemplatesPage />}
             {mainTab === "surveys"  && <SurveysAdminSection />}
             {mainTab === "supervision" && <SupervisionAdmin />}
+            {mainTab === "grades"   && <GradesAdmin />}
             {mainTab === "seed"     && <SeedPage />}
         </div>
     );

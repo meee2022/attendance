@@ -1,12 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --color-qatar-maroon: #9B1239;
-  --color-qatar-maroon-dark: #74092A;
-  --color-qatar-gray-bg: #F4F4F5;
-  --color-qatar-gray-border: #E5E7EB;
-  --color-qatar-gray-text: #6B7280;
-  --color-qatar-gray-dark: #374151;
+  /* ── Brand palette inspired by Arirang Bakery ── */
+  --color-qatar-maroon: #5C1A1B;        /* Primary deep burgundy */
+  --color-qatar-maroon-dark: #3F0E0F;   /* Darker burgundy for hover */
+  --color-qatar-maroon-light: #7A2425;  /* Lighter burgundy */
+  --color-qatar-gold: #C9A876;          /* Accent gold/tan */
+  --color-qatar-gold-dark: #A88456;     /* Deeper gold */
+  --color-qatar-gold-light: #E5CFA6;    /* Light gold */
+  --color-qatar-cream: #F8EFE2;         /* Warm cream background */
+  --color-qatar-cream-dark: #EDE0CE;    /* Slightly darker cream */
+  --color-qatar-ink: #2A1A1B;           /* Deep ink text */
+  --color-qatar-ink-soft: #5C4F4F;      /* Soft ink */
+
+  /* Existing aliases for compatibility */
+  --color-qatar-gray-bg: #FAF6EF;       /* Warm bg replacing cold gray */
+  --color-qatar-gray-border: #E8DECF;   /* Warm border */
+  --color-qatar-gray-text: #6B5F58;     /* Warm gray text */
+  --color-qatar-gray-dark: #2A1A1B;     /* Deep ink */
 }
 
 @layer base {
@@ -22,13 +33,13 @@
   font-family: 'Cairo', sans-serif;
 }
 
-/* Custom shadow for cards */
+/* Custom shadow for cards — warm tinted */
 .qatar-card-shadow {
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px 0 rgba(92, 26, 27, 0.06), 0 1px 2px 0 rgba(92, 26, 27, 0.04);
 }
 
 .qatar-card-shadow:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px -2px rgba(92, 26, 27, 0.12), 0 2px 6px -2px rgba(92, 26, 27, 0.08);
 }
 
 /* iOS safe-area support */
@@ -53,4 +64,25 @@ html {
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* ── Brand utility classes ── */
+.bg-brand-gradient {
+  background: linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%);
+}
+
+.bg-brand-gradient-soft {
+  background: linear-gradient(135deg, rgba(92, 26, 27, 0.06) 0%, rgba(201, 168, 118, 0.08) 100%);
+}
+
+.bg-gold-gradient {
+  background: linear-gradient(135deg, #C9A876 0%, #A88456 100%);
+}
+
+.text-brand {
+  color: #5C1A1B;
+}
+
+.border-brand {
+  border-color: #5C1A1B;
 }

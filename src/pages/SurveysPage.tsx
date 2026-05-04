@@ -22,7 +22,7 @@ const RATING_OPTS = [
     { val: 5, label: "مرتفع جداً",   color: "#7c3aed" },
 ] as const;
 
-const MCOL_COLORS = ["#9B1239", "#1e40af", "#065f46"] as const;
+const MCOL_COLORS = ["#5C1A1B", "#1e40af", "#065f46"] as const;
 
 // ── Survey Form ────────────────────────────────────────────────────────────
 function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
@@ -69,7 +69,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
 
             {/* ── Teacher card ── */}
             <div className="rounded-2xl qatar-card-shadow overflow-hidden"
-                style={{ background: "linear-gradient(135deg,#9B1239,#C0184C)" }}>
+                style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
                 <div className="px-5 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-11 h-11 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center font-black text-white text-base flex-shrink-0">
@@ -113,7 +113,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             {/* ── Basic info ── */}
             <div className="rounded-2xl overflow-hidden shadow-sm border border-slate-100">
                 <div className="px-5 py-3.5 flex items-center justify-between"
-                    style={{ background: "linear-gradient(135deg,#9B123922 0%,#9B12390a 100%)", borderRight: "4px solid #9B1239" }}>
+                    style={{ background: "linear-gradient(135deg,#5C1A1B22 0%,#5C1A1B0a 100%)", borderRight: "4px solid #5C1A1B" }}>
                     <span className="font-black text-slate-800 text-sm">بيانات المعلم</span>
                     <div className="flex items-center gap-2">
                         <span className="text-xs font-black text-slate-400">المعلومات الأساسية</span>
@@ -200,7 +200,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             {questionSections.map(section => {
                 const multichecks = section.questions.filter(q => q.type === "multicheck");
                 const textareas = section.questions.filter(q => q.type === "textarea");
-                const sectionColor = section.color || "#9B1239";
+                const sectionColor = section.color || "#5C1A1B";
                 return (
                     <div key={section.id} className="rounded-2xl overflow-hidden shadow-sm border border-slate-100">
                         {/* Header */}
@@ -272,7 +272,7 @@ function SurveyForm({ survey, respondent, existingResponse, onSubmitted }: {
             {/* Submit */}
             <button onClick={handleSubmit} disabled={saving || saved}
                 className={`w-full py-4 rounded-2xl font-black text-base flex items-center justify-center gap-2 transition-all qatar-card-shadow ${saved ? "bg-emerald-500 text-white" : "text-white hover:opacity-90 active:scale-[0.99]"}`}
-                style={saved ? {} : { background: "linear-gradient(135deg,#9B1239 0%,#C0184C 100%)" }}>
+                style={saved ? {} : { background: "linear-gradient(135deg,#5C1A1B 0%,#7A2425 100%)" }}>
                 {saved ? <><CheckCircle2 className="w-5 h-5" />تم الحفظ بنجاح!</>
                     : saving ? "جارٍ الحفظ..."
                     : <><Send className="w-4 h-4" />حفظ الإجابات</>}
@@ -391,7 +391,7 @@ function AnswerTab({ survey }: { survey: Survey }) {
                 {/* Overall progress */}
                 <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${respondents.length > 0 ? Math.round((totalDone / respondents.length) * 100) : 0}%`, background: "linear-gradient(90deg,#9B1239,#C0184C)" }} />
+                        style={{ width: `${respondents.length > 0 ? Math.round((totalDone / respondents.length) * 100) : 0}%`, background: "linear-gradient(90deg,#5C1A1B,#7A2425)" }} />
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold mt-1 text-right">
                     {respondents.length > 0 ? Math.round((totalDone / respondents.length) * 100) : 0}% نسبة الاستجابة الكلية
@@ -421,7 +421,7 @@ function AnswerTab({ survey }: { survey: Survey }) {
                                 </div>
                                 <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                     <div className="h-full rounded-full transition-all"
-                                        style={{ width: `${deptPct}%`, background: allDone ? "#10b981" : "linear-gradient(90deg,#9B1239,#C0184C)" }} />
+                                        style={{ width: `${deptPct}%`, background: allDone ? "#10b981" : "linear-gradient(90deg,#5C1A1B,#7A2425)" }} />
                                 </div>
                             </button>
                         );
@@ -492,7 +492,7 @@ export function ManageTab({ survey }: { survey: Survey }) {
                         {pinError && <p className="text-red-500 text-sm text-center font-bold">{pinError}</p>}
                         <button onClick={() => { if (pin === "1234") setAuthed(true); else setPinError("رمز PIN غير صحيح"); }}
                             className="w-full py-3 rounded-xl font-black text-white text-sm transition-all hover:opacity-90"
-                            style={{ background: "linear-gradient(135deg, #9B1239, #C0184C)" }}>
+                            style={{ background: "linear-gradient(135deg, #5C1A1B, #7A2425)" }}>
                             دخول
                         </button>
                     </div>
@@ -589,7 +589,7 @@ function TeachersManager({ survey }: { survey: Survey }) {
                 </div>
                 <button onClick={handleImport} disabled={importing}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-black hover:opacity-90 disabled:opacity-50 flex-shrink-0"
-                    style={{ background: "linear-gradient(135deg, #9B1239, #C0184C)" }}>
+                    style={{ background: "linear-gradient(135deg, #5C1A1B, #7A2425)" }}>
                     {importing ? <RotateCcw className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
                     {importing ? "جارٍ الاستيراد..." : "استيراد الكل"}
                 </button>
@@ -608,7 +608,7 @@ function TeachersManager({ survey }: { survey: Survey }) {
                     <datalist id="dl-depts">{departments.map(d => <option key={d} value={d}/>)}</datalist>
                     <button onClick={handleAdd} disabled={adding}
                         className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-sm font-black hover:opacity-90 disabled:opacity-50"
-                        style={{ background: "linear-gradient(135deg, #9B1239, #C0184C)" }}>
+                        style={{ background: "linear-gradient(135deg, #5C1A1B, #7A2425)" }}>
                         <Plus className="w-4 h-4"/>إضافة
                     </button>
                 </div>
@@ -780,7 +780,7 @@ function SurveyEditor({ survey }: { survey: Survey }) {
             {/* Save */}
             <button onClick={handleSave} disabled={saving || saved}
                 className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all ${saved ? "bg-emerald-500 text-white" : "text-white hover:opacity-90"}`}
-                style={saved ? {} : { background: "linear-gradient(135deg,#9B1239,#C0184C)" }}>
+                style={saved ? {} : { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
                 {saved ? <><CheckCircle2 className="w-4 h-4"/>تم الحفظ!</> : saving ? "جارٍ الحفظ..." : <><Check className="w-4 h-4"/>حفظ المحاور</>}
             </button>
 
@@ -795,7 +795,7 @@ function SurveyEditor({ survey }: { survey: Survey }) {
 }
 
 // ── Analytics Tab ──────────────────────────────────────────────────────────
-const MCOL_COLORS_A = ["#9B1239", "#1e40af", "#065f46"];
+const MCOL_COLORS_A = ["#5C1A1B", "#1e40af", "#065f46"];
 const RATING_COLORS_A = ["#6b7280", "#10b981", "#f59e0b", "#ef4444", "#7c3aed"];
 const RATING_LABELS_A = ["لا أحتاج", "منخفض", "متوسط", "مرتفع", "مرتفع جداً"];
 
@@ -825,7 +825,7 @@ function RadarChart({ data, size = 280 }: { data: { label: string; value: number
                 const [x, y] = point(i, 5);
                 return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e2e8f0" strokeWidth="1" />;
             })}
-            <polygon points={polygon} fill="#9B123933" stroke="#9B1239" strokeWidth="2" />
+            <polygon points={polygon} fill="#5C1A1B33" stroke="#5C1A1B" strokeWidth="2" />
             {data.map((d, i) => {
                 const [px, py] = point(i, d.value);
                 return <circle key={i} cx={px} cy={py} r="4" fill={d.color} stroke="#fff" strokeWidth="2" />;
@@ -983,7 +983,7 @@ export function AnalyticsTab({ survey }: { survey: Survey }) {
         const all: { sectionTitle: string; sectionColor: string; q: any; avg: number; cnt: number }[] = [];
         for (const { section, qStats } of sectionStats) {
             for (const qs of qStats) {
-                if (qs.avg > 0) all.push({ sectionTitle: section.title, sectionColor: section.color ?? "#9B1239", q: qs.q, avg: qs.avg, cnt: qs.cnt });
+                if (qs.avg > 0) all.push({ sectionTitle: section.title, sectionColor: section.color ?? "#5C1A1B", q: qs.q, avg: qs.avg, cnt: qs.cnt });
             }
         }
         return all.sort((a, b) => b.avg - a.avg).slice(0, 10);
@@ -1099,13 +1099,13 @@ export function AnalyticsTab({ survey }: { survey: Survey }) {
                     <div className="flex flex-wrap gap-2">
                         <button onClick={() => setSelectedDept("all")}
                             className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === "all" ? "text-white border-transparent shadow-sm" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                            style={selectedDept === "all" ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
+                            style={selectedDept === "all" ? { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" } : {}}>
                             الكل
                         </button>
                         {departments.map(d => (
                             <button key={d} onClick={() => setSelectedDept(d)}
                                 className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDept === d ? "text-white border-transparent shadow-sm" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                                style={selectedDept === d ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
+                                style={selectedDept === d ? { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" } : {}}>
                                 {d}
                             </button>
                         ))}
@@ -1173,7 +1173,7 @@ export function AnalyticsTab({ survey }: { survey: Survey }) {
             {topQuestions.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between"
-                        style={{ background: "linear-gradient(135deg,#7c2d12,#9B1239)" }}>
+                        style={{ background: "linear-gradient(135deg,#7c2d12,#5C1A1B)" }}>
                         <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{topQuestions.length}</span>
                         <div className="flex items-center gap-2">
                             <span className="font-black text-white text-sm">أعلى الاحتياجات أولوية</span>
@@ -1382,7 +1382,7 @@ export default function SurveysPage() {
         return (
             <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-500">
                 <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                    style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                    style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                     <div className="p-5 sm:p-8">
                         <h1 className="text-2xl font-black text-white flex items-center gap-3">
                             <ClipboardList className="w-7 h-7 text-white/80"/>الاستبانات
@@ -1407,7 +1407,7 @@ export default function SurveysPage() {
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
             {/* Header */}
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="p-5 sm:p-7">
                     <h1 className="text-2xl font-black text-white flex items-center gap-3">
                         <ClipboardList className="w-7 h-7 text-white/80"/>الاستبانات

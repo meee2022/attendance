@@ -12,7 +12,7 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
     deputy: "النائب الأكاديمي",
 };
 const ROLE_COLORS: Record<VisitorRole, string> = {
-    coordinator: "#9B1239",
+    coordinator: "#5C1A1B",
     supervisor: "#1e40af",
     deputy: "#065f46",
 };

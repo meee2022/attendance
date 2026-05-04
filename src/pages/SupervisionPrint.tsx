@@ -47,7 +47,7 @@ export default function SupervisionPrint() {
                     padding: 8mm;
                     font-size: 11px;
                 }
-                .print-root h1 { font-size: 18px; margin: 0; font-weight: 900; color: #9B1239; }
+                .print-root h1 { font-size: 18px; margin: 0; font-weight: 900; color: #5C1A1B; }
                 .print-root h2 { font-size: 13px; margin: 12px 0 6px; font-weight: 900; padding: 6px 10px; border-radius: 6px; }
                 .print-root table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
                 .print-root th, .print-root td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: right; }
@@ -69,18 +69,18 @@ export default function SupervisionPrint() {
                 .print-root .summary-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px; text-align: center; }
                 .print-root .summary-card b { display: block; font-size: 16px; font-weight: 900; }
                 .print-root .summary-card span { font-size: 9px; }
-                .print-root .check-mark { color: #9B1239; font-weight: 900; font-size: 14px; }
+                .print-root .check-mark { color: #5C1A1B; font-weight: 900; font-size: 14px; }
                 .print-root .domain-header { color: white; }
             `}</style>
             <div className="print-root">
                 {/* Title */}
-                <div style={{ textAlign: "center", marginBottom: 10, borderBottom: "2px solid #9B1239", paddingBottom: 6 }}>
+                <div style={{ textAlign: "center", marginBottom: 10, borderBottom: "2px solid #5C1A1B", paddingBottom: 6 }}>
                     <h1>استمارة الإشراف على أداء المعلّم</h1>
                     <p style={{ margin: "2px 0 0", fontSize: 10, color: "#64748b", fontWeight: 700 }}>مدرسة ابن تيمية الثانوية للبنين · العام الأكاديمي 2025–2026</p>
                 </div>
 
                 {/* Basic Info */}
-                <h2 style={{ background: "#9B1239", color: "white" }}>المعلومات الأساسية</h2>
+                <h2 style={{ background: "#5C1A1B", color: "white" }}>المعلومات الأساسية</h2>
                 <div className="info-grid">
                     <div className="info-cell"><b>المعلم:</b>{visit.teacherName}</div>
                     <div className="info-cell"><b>القسم:</b>{visit.teacherDepartment || "—"}</div>
@@ -170,9 +170,9 @@ export default function SupervisionPrint() {
                         <span style={{ color: "#8b5cf6" }}>الإدارة الصفية</span>
                         <b style={{ color: "#8b5cf6" }}>{((domAvgs.management ?? 0) * 100).toFixed(0)}%</b>
                     </div>
-                    <div className="summary-card" style={{ background: "#9B12390a" }}>
-                        <span style={{ color: "#9B1239" }}>المعدل العام</span>
-                        <b style={{ color: "#9B1239" }}>{((visit.averageScore ?? 0) * 100).toFixed(0)}%</b>
+                    <div className="summary-card" style={{ background: "#5C1A1B0a" }}>
+                        <span style={{ color: "#5C1A1B" }}>المعدل العام</span>
+                        <b style={{ color: "#5C1A1B" }}>{((visit.averageScore ?? 0) * 100).toFixed(0)}%</b>
                     </div>
                 </div>
 
@@ -197,7 +197,7 @@ export default function SupervisionPrint() {
                 </div>
 
                 <div className="no-print" style={{ marginTop: 20, textAlign: "center" }}>
-                    <button onClick={() => window.print()} style={{ padding: "8px 24px", background: "#9B1239", color: "white", border: "none", borderRadius: 8, fontWeight: 900, cursor: "pointer" }}>
+                    <button onClick={() => window.print()} style={{ padding: "8px 24px", background: "#5C1A1B", color: "white", border: "none", borderRadius: 8, fontWeight: 900, cursor: "pointer" }}>
                         طباعة
                     </button>
                 </div>

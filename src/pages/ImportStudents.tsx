@@ -131,7 +131,7 @@ export default function ImportStudents() {
 
             {/* ── Page Header ── */}
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="p-6 sm:p-8">
                     <h1 className="text-3xl font-black text-white">
                         استيراد بيانات الطلاب

@@ -1,0 +1,17 @@
+{
+    "name": "مدرسة ابن تيمية الثانوية للبنين",
+    "short_name": "ابن تيمية",
+    "description": "النظام الإلكتروني الموحد للحضور والإشراف الصفي",
+    "lang": "ar",
+    "dir": "rtl",
+    "start_url": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#9B1239",
+    "theme_color": "#9B1239",
+    "icons": [
+        { "src": "/favicon.svg",        "sizes": "any",     "type": "image/svg+xml", "purpose": "any" },
+        { "src": "/icon-192.png",       "sizes": "192x192", "type": "image/png" },
+        { "src": "/apple-touch-icon.png","sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    ]
+}

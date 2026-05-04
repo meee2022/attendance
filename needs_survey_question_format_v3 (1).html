@@ -1,0 +1,211 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.wrap{direction:rtl;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);overflow:hidden}
+.hdr{background:#0f3d6e;padding:14px 20px;display:flex;align-items:center;gap:12px}
+.hdr-logo{width:46px;height:46px;border:1.5px solid rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hdr-logo svg{width:26px;height:26px;stroke:white;fill:none;stroke-width:1.5}
+.hdr-txt{flex:1;text-align:center}
+.hdr-txt h1{color:white;font-size:14px;font-weight:500;line-height:1.5}
+.hdr-txt p{color:rgba(255,255,255,0.65);font-size:11px;margin-top:3px}
+.banner{background:#ddeaf7;border-bottom:2px solid #1a6ab1;padding:10px 20px;text-align:center}
+.banner h2{color:#0f3d6e;font-size:13px;font-weight:500}
+.banner p{color:#2563a8;font-size:11px;margin-top:3px}
+.intro{background:#f0f7ff;border-right:3px solid #1a6ab1;margin:14px 18px 0;padding:10px 13px;border-radius:0 5px 5px 0;font-size:11px;color:#0c4a7c;line-height:1.7}
+.intro strong{font-weight:500}
+.scale-bar{display:flex;gap:0;margin:10px 18px;border:0.5px solid var(--color-border-secondary);border-radius:5px;overflow:hidden}
+.scale-cell{flex:1;text-align:center;padding:6px 4px;font-size:10px;font-weight:500;line-height:1.3}
+.sc1{background:#fef2f2;color:#dc2626}.sc2{background:#fff7ed;color:#c2410c}.sc3{background:#fffbeb;color:#b45309}.sc4{background:#f0fdf4;color:#15803d}.sc5{background:#f5f3ff;color:#7c3aed}
+.info-sec{padding:12px 18px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.info-row{display:flex;align-items:center;gap:6px;padding:5px 9px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:4px}
+.info-lbl{font-size:11px;color:var(--color-text-secondary);white-space:nowrap;min-width:78px}
+.info-val{flex:1;font-size:11px;color:var(--color-text-primary);border:none;background:transparent;outline:none;font-family:inherit;direction:rtl}
+.domain-sec{padding:12px 18px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.domain-title-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:7px 12px;border-radius:5px}
+.dt1{background:#e8f4fd}.dt2{background:#e8f8f0}.dt3{background:#fdf3e8}.dt4{background:#f3e8fd}.dt5{background:#fde8e8}.dt6{background:#e8fdf8}
+.dt1 .dtxt{color:#0c4a7c}.dt2 .dtxt{color:#065f46}.dt3 .dtxt{color:#78350f}.dt4 .dtxt{color:#4c1d95}.dt5 .dtxt{color:#7f1d1d}.dt6 .dtxt{color:#064e3b}
+.dt1 .dico{stroke:#0c4a7c}.dt2 .dico{stroke:#065f46}.dt3 .dico{stroke:#78350f}.dt4 .dico{stroke:#4c1d95}.dt5 .dico{stroke:#7f1d1d}.dt6 .dico{stroke:#064e3b}
+.dtxt{font-size:12px;font-weight:500}
+.dico{fill:none;stroke-width:1.8}
+.q-card{border:0.5px solid var(--color-border-tertiary);border-radius:5px;margin-bottom:7px;overflow:hidden;background:var(--color-background-primary)}
+.q-top{padding:8px 12px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:flex-start;gap:8px}
+.q-num{background:#1a6ab1;color:white;border-radius:3px;font-size:10px;font-weight:500;padding:2px 7px;flex-shrink:0;margin-top:1px}
+.q-text{font-size:12px;color:var(--color-text-primary);line-height:1.5;flex:1}
+.q-bottom{padding:8px 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.q-label{font-size:10px;color:var(--color-text-secondary);margin-left:6px}
+.likert{display:flex;gap:4px}
+.likert-opt{position:relative}
+.likert-opt input{position:absolute;opacity:0;width:0;height:0}
+.likert-opt label{display:flex;align-items:center;justify-content:center;padding:4px 10px;border:0.5px solid var(--color-border-secondary);border-radius:3px;font-size:10px;font-weight:500;cursor:pointer;white-space:nowrap;color:var(--color-text-secondary);transition:all .12s}
+.likert-opt label:hover{border-color:#1a6ab1;color:#1a6ab1}
+.l-none input:checked+label{background:#6b7280;border-color:#6b7280;color:white}
+.l-low input:checked+label{background:#10b981;border-color:#10b981;color:white}
+.l-mid input:checked+label{background:#f59e0b;border-color:#f59e0b;color:white}
+.l-high input:checked+label{background:#ef4444;border-color:#ef4444;color:white}
+.l-vhigh input:checked+label{background:#7c3aed;border-color:#7c3aed;color:white}
+.note-inp{border:0.5px solid var(--color-border-tertiary);border-radius:3px;font-size:10px;padding:3px 8px;background:var(--color-background-secondary);font-family:inherit;color:var(--color-text-primary);outline:none;direction:rtl;width:170px}
+.note-inp::placeholder{color:var(--color-text-tertiary)}
+.support-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 18px 12px}
+.sb{border:0.5px solid var(--color-border-tertiary);border-radius:5px;padding:9px 11px;background:var(--color-background-secondary)}
+.sb-t{font-size:11px;font-weight:500;color:#0f3d6e;margin-bottom:7px;padding-bottom:5px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.chk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-text-primary);cursor:pointer;margin-bottom:5px;padding:2px 0}
+.chk input{accent-color:#1a6ab1;cursor:pointer}
+.textarea-f{width:100%;min-height:52px;padding:7px 10px;border:0.5px solid var(--color-border-secondary);border-radius:4px;font-size:11px;font-family:inherit;color:var(--color-text-primary);background:var(--color-background-secondary);resize:vertical;direction:rtl;outline:none}
+.textarea-f::placeholder{color:var(--color-text-tertiary)}
+.sec-label{font-size:12px;font-weight:500;color:#0f3d6e;padding:10px 18px 6px;display:flex;align-items:center;gap:8px}
+.sec-num{width:22px;height:22px;background:#1a6ab1;color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0}
+.pad-h{padding:0 18px 10px}
+.footer{padding:8px 18px;text-align:center;background:var(--color-background-secondary);border-top:0.5px solid var(--color-border-tertiary)}
+.footer p{font-size:10px;color:var(--color-text-tertiary)}
+</style>
+
+<div class="wrap">
+
+<div class="hdr">
+  <div class="hdr-logo"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+  <div class="hdr-txt">
+    <h1>وزارة التربية والتعليم والتعليم العالي — دولة قطر</h1>
+    <p>إدارة التربية الخاصة والتعليم الدامج — قسم مدارس التربية الخاصة وطلبة الدمج</p>
+  </div>
+  <div class="hdr-logo"><svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+</div>
+
+<div class="banner">
+  <h2>استبانة حصر الاحتياجات التدريبية والمهنية لمعلم التربية الخاصة</h2>
+  <p>العام الأكاديمي 2025-2026 — النموذج: IE-IED-P5-F3-NA</p>
+</div>
+
+<div class="intro">
+  <strong>تعليمات:</strong> تهدف هذه الاستبانة إلى تحديد احتياجاتك التدريبية والمهنية في مجالات التربية الخاصة. يُرجى قراءة كل سؤال بعناية والإجابة بصدق وفق المقياس التالي:
+</div>
+
+<div class="scale-bar">
+  <div class="scale-cell sc1">1<br>لا أحتاج</div>
+  <div class="scale-cell sc2">2<br>احتياج منخفض</div>
+  <div class="scale-cell sc3">3<br>احتياج متوسط</div>
+  <div class="scale-cell sc4">4<br>احتياج مرتفع</div>
+  <div class="scale-cell sc5">5<br>احتياج مرتفع جداً</div>
+</div>
+
+<div class="info-sec">
+  <div class="sec-label" style="padding:0 0 8px"><div class="sec-num">1</div>المعلومات الأساسية</div>
+  <div class="info-grid">
+    <div class="info-row"><span class="info-lbl">اسم المعلم:</span><input class="info-val" placeholder="اكتب هنا..."></div>
+    <div class="info-row"><span class="info-lbl">المادة / المسار:</span><input class="info-val" placeholder="اكتب هنا..."></div>
+    <div class="info-row"><span class="info-lbl">سنوات الخبرة:</span><input class="info-val" placeholder="عدد السنوات..."></div>
+    <div class="info-row"><span class="info-lbl">المؤهل العلمي:</span><input class="info-val" placeholder="اكتب هنا..."></div>
+    <div class="info-row"><span class="info-lbl">التاريخ:</span><input class="info-val" type="date"></div>
+  </div>
+</div>
+
+<div class="sec-label" style="border-top:0.5px solid var(--color-border-tertiary);padding-top:12px"><div class="sec-num">2</div>محاور الاستبانة</div>
+
+<div class="domain-sec">
+  <div class="domain-title-bar dt1">
+    <svg class="dico" width="16" height="16" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+    <span class="dtxt">المحور الأول: التخطيط للدرس</span>
+  </div>
+  <div id="d1"></div>
+</div>
+
+<div class="domain-sec">
+  <div class="domain-title-bar dt2">
+    <svg class="dico" width="16" height="16" viewBox="0 0 24 24"><path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+    <span class="dtxt">المحور الثاني: تنفيذ الدرس</span>
+  </div>
+  <div id="d2"></div>
+</div>
+
+<div class="domain-sec">
+  <div class="domain-title-bar dt3">
+    <svg class="dico" width="16" height="16" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    <span class="dtxt">المحور الثالث: التقويم والمتابعة</span>
+  </div>
+  <div id="d3"></div>
+</div>
+
+<div class="domain-sec">
+  <div class="domain-title-bar dt4">
+    <svg class="dico" width="16" height="16" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+    <span class="dtxt">المحور الرابع: الجانب السلوكي والمهاري</span>
+  </div>
+  <div id="d4"></div>
+</div>
+
+<div class="domain-sec">
+  <div class="domain-title-bar dt5">
+    <svg class="dico" width="16" height="16" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+    <span class="dtxt">المحور الخامس: الإدارة الصفية وبيئة التعلم</span>
+  </div>
+  <div id="d5"></div>
+</div>
+
+<div class="domain-sec">
+  <div class="domain-title-bar dt6">
+    <svg class="dico" width="16" height="16" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/></svg>
+    <span class="dtxt">المحور السادس: التعاون بين المعلم والمساعد</span>
+  </div>
+  <div id="d6"></div>
+</div>
+
+<div class="sec-label" style="border-top:0.5px solid var(--color-border-tertiary);padding-top:12px"><div class="sec-num">3</div>نوع الدعم والتطوير المفضّل</div>
+<div class="support-grid">
+  <div class="sb">
+    <div class="sb-t">التدريب والتأهيل</div>
+    <label class="chk"><input type="checkbox"> ورشة عمل داخلية</label>
+    <label class="chk"><input type="checkbox"> دورة تدريبية خارجية</label>
+    <label class="chk"><input type="checkbox"> تعلم إلكتروني ذاتي</label>
+    <label class="chk"><input type="checkbox"> مجتمع تعلم مهني</label>
+    <label class="chk"><input type="checkbox"> حضور مؤتمر متخصص</label>
+  </div>
+  <div class="sb">
+    <div class="sb-t">الإشراف والمتابعة</div>
+    <label class="chk"><input type="checkbox"> زيارة إشرافية متابعة</label>
+    <label class="chk"><input type="checkbox"> ملاحظة صفية من زميل</label>
+    <label class="chk"><input type="checkbox"> تدريب ميداني (Coaching)</label>
+    <label class="chk"><input type="checkbox"> إشراف تشاركي مع معلم خبير</label>
+    <label class="chk"><input type="checkbox"> تحليل تسجيلات صفية</label>
+  </div>
+  <div class="sb">
+    <div class="sb-t">الموارد والأدوات</div>
+    <label class="chk"><input type="checkbox"> أدوات وموارد تعليمية</label>
+    <label class="chk"><input type="checkbox"> دليل استراتيجيات التدريس</label>
+    <label class="chk"><input type="checkbox"> بنك أنشطة التربية الخاصة</label>
+    <label class="chk"><input type="checkbox"> نماذج تخطيط محدّثة</label>
+    <label class="chk"><input type="checkbox"> مكتبة فيديوهات تعليمية</label>
+  </div>
+</div>
+
+<div class="sec-label" style="border-top:0.5px solid var(--color-border-tertiary);padding-top:12px"><div class="sec-num">4</div>الموضوعات التدريبية التي تقترحها</div>
+<div class="pad-h"><textarea class="textarea-f" placeholder="اكتب هنا الموضوعات أو المجالات التي تودّ التطور فيها..."></textarea></div>
+
+<div class="sec-label" style="border-top:0.5px solid var(--color-border-tertiary);padding-top:12px"><div class="sec-num">5</div>ملاحظات وإضافات</div>
+<div class="pad-h" style="margin-bottom:4px"><textarea class="textarea-f" placeholder="أي ملاحظات أو تعليقات إضافية..."></textarea></div>
+
+<div class="footer" style="margin-top:10px"><p>رمز النموذج: IE-IED-P5-F3-NA &nbsp;|&nbsp; رقم الإصدار: 1 &nbsp;|&nbsp; تاريخ الإصدار: يوليو 2025 &nbsp;|&nbsp; التصنيف: داخلي</p></div>
+</div>
+
+<script>
+const data={
+  d1:['هل تحتاج إلى دعم في إعداد خطة درس مكتملة البنود وفق المتطلبات الأكاديمية والمهارية؟','هل تحتاج إلى دعم في ربط أهداف الدرس اليومية بالأهداف طويلة المدى للخطة التربوية الفردية؟','هل تحتاج إلى دعم في صياغة أهداف تعلم دقيقة وقابلة للقياس على المستويين الأكاديمي والمهاري؟','هل تحتاج إلى دعم في تصميم أنشطة رئيسية واضحة ومتدرجة مرتبطة بأهداف الدرس؟'],
+  d2:['هل تحتاج إلى دعم في تصميم أنشطة تمهيدية فعّالة تُهيّئ الطلاب لموضوع الدرس؟','هل تحتاج إلى دعم في تنظيم محتوى الدرس وعرضه بصورة واضحة ومترابطة؟','هل تحتاج إلى دعم في تنويع طرائق التدريس واستراتيجياته المتمحورة حول الطالب؟','هل تحتاج إلى دعم في توظيف الوسائل التعليمية والتكنولوجيا بصورة فعّالة داخل الحصة؟','هل تحتاج إلى دعم في استخدام تدريبات وأنشطة مرنة تناسب احتياجات الطلاب الفردية؟','هل تحتاج إلى دعم في تنمية مهارات الطلبة الحياتية والتواصلية والاجتماعية أثناء الدرس؟','هل تحتاج إلى دعم في توظيف مصادر التعلم الرئيسة والمساندة بصورة واضحة وسليمة؟','هل تحتاج إلى دعم في تقديم المادة العلمية بدقة وملاءمتها لمستوى الطلاب وأهدافهم؟','هل تحتاج إلى دعم في مراعاة الفروق الفردية بين طلاب المجموعة الواحدة أثناء التدريس؟'],
+  d3:['هل تحتاج إلى دعم في تنويع أساليب التقويم القبلي والبنائي والختامي بما يناسب طلاب التربية الخاصة؟','هل تحتاج إلى دعم في متابعة أعمال الطلبة وتصحيحها بدقة ومنهجية؟','هل تحتاج إلى دعم في تقديم تغذية راجعة متنوعة ومستمرة تدعم تقدم الطلاب؟','هل تحتاج إلى دعم في تفعيل دفتر المتابعة والواجبات المدرسية على المستويين الأكاديمي والمهاري؟'],
+  d4:['هل تحتاج إلى دعم في تقويم الجانب السلوكي للطلاب وفق خططهم التربوية الفردية؟','هل تحتاج إلى دعم في اختيار وتطبيق استراتيجيات مناسبة لتحقيق الأهداف المهارية؟','هل تحتاج إلى دعم في تصميم وتفعيل أنشطة صفية وغير صفية مرتبطة بالأهداف المهارية؟','هل تحتاج إلى دعم في انتقاء الأدوات والوسائل الملائمة لتحقيق الأهداف المهارية؟'],
+  d5:['هل تحتاج إلى دعم في بناء بيئة صفية إيجابية وآمنة وداعمة لتعلم طلاب التربية الخاصة؟','هل تحتاج إلى دعم في إدارة أنشطة التعلم والمشاركات الصفية بصورة منظمة وفعّالة؟','هل تحتاج إلى دعم في تفعيل قوانين إدارة الصف وأساليب ضبط السلوك؟','هل تحتاج إلى دعم في استثمار زمن الحصة الدراسية بأقصى فاعلية ممكنة؟'],
+  d6:['هل تحتاج إلى دعم في وضع خطة تنسيق مسبقة وواضحة مع مساعد المعلم قبل بدء الحصة؟','هل تحتاج إلى دعم في توزيع أدوار الدعم الجماعي والفردي للطلاب بينك وبين المساعد؟','هل تحتاج إلى دعم في تنسيق إعداد المواد والأدوات التعليمية اللازمة للحصة مع المساعد؟','هل تحتاج إلى دعم في إدارة الصف بشكل مشترك مع المساعد لضمان بيئة منظمة وآمنة؟']
+};
+const opts=[{cls:'l-none',label:'لا أحتاج'},{cls:'l-low',label:'منخفض'},{cls:'l-mid',label:'متوسط'},{cls:'l-high',label:'مرتفع'},{cls:'l-vhigh',label:'مرتفع جداً'}];
+let gIdx=1;
+Object.entries(data).forEach(([id,qs])=>{
+  const cont=document.getElementById(id);
+  qs.forEach(q=>{
+    const idx=gIdx++;
+    const radios=opts.map(o=>`<div class="likert-opt ${o.cls}"><input type="radio" name="q${idx}" id="q${idx}-${o.cls}"><label for="q${idx}-${o.cls}">${o.label}</label></div>`).join('');
+    const card=document.createElement('div');
+    card.className='q-card';
+    card.innerHTML=`<div class="q-top"><span class="q-num">${idx}</span><span class="q-text">${q}</span></div><div class="q-bottom"><span class="q-label">مستوى الاحتياج:</span><div class="likert">${radios}</div><input class="note-inp" placeholder="ملاحظة إضافية..."></div>`;
+    cont.appendChild(card);
+  });
+});
+</script>

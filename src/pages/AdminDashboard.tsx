@@ -95,35 +95,41 @@ export default function AdminDashboard() {
     const formattedDate = format(new Date(date), "d/MM/yyyy");
     const gradeLabel = GRADE_LABELS[selectedGrade];
 
-    return (
-        <div className="max-w-7xl mx-auto space-y-8 font-sans transition-all animate-in fade-in duration-500">
+    const formatArabicDate = (d: string) => {
+        const date = new Date(d);
+        const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+        return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+    };
 
-            {/* Page Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 sm:p-8">
-                    <div className="space-y-1">
-                        <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-                            لوحة المتابعة اليومية
+    return (
+        <div dir="rtl" className="max-w-7xl mx-auto space-y-6 font-sans transition-all animate-in fade-in duration-500">
+
+            {/* Hero Header — modern minimal */}
+            <div className="relative">
+                <div className="absolute inset-0 rounded-3xl opacity-5"
+                     style={{ background: "radial-gradient(circle at 30% 50%, #5C1A1B 0%, transparent 50%)" }}/>
+                <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-black text-qatar-maroon tracking-widest mb-1">DAILY OVERVIEW · {formatArabicDate(date)}</p>
+                        <h1 className="text-3xl sm:text-4xl font-black text-slate-800 tracking-tight">
+                            مرحباً بك
                         </h1>
-                        <p className="text-white/70 font-medium text-sm">مدرسة ابن تيمية الثانوية للبنين - Ibn Taymiyyah School</p>
+                        <p className="text-slate-500 font-medium text-sm mt-1">إليك ملخص اليوم في مدرسة ابن تيمية الثانوية للبنين</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4">
-                        <div className="flex items-center gap-3 bg-white/15 backdrop-blur-sm px-4 py-2.5 rounded-xl border border-white/20">
-                            <Calendar className="w-5 h-5 text-white" />
-                            <input
-                                type="date"
-                                className="bg-transparent border-none outline-none font-black text-white cursor-pointer"
-                                value={date}
-                                onChange={e => setDate(e.target.value)}
-                            />
-                        </div>
+                    <div className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-2xl shadow-sm">
+                        <Calendar className="w-4 h-4 text-qatar-maroon" />
+                        <input
+                            type="date"
+                            className="bg-transparent border-none outline-none font-black text-slate-700 cursor-pointer text-sm"
+                            value={date}
+                            onChange={e => setDate(e.target.value)}
+                        />
                     </div>
                 </div>
             </div>
 
             {/* Summary Statistics Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                 <StatCard
                     label="طلاب مكتشفون اليوم"
                     value={data?.summary?.totalStudents || 0}
@@ -159,21 +165,23 @@ export default function AdminDashboard() {
                 />
             </div>
 
-            {/* Grade Toggle Buttons */}
-            <div className="flex justify-end gap-2">
-                {([10, 11, 12] as const).map((grade) => (
-                    <button
-                        key={grade}
-                        onClick={() => setSelectedGrade(grade)}
-                        className={`px-5 py-2 rounded-xl font-black text-sm transition-colors border ${
-                            selectedGrade === grade
-                                ? "bg-qatar-maroon text-white border-qatar-maroon"
-                                : "bg-slate-100 text-qatar-maroon border-slate-200 hover:bg-rose-50"
-                        }`}
-                    >
-                        {GRADE_LABELS[grade]}
-                    </button>
-                ))}
+            {/* Grade Pills - segmented control style */}
+            <div className="flex justify-end">
+                <div className="inline-flex bg-slate-100 rounded-full p-1">
+                    {([10, 11, 12] as const).map((grade) => (
+                        <button
+                            key={grade}
+                            onClick={() => setSelectedGrade(grade)}
+                            className={`px-5 py-1.5 rounded-full font-black text-sm transition-all ${
+                                selectedGrade === grade
+                                    ? "bg-white text-qatar-maroon shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"
+                            }`}
+                        >
+                            {GRADE_LABELS[grade]}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Main Table Section */}

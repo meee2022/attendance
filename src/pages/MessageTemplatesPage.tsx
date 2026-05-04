@@ -17,7 +17,7 @@ export default function MessageTemplatesPage() {
     return (
         <div className="max-w-4xl mx-auto space-y-8 font-sans animate-in fade-in duration-500 pb-20">
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="flex items-center gap-4 p-6 sm:p-8">
                     <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 border border-white/20">
                         <MessageSquare className="w-5 h-5" />

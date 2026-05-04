@@ -61,7 +61,7 @@ export default function SeedPage() {
         <div className="max-w-6xl mx-auto space-y-10 font-sans transition-all animate-in fade-in duration-500 pb-20 mt-6">
 
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="flex flex-col gap-1 p-5 sm:p-8">
                     <h1 className="text-3xl font-black text-white flex items-center gap-3">
                         <Database className="w-8 h-8 text-white/80" />
@@ -83,7 +83,7 @@ export default function SeedPage() {
                 {/* Ensure Classes */}
                 <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden flex flex-col">
                     <div className="px-8 py-5 flex items-center justify-between"
-                         style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 60%, #9B1239 100%)" }}>
+                         style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 60%, #5C1A1B 100%)" }}>
                         <h2 className="text-lg font-black text-white">إعداد هيكل الصفوف</h2>
                         <Layers className="w-5 h-5 text-white/30" />
                     </div>
@@ -110,7 +110,7 @@ export default function SeedPage() {
                                 onClick={handleEnsureClasses}
                                 disabled={classLoading}
                                 className="w-full disabled:opacity-30 text-white font-black py-4 px-6 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-3"
-                                style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 60%, #9B1239 100%)" }}
+                                style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 60%, #5C1A1B 100%)" }}
                             >
                                 {classLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/20 border-t-white rounded-full"></div> : <Layers className="w-5 h-5" />}
                                 {classLoading ? "جاري الإنشاء..." : "تحديث هيكل الصفوف"}
@@ -186,7 +186,7 @@ export default function SeedPage() {
             {data?.classes && data.classes.length > 0 && (
                 <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
                     <div className="px-8 py-5 border-b border-qatar-gray-border flex items-center justify-between"
-                         style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 60%, #9B1239 100%)" }}>
+                         style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 60%, #5C1A1B 100%)" }}>
                         <h2 className="text-lg font-black text-white">توزيع الصفوف الحالية</h2>
                         <span className="text-white/70 text-sm font-bold">{data.classes.length} صف</span>
                     </div>

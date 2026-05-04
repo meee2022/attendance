@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(npx convex *)",
+      "Bash(CONVEX_DEPLOYMENT=\"prod:hidden-badger-532\" CONVEX_DEPLOY_KEY=\"prod:hidden-badger-532|eyJ2MiI6IjJjODU0MzI4ZmQ3NjRhNDFiNzUxODFhNzI4NTdlMmVkIn0=\" npx convex deploy)",
+      "Bash(cat .env.local)",
+      "Bash(cat .env)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 CONVEX_DEPLOY_KEY=\"prod:hidden-badger-532|eyJ2MiI6IjJjODU0MzI4ZmQ3NjRhNDFiNzUxODFhNzI4NTdlMmVkIn0=\" npx convex deploy --yes)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git commit *)",
+      "Bash(npx tsc *)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex deploy --yes)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --head claude/vigorous-volhard-dfae4e --title 'إعادة تصميم الاستبانات: عرض المعلم + لوحة المسؤول + تحليل بيانات بـ charts' --body ' *)",
+      "Bash(cp \"/d/OneDrive - Ministry of Education and Higher Education/الخاص/الزيارات ابو ذر/فيصل زاهد الملحم - 00-الزيارة الصفية 2026/فيصل زاهد الملحم - 00-الزيارة الصفية 2026/استمارة الإشراف على أداء معلم1.xlsm\" /tmp/supervision.xlsm)",
+      "Read(//tmp/**)",
+      "Bash(node /tmp/analyze.mjs)",
+      "Bash(cp /tmp/supervision.xlsm \"/c/Users/M/AppData/Local/Temp/supervision.xlsm\")",
+      "Bash(node _analyze.mjs)",
+      "Bash(sed -n '1,80p' /tmp/an2.txt)",
+      "Bash(sed -n '80,180p' /tmp/an2.txt)",
+      "Bash(node _extract_data.mjs)",
+      "Bash(node -e \"console.log\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('./convex/_seedData.json'\\)\\).teachers.length + ' teachers'\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(npm install *)",
+      "Bash(node _convert_og.mjs)",
+      "PowerShell($path = \"D:\\\\OneDrive - Ministry of Education and Higher Education\\\\الخاص\\\\الزيارات ابو ذر\\\\OneDrive_1_5-4-2026\"; if \\(Test-Path $path\\) { Get-ChildItem $path -Recurse | Select-Object FullName, Length, @{N='Type';E={if\\($_.PSIsContainer\\){'DIR'}else{$_.Extension}}} | Format-Table -AutoSize -Wrap } else { Write-Host \"PATH NOT FOUND\" })",
+      "Bash(cp /tmp/grade10.xlsx \"/c/Users/M/AppData/Local/Temp/grade10.xlsx\")",
+      "Bash(cp /tmp/grade11_sci.xlsx \"/c/Users/M/AppData/Local/Temp/grade11_sci.xlsx\")",
+      "Bash(cp /tmp/grade11_lit.xlsx \"/c/Users/M/AppData/Local/Temp/grade11_lit.xlsx\")",
+      "Bash(cp /tmp/grade11_tech.xlsx \"/c/Users/M/AppData/Local/Temp/grade11_tech.xlsx\")",
+      "Bash(node _analyze_assessments.mjs)",
+      "Bash(node _extract_grades.mjs)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex logs --history 50)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 timeout 10 npx convex logs --history 100)"
+    ]
+  }
+}

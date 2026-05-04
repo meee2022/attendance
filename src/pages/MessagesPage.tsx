@@ -119,7 +119,7 @@ export default function MessagesPage() {
       {/* Header */}
       <div
         className="rounded-2xl overflow-hidden qatar-card-shadow"
-        style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}
+        style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 sm:p-8">
           <div>

@@ -89,7 +89,7 @@ export default function ReportsPage() {
 
             {/* Header */}
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 sm:p-8">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
@@ -590,7 +590,7 @@ function FrequentAbsencesTab({ schoolId, date }: { schoolId: string; date: strin
             {/* Sub-header */}
             <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
                 <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
-                     style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 100%)" }}>
+                     style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 100%)" }}>
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
                             <AlertTriangle className="w-5 h-5 text-white" />

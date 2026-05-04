@@ -21,7 +21,7 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
     deputy: "النائب الأكاديمي",
 };
 const ROLE_COLORS: Record<VisitorRole, string> = {
-    coordinator: "#9B1239",
+    coordinator: "#5C1A1B",
     supervisor: "#1e40af",
     deputy: "#065f46",
 };
@@ -132,7 +132,7 @@ export default function SupervisionPage() {
         return (
             <div dir="rtl" className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
                 <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                    style={{ background: "linear-gradient(135deg,#9B1239 0%,#C0184C 50%,#9B1239 100%)" }}>
+                    style={{ background: "linear-gradient(135deg,#5C1A1B 0%,#7A2425 50%,#5C1A1B 100%)" }}>
                     <div className="p-5 sm:p-7">
                         <h1 className="text-2xl font-black text-white flex items-center gap-3">
                             <ClipboardCheck className="w-7 h-7 text-white/80"/>الإشراف الصفي
@@ -147,7 +147,7 @@ export default function SupervisionPage() {
                     <button onClick={async () => { setSeeding(true); try { await seedDefault({}); } finally { setSeeding(false); } }}
                         disabled={seeding}
                         className="flex items-center gap-2 px-6 py-3 rounded-2xl text-white font-black text-sm hover:opacity-90 disabled:opacity-50 qatar-card-shadow"
-                        style={{ background: "linear-gradient(135deg,#9B1239,#C0184C)" }}>
+                        style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
                         {seeding ? <><RotateCcw className="w-4 h-4 animate-spin"/>جارٍ التهيئة...</> : <><Plus className="w-4 h-4"/>تهيئة المعايير الافتراضية</>}
                     </button>
                 </div>
@@ -219,8 +219,8 @@ export default function SupervisionPage() {
 // ── Visit Form (Multi-step Wizard) ────────────────────────────────────────
 function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { criteria: Criterion[]; editingId: string | null; authedRole: VisitorRole; isOnline: boolean; onSaved: () => void }) {
     const existing = useQuery(api.supervision.getVisit, editingId ? { id: editingId as any } : "skip" as any) as Visit | null | undefined;
-    const activeSurvey = useQuery(api.surveys.getActiveSurvey) as any;
-    const respondents = useQuery(api.surveys.getRespondents, activeSurvey ? { surveyId: activeSurvey._id } : "skip" as any) as any[] | undefined;
+    const schoolTeachers = useQuery(api.supervision.getSchoolTeachers) as any[] | undefined;
+    const supervisorsAll = useQuery(api.supervision.getSupervisors) as any[] | undefined;
     const saveVisit = useMutation(api.supervision.saveVisit);
 
     const [step, setStep] = useState(1);
@@ -263,11 +263,19 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
 
     const teachers = useMemo(() => {
         const set = new Map<string, string>();
-        for (const t of respondents ?? []) {
-            if (t?.name) set.set(t.name, t.department ?? "");
+        for (const t of schoolTeachers ?? []) {
+            if (t?.fullName) set.set(t.fullName, t.department ?? "");
         }
         return Array.from(set.entries()).map(([name, department]) => ({ name, department }));
-    }, [respondents]);
+    }, [schoolTeachers]);
+
+    // Auto-suggest visitor names based on selected role and teacher's department
+    const visitorSuggestions = useMemo(() => {
+        if (!supervisorsAll) return [];
+        return supervisorsAll
+            .filter(s => s.role === visitorRole && (!teacherDepartment || s.subjects.includes(teacherDepartment)))
+            .map(s => s.fullName);
+    }, [supervisorsAll, visitorRole, teacherDepartment]);
 
     const filteredTeachers = useMemo(() => {
         const q = searchTeacher.trim();
@@ -362,7 +370,7 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                                 className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-black transition-all flex-1 justify-center ${
                                     step === s.n ? "text-white shadow" : step > s.n ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-400"
                                 }`}
-                                style={step === s.n ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
+                                style={step === s.n ? { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" } : {}}>
                                 <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
                                     step === s.n ? "bg-white/30" : step > s.n ? "bg-emerald-200" : "bg-slate-200"
                                 }`}>{step > s.n ? <Check className="w-3 h-3"/> : s.n}</span>
@@ -377,7 +385,7 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
             {/* Step 1: Visitor + Teacher */}
             {step === 1 && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3.5 border-b border-slate-100" style={{ background: "linear-gradient(135deg,#9B123922,#9B12390a)", borderRight: "4px solid #9B1239" }}>
+                    <div className="px-5 py-3.5 border-b border-slate-100" style={{ background: "linear-gradient(135deg,#5C1A1B22,#5C1A1B0a)", borderRight: "4px solid #5C1A1B" }}>
                         <span className="font-black text-slate-800 text-sm">بيانات الزائر والمعلم</span>
                     </div>
                     <div className="p-5 space-y-5">
@@ -400,9 +408,12 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                         {/* Visitor name */}
                         <div>
                             <label className="block text-xs font-black text-slate-500 mb-1.5">اسم الزائر</label>
-                            <input value={visitorName} onChange={e => setVisitorName(e.target.value)}
-                                placeholder="اكتب اسم الزائر..."
+                            <input value={visitorName} onChange={e => setVisitorName(e.target.value)} list="visitor-suggestions"
+                                placeholder="اكتب اسم الزائر أو اختر من القائمة..."
                                 className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 font-bold text-slate-700"/>
+                            <datalist id="visitor-suggestions">
+                                {visitorSuggestions.map(n => <option key={n} value={n}/>)}
+                            </datalist>
                             <p className="text-[10px] text-slate-400 font-bold mt-1">تم تسجيل دخولك كـ <span className="font-black" style={{ color: ROLE_COLORS[authedRole] }}>{ROLE_LABELS[authedRole]}</span></p>
                         </div>
                         {/* Teacher selection */}
@@ -492,7 +503,7 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                                         return (
                                             <button key={t} onClick={() => setFollowUpType(t)}
                                                 className={`py-2.5 rounded-xl text-sm font-black transition-all border-2 ${sel ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-600"}`}
-                                                style={sel ? { background: "linear-gradient(135deg,#9B1239,#C0184C)" } : {}}>
+                                                style={sel ? { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" } : {}}>
                                                 {FOLLOW_UP[t]}
                                             </button>
                                         );
@@ -651,7 +662,7 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                             </button>
                             <button onClick={() => handleSave("submitted")} disabled={saving || !canStep2 || !canStep3}
                                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-white text-sm font-black hover:opacity-90 disabled:opacity-40 qatar-card-shadow"
-                                style={{ background: "linear-gradient(135deg,#9B1239,#C0184C)" }}>
+                                style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
                                 <Send className="w-4 h-4"/>{saving ? "جارٍ الحفظ..." : editingId ? "حفظ التعديلات" : "تأكيد وإرسال"}
                             </button>
                         </div>
@@ -793,7 +804,13 @@ function VisitsList({ criteria, authedRole, offlineDrafts, onEdit, onView, onDra
                                             className="flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-black">
                                             <Printer className="w-3 h-3"/>طباعة
                                         </button>
-                                        <button onClick={async () => { if (confirm("حذف هذه الزيارة؟")) await deleteVisit({ id: v._id as any }); }}
+                                        <button onClick={async () => {
+                                            if (v.teacherSignedAt) { alert("لا يمكن حذف زيارة موقَّعة من المعلم"); return; }
+                                            if (confirm("حذف هذه الزيارة؟")) {
+                                                try { await deleteVisit({ id: v._id as any, actorRole: authedRole }); }
+                                                catch (e: any) { alert(e.message ?? "تعذر الحذف"); }
+                                            }
+                                        }}
                                             className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">
                                             <Trash2 className="w-3.5 h-3.5"/>
                                         </button>

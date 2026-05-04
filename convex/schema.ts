@@ -160,6 +160,78 @@ export default defineSchema({
     }).index("by_school", ["schoolId"])
       .index("by_role", ["schoolId", "role"]),
 
+    // ── نظام رصد الدرجات (Grade Tracking) ─────────────────────────────────
+    // كل صف من الجدول = درجات طالب واحد في مادة واحدة (5 تقييمات)
+    studentGrades: defineTable({
+        schoolId: v.id("schools"),
+        studentId: v.optional(v.id("students")),  // مرتبط بالطالب الأصلي إن وجد
+        studentName: v.string(),                  // الاسم (للأشخاص غير المرتبطين)
+        className: v.string(),                    // اسم الفصل (مثل 10-1)
+        grade: v.number(),                        // 10 أو 11
+        track: v.string(),                        // عام · علمي · أدبي · تكنولوجي
+        subjectName: v.string(),                  // اسم المادة
+        // 5 تقييمات: number | "absent" | "excused" | null
+        a1: v.optional(v.union(v.number(), v.string())),
+        a2: v.optional(v.union(v.number(), v.string())),
+        a3: v.optional(v.union(v.number(), v.string())),
+        a4: v.optional(v.union(v.number(), v.string())),
+        a5: v.optional(v.union(v.number(), v.string())),
+        notes: v.optional(v.string()),
+        updatedAt: v.number(),
+        updatedBy: v.optional(v.string()),
+    }).index("by_school", ["schoolId"])
+      .index("by_class_subject", ["schoolId", "className", "subjectName"])
+      .index("by_student", ["schoolId", "studentName"])
+      .index("by_subject", ["schoolId", "subjectName"]),
+
+    // إعدادات نظام الدرجات
+    gradeSettings: defineTable({
+        schoolId: v.id("schools"),
+        maxPerAssessment: v.number(),       // افتراضي 20
+        finalScoreOutOf: v.number(),        // افتراضي 5
+        passThreshold: v.number(),          // حد النجاح من finalScoreOutOf (افتراضي 2.5)
+        excellenceThreshold: v.number(),    // حد التميز (افتراضي 4.5)
+        assessmentLabels: v.array(v.string()), // ["تقييم 1", ..., "تقييم 5"]
+    }).index("by_school", ["schoolId"]),
+
+    // قاعدة بيانات المعلمين الموحدة
+    schoolTeachers: defineTable({
+        schoolId: v.id("schools"),
+        fullName: v.string(),
+        department: v.string(),
+        email: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        teachingClasses: v.optional(v.array(v.string())),
+        isActive: v.boolean(),
+    }).index("by_school", ["schoolId"])
+      .index("by_dept", ["schoolId", "department"]),
+
+    // سجل المراجعات (audit log)
+    supervisionAuditLog: defineTable({
+        schoolId: v.id("schools"),
+        visitId: v.optional(v.id("supervisionVisits")),
+        action: v.string(),
+        actorRole: v.optional(v.string()),
+        actorName: v.optional(v.string()),
+        details: v.optional(v.string()),
+        timestamp: v.number(),
+    }).index("by_school", ["schoolId"])
+      .index("by_visit", ["visitId"]),
+
+    // خطط تطوير المعلم
+    teacherImprovementPlans: defineTable({
+        schoolId: v.id("schools"),
+        teacherName: v.string(),
+        relatedVisitId: v.optional(v.id("supervisionVisits")),
+        weakAreas: v.array(v.string()),
+        actionItems: v.array(v.string()),
+        targetDate: v.optional(v.string()),
+        status: v.union(v.literal("active"), v.literal("achieved"), v.literal("cancelled")),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    }).index("by_school", ["schoolId"])
+      .index("by_teacher", ["schoolId", "teacherName"]),
+
     supervisionVisits: defineTable({
         schoolId: v.id("schools"),
         // الزائر

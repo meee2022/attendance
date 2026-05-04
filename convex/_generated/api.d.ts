@@ -10,6 +10,7 @@
 
 import type * as assessments from "../assessments.js";
 import type * as attendance from "../attendance.js";
+import type * as grades from "../grades.js";
 import type * as messages from "../messages.js";
 import type * as settings from "../settings.js";
 import type * as setup from "../setup.js";
@@ -26,6 +27,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   assessments: typeof assessments;
   attendance: typeof attendance;
+  grades: typeof grades;
   messages: typeof messages;
   settings: typeof settings;
   setup: typeof setup;

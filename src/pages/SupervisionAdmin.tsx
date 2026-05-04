@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, BarChart3, KeyRound, Save } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, BarChart3, KeyRound, Save, Users, Activity, History } from "lucide-react";
 import SupervisionAnalytics from "./SupervisionAnalytics";
+import SupervisionAdvancedAnalytics from "./SupervisionAdvancedAnalytics";
+import SupervisionTeachers from "./SupervisionTeachers";
+import SupervisionAuditLog from "./SupervisionAuditLog";
 
 type Domain = "planning" | "execution" | "evaluation" | "management";
 type Role = "coordinator" | "supervisor" | "deputy";
@@ -13,37 +16,45 @@ const DOMAIN_COLORS: Record<Domain, string> = { planning: "#3b82f6", execution: 
 const DOMAIN_ORDER: Domain[] = ["planning", "execution", "evaluation", "management"];
 
 const ROLE_LABELS: Record<Role, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
-const ROLE_COLORS: Record<Role, string> = { coordinator: "#9B1239", supervisor: "#1e40af", deputy: "#065f46" };
+const ROLE_COLORS: Record<Role, string> = { coordinator: "#5C1A1B", supervisor: "#1e40af", deputy: "#065f46" };
+
+type AdminTab = "analytics" | "advanced" | "teachers" | "criteria" | "pins" | "audit";
 
 export default function SupervisionAdmin() {
-    const [tab, setTab] = useState<"analytics" | "criteria" | "pins">("analytics");
+    const [tab, setTab] = useState<AdminTab>("analytics");
+
+    const TABS: { key: AdminTab; label: string; icon: any }[] = [
+        { key: "analytics", label: "التحليل", icon: BarChart3 },
+        { key: "advanced",  label: "تحليل متقدم", icon: Activity },
+        { key: "teachers",  label: "المعلمون والزائرون", icon: Users },
+        { key: "criteria",  label: "المعايير", icon: ClipboardCheck },
+        { key: "pins",      label: "كلمات المرور", icon: KeyRound },
+        { key: "audit",     label: "سجل المراجعات", icon: History },
+    ];
 
     return (
         <div dir="rtl" className="space-y-5">
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between">
-                    <div className="flex gap-2 flex-wrap">
-                        <button onClick={() => setTab("analytics")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${tab === "analytics" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
-                            <BarChart3 className="w-3.5 h-3.5"/>التحليل
-                        </button>
-                        <button onClick={() => setTab("criteria")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${tab === "criteria" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
-                            <ClipboardCheck className="w-3.5 h-3.5"/>المعايير
-                        </button>
-                        <button onClick={() => setTab("pins")}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${tab === "pins" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
-                            <KeyRound className="w-3.5 h-3.5"/>كلمات المرور
-                        </button>
+                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex gap-1.5 flex-wrap">
+                        {TABS.map(({ key, label, icon: Icon }) => (
+                            <button key={key} onClick={() => setTab(key)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${tab === key ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
+                                <Icon className="w-3.5 h-3.5"/>{label}
+                            </button>
+                        ))}
                     </div>
                     <span className="font-black text-white text-sm flex items-center gap-2">
                         <ClipboardCheck className="w-4 h-4 text-white/60"/>إدارة الإشراف الصفي
                     </span>
                 </div>
                 <div className="p-5">
-                    {tab === "criteria" && <CriteriaManager/>}
                     {tab === "analytics" && <SupervisionAnalytics/>}
-                    {tab === "pins" && <PinsManager/>}
+                    {tab === "advanced"  && <SupervisionAdvancedAnalytics/>}
+                    {tab === "teachers"  && <SupervisionTeachers/>}
+                    {tab === "criteria"  && <CriteriaManager/>}
+                    {tab === "pins"      && <PinsManager/>}
+                    {tab === "audit"     && <SupervisionAuditLog/>}
                 </div>
             </div>
         </div>

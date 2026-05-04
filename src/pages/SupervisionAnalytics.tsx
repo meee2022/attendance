@@ -8,7 +8,7 @@ type VisitorRole = "coordinator" | "supervisor" | "deputy";
 type Domain = "planning" | "execution" | "evaluation" | "management";
 
 const ROLE_LABELS: Record<VisitorRole, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
-const ROLE_COLORS: Record<VisitorRole, string> = { coordinator: "#9B1239", supervisor: "#1e40af", deputy: "#065f46" };
+const ROLE_COLORS: Record<VisitorRole, string> = { coordinator: "#5C1A1B", supervisor: "#1e40af", deputy: "#065f46" };
 const DOMAIN_LABELS: Record<Domain, string> = { planning: "التخطيط", execution: "تنفيذ الدرس", evaluation: "التقويم", management: "الإدارة الصفية" };
 const DOMAIN_COLORS: Record<Domain, string> = { planning: "#3b82f6", execution: "#10b981", evaluation: "#f59e0b", management: "#8b5cf6" };
 const DOMAIN_ORDER: Domain[] = ["planning", "execution", "evaluation", "management"];
@@ -47,7 +47,7 @@ function RadarChart({ data, size = 280 }: { data: { label: string; value: number
                 const [x, y] = point(i, 1);
                 return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e2e8f0" strokeWidth="1"/>;
             })}
-            <polygon points={polygon} fill="#9B123933" stroke="#9B1239" strokeWidth="2"/>
+            <polygon points={polygon} fill="#5C1A1B33" stroke="#5C1A1B" strokeWidth="2"/>
             {data.map((d, i) => {
                 const [px, py] = point(i, d.value);
                 return <circle key={i} cx={px} cy={py} r="4" fill={d.color} stroke="#fff" strokeWidth="2"/>;
@@ -265,7 +265,7 @@ export default function SupervisionAnalytics() {
             {/* Top needs (lowest performance) */}
             {topNeeds.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#7c2d12,#9B1239)" }}>
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#7c2d12,#5C1A1B)" }}>
                         <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">5</span>
                         <span className="font-black text-white text-sm">أعلى الاحتياجات (أضعف 5 معايير)</span>
                     </div>

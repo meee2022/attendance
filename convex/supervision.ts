@@ -273,6 +273,10 @@ export const saveVisit = mutation({
         if (args.id) {
             const existing = await ctx.db.get(args.id);
             if (!existing) throw new Error("الزيارة غير موجودة");
+            // منع التعديل بعد توقيع المعلم
+            if (existing.teacherSignedAt) {
+                throw new Error("لا يمكن تعديل زيارة موقَّعة من المعلم");
+            }
             const wasSubmitted = existing.status === "submitted";
             await ctx.db.patch(args.id, {
                 visitorRole: args.visitorRole,
@@ -293,6 +297,16 @@ export const saveVisit = mutation({
                 notes: args.notes?.trim(),
                 status: args.status,
                 submittedAt: args.status === "submitted" && !wasSubmitted ? Date.now() : existing.submittedAt,
+            });
+            // audit log
+            await ctx.db.insert("supervisionAuditLog", {
+                schoolId: school._id,
+                visitId: args.id,
+                action: args.status === "submitted" && !wasSubmitted ? "submitted" : "updated",
+                actorRole: args.visitorRole,
+                actorName: args.visitorName.trim(),
+                details: `تعديل زيارة ${args.teacherName.trim()}`,
+                timestamp: Date.now(),
             });
             return args.id;
         }
@@ -326,13 +340,361 @@ export const saveVisit = mutation({
             submittedAt: args.status === "submitted" ? Date.now() : undefined,
             createdAt: Date.now(),
         });
+        await ctx.db.insert("supervisionAuditLog", {
+            schoolId: school._id,
+            visitId: id,
+            action: "created",
+            actorRole: args.visitorRole,
+            actorName: args.visitorName.trim(),
+            details: `إنشاء زيارة لـ ${args.teacherName.trim()}`,
+            timestamp: Date.now(),
+        });
         return id;
     },
 });
 
-export const deleteVisit = mutation({
-    args: { id: v.id("supervisionVisits") },
+// ── Default school teachers from Excel ────────────────────────────────────
+const SCHOOL_TEACHERS_SEED: { fullName: string; department: string; email: string }[] = [
+    { fullName: "محمد رشيد عبدالله حاجى", department: "التربية الإسلامية", email: "m.haji0312@education.qa" },
+    { fullName: "محمد معاذ محمود قناعه", department: "التربية الإسلامية", email: "m.kanaah0103@education.qa" },
+    { fullName: "طه اسماعيل عبدالله", department: "التربية الإسلامية", email: "t.abdulla0607@education.qa" },
+    { fullName: "حسن عبدالسلام محمد ابوسريه", department: "التربية الإسلامية", email: "h.abdelsalam1008@education.qa" },
+    { fullName: "سائد سمير عدنان صالح", department: "التربية الإسلامية", email: "s.salih0103@education.qa" },
+    { fullName: "احمد حسن خلف لبابنه", department: "التربية الإسلامية", email: "a.lababneh0111@education.qa" },
+    { fullName: "محسن محمد احمد فرحات", department: "التربية الإسلامية", email: "m.farahat1401@education.qa" },
+    { fullName: "يوسف مروان البواب", department: "اللغة العربية", email: "y.albawab0910@education.qa" },
+    { fullName: "محمد عايد عبدالله", department: "اللغة العربية", email: "m.abdullah1905@education.qa" },
+    { fullName: "البشير بنمحمد بشطوله", department: "اللغة العربية", email: "b.bachtoula1001@education.qa" },
+    { fullName: "نور مرعي حسين الهدروسي", department: "اللغة العربية", email: "n.alhadrusi0808@education.qa" },
+    { fullName: "نصر اسماعيل عبدالعزيز اسماعيل", department: "اللغة العربية", email: "n.ismail0201@education.qa" },
+    { fullName: "باسل مفلح علي الدلابيح", department: "اللغة العربية", email: "b.aldalabeeh1307@education.qa" },
+    { fullName: "احمد عبدالمنصف نصر محمود", department: "اللغة العربية", email: "a.mahmoud2312@education.qa" },
+    { fullName: "عباس الداخلى محمد عباس", department: "اللغة العربية", email: "a.abbas0105@education.qa" },
+    { fullName: "خالد حمدى محمد مهنى مهنى", department: "اللغة العربية", email: "k.mehanni0101@education.qa" },
+    { fullName: "احمد راضي صالح شافعي", department: "اللغة العربية", email: "a.shafey0709@education.qa" },
+    { fullName: "زناتى محمد محمد حسين", department: "اللغة العربية", email: "z.hussein0201@education.qa" },
+    { fullName: "مصباح محمد علي حسين دسوقي", department: "اللغة الإنجليزية", email: "m.desoqi0101@education.qa" },
+    { fullName: "وليد محمود حامد احمد", department: "اللغة الإنجليزية", email: "w.ahmed0106@education.qa" },
+    { fullName: "سامح عبدالكريم عبدالله محمود", department: "اللغة الإنجليزية", email: "s.mahmoud0612@education.qa" },
+    { fullName: "حسان احمد محمد ابوشمله", department: "اللغة الإنجليزية", email: "h.abushamleh0101@education.qa" },
+    { fullName: "معاذ يوسف فالح حجازي", department: "اللغة الإنجليزية", email: "m.hijazi0401@education.qa" },
+    { fullName: "فوزي اتار", department: "اللغة الإنجليزية", email: "f.atar0306@education.qa" },
+    { fullName: "عمر فرح ارشيد ابو غزله", department: "اللغة الإنجليزية", email: "o.ghazleh2210@education.qa" },
+    { fullName: "مراد بن الشاذلي الذوادي", department: "اللغة الإنجليزية", email: "m.dhaouadi0211@education.qa" },
+    { fullName: "كامل شرف كامل عبدالجابر", department: "اللغة الإنجليزية", email: "k.abdelgaer1603@education.qa" },
+    { fullName: "ابراهيم محمد محمد على", department: "اللغة الإنجليزية", email: "i.ali1611@education.qa" },
+    { fullName: "محسين خامحمد", department: "اللغة الإنجليزية", email: "m.khamhammed1607@education.qa" },
+    { fullName: "فيصل زاهد الملحم", department: "الرياضيات", email: "f.almulhem0604@education.qa" },
+    { fullName: "محمد عطيه حامد عبدالرحيم", department: "الرياضيات", email: "m.hamed1008@education.qa" },
+    { fullName: "محمد الشحات عبدالوهاب حسانين", department: "الرياضيات", email: "m.hassanein2411@education.qa" },
+    { fullName: "ايمن يوسف عبدالرزاق حجازي", department: "الرياضيات", email: "a.hijazi2310@education.qa" },
+    { fullName: "مراد زهير محمد نهاد عبدالمجيد", department: "الرياضيات", email: "m.abdelmajid2006@education.qa" },
+    { fullName: "علي كليب عبد اللطيف العطار", department: "الرياضيات", email: "a.elattar1801@education.qa" },
+    { fullName: "رجب عبدالله عبدالعزيز محمود", department: "الرياضيات", email: "r.mahmoud0207@education.qa" },
+    { fullName: "محمد جابر الرحماني", department: "الرياضيات", email: "m.rahmeni2911@education.qa" },
+    { fullName: "احمد محمد عبدالحميد محروس", department: "الرياضيات", email: "a.mahrouh0309@education.qa" },
+    { fullName: "عادل بن صغير السمعلي", department: "الرياضيات", email: "a.samaali1505@education.qa" },
+    { fullName: "علي قره خالد", department: "الرياضيات", email: "a.karahalit1501@education.qa" },
+    { fullName: "اشرف صبحي محمد اسماعيل عابدين", department: "الأحياء", email: "a.abdeen1605@education.qa" },
+    { fullName: "رجاء سليمان محمد مصطفى سعد", department: "الأحياء", email: "r.saad2001@education.qa" },
+    { fullName: "محمد على ابراهيم محمد احمد", department: "الأحياء", email: "m.ahmed0108@education.qa" },
+    { fullName: "محمد صلاح محمد رزق نايل", department: "الأحياء", email: "m.naiel0108@education.qa" },
+    { fullName: "عاصم محمد عطاالله المطارنه", department: "الأحياء", email: "a.almatarneh0610@education.qa" },
+    { fullName: "حسام تيسير عبدالفتاح داغر", department: "الأحياء", email: "h.dagher0102@education.qa" },
+    { fullName: "يوسف محمد عبدالله طبل", department: "الكيمياء", email: "y.tabl0112@education.qa" },
+    { fullName: "كرم احمد عمار اكرم قزعل", department: "الكيمياء", email: "k.kazeal0205@education.qa" },
+    { fullName: "محمد ربيع فهيم حماد", department: "الكيمياء", email: "m.hammad1012@education.qa" },
+    { fullName: "محمد عبد العظيم احمد جاد المولي", department: "الكيمياء", email: "m.elmawla1404@education.qa" },
+    { fullName: "احمد يوسف اسماعيل منسي", department: "الكيمياء", email: "a.mansi0112@education.qa" },
+    { fullName: "امير غزلان", department: "الكيمياء", email: "a.ghuzlaan1604@education.qa" },
+    { fullName: "سامر كساب شحادة العبدالله", department: "الكيمياء", email: "s.alabdallah0103@education.qa" },
+    { fullName: "محمد كامل محمد عجاج", department: "الكيمياء", email: "m.ajaj3012@education.qa" },
+    { fullName: "محمد مصطفى احمد سليمان", department: "الفيزياء", email: "m.suliman2404@education.qa" },
+    { fullName: "احمد الروبي تمام على", department: "الفيزياء", email: "a.aly2903@education.qa" },
+    { fullName: "محمد سيف النصر احمد سيف", department: "الفيزياء", email: "m.seif0909@education.qa" },
+    { fullName: "نبيل قاسم محمد جرادات", department: "الفيزياء", email: "n.jaradat0109@education.qa" },
+    { fullName: "علي الصالح عبدالحمبد حاجي", department: "الفيزياء", email: "a.hajji27121@education.qa" },
+    { fullName: "محمد احمد يسن ابراهيم", department: "العلوم الاجتماعية", email: "m.ibrahim1102@education.qa" },
+    { fullName: "رجب محمد سعيد حموده", department: "العلوم الاجتماعية", email: "r.hammouda0204@education.qa" },
+    { fullName: "احمد محمد احمد ابراهيم", department: "العلوم الاجتماعية", email: "a.ibrahim1102@education.qa" },
+    { fullName: "حاتم صالح مصطفى عامريه", department: "العلوم الاجتماعية", email: "h.amryeh3010@education.qa" },
+    { fullName: "أحمد عسكر أنور أحمد", department: "العلوم الاجتماعية", email: "a.ahmed2910@education.qa" },
+    { fullName: "طالب حمد الله عليان المصاروه", department: "العلوم الاجتماعية", email: "t.almasarweh0405@education.qa" },
+    { fullName: "محمد هلال الغزاوي", department: "العلوم الاجتماعية", email: "m.alghezawi0104@education.qa" },
+    { fullName: "محمد رضى موسي محمد خليل", department: "العلوم الاجتماعية", email: "m.khalil1404@education.qa" },
+    { fullName: "محمدامين علي عبدالرحمن المحاسنه", department: "العلوم الاجتماعية", email: "m.almahasneh2610@education.qa" },
+    { fullName: "محمد عباس مرسى ابوالعلا", department: "الحوسبة وتكنولوجيا المعلومات", email: "m.abouelela0609@education.qa" },
+    { fullName: "محمد المهدي بورماش", department: "الحوسبة وتكنولوجيا المعلومات", email: "m.bourmeche2309@education.qa" },
+    { fullName: "حاتم المنوبي المنوبي", department: "الحوسبة وتكنولوجيا المعلومات", email: "h.mannoubi2012@education.qa" },
+    { fullName: "أسامة اليوسف", department: "الحوسبة وتكنولوجيا المعلومات", email: "u.alyousf2409@education.qa" },
+    { fullName: "مصطفى السر فضل المولى احمد", department: "الحوسبة وتكنولوجيا المعلومات", email: "m.ahmed29083@education.qa" },
+    { fullName: "فراس محمد أحمد العبسي", department: "الحوسبة وتكنولوجيا المعلومات", email: "f.alabsi2510@education.qa" },
+    { fullName: "السيد ابوالنور ابوالنور السيد عوف", department: "التربية الرياضية", email: "e.ouf2512@education.qa" },
+    { fullName: "غانم محمد عبدالرحمن احمد المحمودى", department: "التربية الرياضية", email: "g.mahmoudi2308@education.qa" },
+    { fullName: "رائد اسعود موسى دييه", department: "التربية الرياضية", email: "r.deebh1003@education.qa" },
+    { fullName: "محمود عبدالرازق خليفه محمد عطيه", department: "التربية الرياضية", email: "m.attia12021@education.qa" },
+    { fullName: "وجيه زغدود", department: "التربية الرياضية", email: "w.zaghdoud0405@education.qa" },
+    { fullName: "احمد سعيد العلى", department: "المهارات الحياتية", email: "a.alali2801@education.qa" },
+    { fullName: "أحمد الأحمد", department: "المهارات الحياتية", email: "a.elahmed1505@education.qa" },
+    { fullName: "احمد جمال العبيد", department: "المهارات الحياتية", email: "a.alobeid1010@education.qa" },
+];
+
+const COORDINATORS_SEED: { department: string; coordinator: string; supervisor?: string }[] = [
+    { department: "التربية الإسلامية", coordinator: "محمد رشيد عبدالله حاجى" },
+    { department: "اللغة العربية", coordinator: "يوسف مروان البواب" },
+    { department: "اللغة الإنجليزية", coordinator: "مصباح محمد علي حسين دسوقي" },
+    { department: "الرياضيات", coordinator: "فيصل زاهد الملحم", supervisor: "حاتم الضاوي" },
+    { department: "الأحياء", coordinator: "اشرف صبحي محمد اسماعيل عابدين" },
+    { department: "الكيمياء", coordinator: "محمد ربيع فهيم حماد" },
+    { department: "الفيزياء", coordinator: "محمد مصطفى احمد سليمان" },
+    { department: "العلوم الاجتماعية", coordinator: "محمد احمد يسن ابراهيم" },
+    { department: "الحوسبة وتكنولوجيا المعلومات", coordinator: "محمد عباس مرسى ابوالعلا" },
+    { department: "التربية الرياضية", coordinator: "السيد ابوالنور ابوالنور السيد عوف" },
+];
+
+export const seedSchoolTeachersDefault = mutation({
+    args: { clearExisting: v.optional(v.boolean()) },
     handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        if (args.clearExisting) {
+            const existing = await ctx.db.query("schoolTeachers")
+                .withIndex("by_school", q => q.eq("schoolId", school._id))
+                .collect();
+            for (const t of existing) await ctx.db.delete(t._id);
+        }
+        const existing = await ctx.db.query("schoolTeachers")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        const existingNames = new Set(existing.map(t => t.fullName));
+        let added = 0, skipped = 0;
+        for (const t of SCHOOL_TEACHERS_SEED) {
+            if (existingNames.has(t.fullName)) { skipped++; continue; }
+            await ctx.db.insert("schoolTeachers", {
+                schoolId: school._id,
+                fullName: t.fullName,
+                department: t.department,
+                email: t.email || undefined,
+                isActive: true,
+            });
+            added++;
+        }
+        // Seed coordinators as supervisors
+        const existingSupervisors = await ctx.db.query("supervisors")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        const existingSupNames = new Set(existingSupervisors.map(s => `${s.fullName}|${s.role}`));
+        for (const c of COORDINATORS_SEED) {
+            const coordKey = `${c.coordinator}|coordinator`;
+            if (!existingSupNames.has(coordKey)) {
+                await ctx.db.insert("supervisors", {
+                    schoolId: school._id,
+                    fullName: c.coordinator,
+                    role: "coordinator",
+                    subjects: [c.department],
+                    isActive: true,
+                });
+            }
+            if (c.supervisor) {
+                const supKey = `${c.supervisor}|supervisor`;
+                if (!existingSupNames.has(supKey)) {
+                    await ctx.db.insert("supervisors", {
+                        schoolId: school._id,
+                        fullName: c.supervisor,
+                        role: "supervisor",
+                        subjects: [c.department],
+                        isActive: true,
+                    });
+                }
+            }
+        }
+        return { added, skipped, total: SCHOOL_TEACHERS_SEED.length };
+    },
+});
+
+// ── School Teachers (مصدر الحقيقة الموحد) ────────────────────────────────
+export const getSchoolTeachers = query({
+    args: {},
+    handler: async (ctx) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return [];
+        const teachers = await ctx.db.query("schoolTeachers")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        return teachers.filter(t => t.isActive !== false);
+    },
+});
+
+export const importSchoolTeachersBulk = mutation({
+    args: {
+        teachers: v.array(v.object({
+            fullName: v.string(),
+            department: v.string(),
+            email: v.optional(v.string()),
+            phone: v.optional(v.string()),
+            teachingClasses: v.optional(v.array(v.string())),
+        })),
+        clearExisting: v.optional(v.boolean()),
+    },
+    handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        if (args.clearExisting) {
+            const existing = await ctx.db.query("schoolTeachers")
+                .withIndex("by_school", q => q.eq("schoolId", school._id))
+                .collect();
+            for (const t of existing) await ctx.db.delete(t._id);
+        }
+        let added = 0, skipped = 0;
+        const existing = await ctx.db.query("schoolTeachers")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        const existingNames = new Set(existing.map(t => t.fullName));
+        for (const t of args.teachers) {
+            if (existingNames.has(t.fullName.trim())) { skipped++; continue; }
+            await ctx.db.insert("schoolTeachers", {
+                schoolId: school._id,
+                fullName: t.fullName.trim(),
+                department: t.department.trim(),
+                email: t.email?.trim() || undefined,
+                phone: t.phone?.trim() || undefined,
+                teachingClasses: t.teachingClasses,
+                isActive: true,
+            });
+            added++;
+        }
+        return { added, skipped };
+    },
+});
+
+export const addSchoolTeacher = mutation({
+    args: { fullName: v.string(), department: v.string(), email: v.optional(v.string()), phone: v.optional(v.string()) },
+    handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        await ctx.db.insert("schoolTeachers", {
+            schoolId: school._id,
+            fullName: args.fullName.trim(),
+            department: args.department.trim(),
+            email: args.email?.trim() || undefined,
+            phone: args.phone?.trim() || undefined,
+            isActive: true,
+        });
+    },
+});
+
+export const updateSchoolTeacher = mutation({
+    args: {
+        id: v.id("schoolTeachers"),
+        fullName: v.optional(v.string()),
+        department: v.optional(v.string()),
+        email: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        teachingClasses: v.optional(v.array(v.string())),
+        isActive: v.optional(v.boolean()),
+    },
+    handler: async (ctx, args) => {
+        const patch: any = {};
+        if (args.fullName !== undefined) patch.fullName = args.fullName.trim();
+        if (args.department !== undefined) patch.department = args.department.trim();
+        if (args.email !== undefined) patch.email = args.email.trim() || undefined;
+        if (args.phone !== undefined) patch.phone = args.phone.trim() || undefined;
+        if (args.teachingClasses !== undefined) patch.teachingClasses = args.teachingClasses;
+        if (args.isActive !== undefined) patch.isActive = args.isActive;
+        await ctx.db.patch(args.id, patch);
+    },
+});
+
+export const deleteSchoolTeacher = mutation({
+    args: { id: v.id("schoolTeachers") },
+    handler: async (ctx, args) => { await ctx.db.delete(args.id); },
+});
+
+// ── Audit Log ─────────────────────────────────────────────────────────────
+export const getAuditLog = query({
+    args: { visitId: v.optional(v.id("supervisionVisits")), limit: v.optional(v.number()) },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return [];
+        let q;
+        if (args.visitId) {
+            q = ctx.db.query("supervisionAuditLog").withIndex("by_visit", x => x.eq("visitId", args.visitId!));
+        } else {
+            q = ctx.db.query("supervisionAuditLog").withIndex("by_school", x => x.eq("schoolId", school._id));
+        }
+        const all = await q.collect();
+        const sorted = all.sort((a, b) => b.timestamp - a.timestamp);
+        return args.limit ? sorted.slice(0, args.limit) : sorted;
+    },
+});
+
+// ── Improvement Plans ─────────────────────────────────────────────────────
+export const getImprovementPlans = query({
+    args: { teacherName: v.optional(v.string()) },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return [];
+        if (args.teacherName) {
+            return ctx.db.query("teacherImprovementPlans")
+                .withIndex("by_teacher", q => q.eq("schoolId", school._id).eq("teacherName", args.teacherName!))
+                .collect();
+        }
+        return ctx.db.query("teacherImprovementPlans")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+    },
+});
+
+export const createImprovementPlan = mutation({
+    args: {
+        teacherName: v.string(),
+        relatedVisitId: v.optional(v.id("supervisionVisits")),
+        weakAreas: v.array(v.string()),
+        actionItems: v.array(v.string()),
+        targetDate: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        await ctx.db.insert("teacherImprovementPlans", {
+            schoolId: school._id,
+            teacherName: args.teacherName.trim(),
+            relatedVisitId: args.relatedVisitId,
+            weakAreas: args.weakAreas,
+            actionItems: args.actionItems,
+            targetDate: args.targetDate,
+            status: "active",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        });
+    },
+});
+
+export const updateImprovementPlanStatus = mutation({
+    args: { id: v.id("teacherImprovementPlans"), status: v.union(v.literal("active"), v.literal("achieved"), v.literal("cancelled")) },
+    handler: async (ctx, args) => {
+        await ctx.db.patch(args.id, { status: args.status, updatedAt: Date.now() });
+    },
+});
+
+export const deleteImprovementPlan = mutation({
+    args: { id: v.id("teacherImprovementPlans") },
+    handler: async (ctx, args) => { await ctx.db.delete(args.id); },
+});
+
+export const deleteVisit = mutation({
+    args: { id: v.id("supervisionVisits"), actorRole: v.optional(v.string()), actorName: v.optional(v.string()) },
+    handler: async (ctx, args) => {
+        const v = await ctx.db.get(args.id);
+        if (v?.teacherSignedAt) throw new Error("لا يمكن حذف زيارة موقَّعة");
+        const school = await ctx.db.query("schools").first();
+        if (school && v) {
+            await ctx.db.insert("supervisionAuditLog", {
+                schoolId: school._id,
+                visitId: args.id,
+                action: "deleted",
+                actorRole: args.actorRole,
+                actorName: args.actorName,
+                details: `حذف زيارة ${v.teacherName}`,
+                timestamp: Date.now(),
+            });
+        }
         await ctx.db.delete(args.id);
     },
 });

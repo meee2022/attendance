@@ -110,7 +110,7 @@ export default function AssessmentsPage() {
         <div className="max-w-7xl mx-auto space-y-8 font-sans transition-all animate-in fade-in duration-500 pb-20 mt-4">
             {/* Header */}
             <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #9B1239 0%, #C0184C 50%, #9B1239 100%)" }}>
+                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
                 <div className="flex flex-col gap-1 p-5 sm:p-8">
                     <h1 className="text-3xl font-black text-white flex items-center gap-3">
                         <BookOpen className="w-8 h-8 text-white/80" />

@@ -1,5 +1,31 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+
+// ── Feature toggle (hidden pages/sections) ────────────────────────────────
+export const getHiddenFeatures = query({
+    args: {},
+    handler: async (ctx) => {
+        const school = await ctx.db.query("schools").first();
+        return school?.hiddenFeatures ?? [];
+    },
+});
+
+export const toggleFeature = mutation({
+    args: { featureKey: v.string(), hidden: v.boolean() },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) throw new Error("لا توجد مدرسة.");
+        const current = school.hiddenFeatures ?? [];
+        let next: string[];
+        if (args.hidden) {
+            next = current.includes(args.featureKey) ? current : [...current, args.featureKey];
+        } else {
+            next = current.filter(k => k !== args.featureKey);
+        }
+        await ctx.db.patch(school._id, { hiddenFeatures: next });
+        return next;
+    },
+});
 
 export const updateAdminPin = mutation({
     args: { currentPin: v.string(), newPin: v.string() },

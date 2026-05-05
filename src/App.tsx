@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen } from "lucide-react";
+import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen, Lock } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import TeacherUpload from "./pages/TeacherUpload";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -19,6 +19,7 @@ import SupervisionPage from "./pages/SupervisionPage";
 import SupervisionPrint from "./pages/SupervisionPrint";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
+import { useHiddenFeatures } from "./lib/featureFlags";
 
 // Primary nav: most-used daily operations
 const PRIMARY_NAV = [
@@ -45,22 +46,38 @@ const ADMIN_NAV = [
 
 const ALL_NAV = [...PUBLIC_NAV, ...ADMIN_NAV];
 
+function FeatureRoute({ featureKey, children }: { featureKey: string; children: React.ReactNode }) {
+  const hidden = useHiddenFeatures();
+  if (hidden.includes(featureKey)) {
+    return (
+      <div dir="rtl" className="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center mt-10">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+          <Shield className="w-8 h-8 text-slate-400"/>
+        </div>
+        <p className="font-black text-slate-700 text-lg">هذه الصفحة معطّلة حالياً</p>
+        <p className="text-sm text-slate-400 font-bold mt-2">يمكن للمسؤول تفعيلها من الإعدادات</p>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <div className="min-h-screen bg-qatar-gray-bg text-slate-900 font-sans" dir="rtl">
       <Navbar />
       <main className="max-w-7xl mx-auto py-4 lg:py-10 px-3 sm:px-6 lg:px-8 pb-28 lg:pb-10">
         <Routes>
-          <Route path="/"                    element={<AdminDashboard />} />
-          <Route path="/upload"              element={<TeacherUpload />} />
-          <Route path="/assessments"         element={<AssessmentsPage />} />
+          <Route path="/"                    element={<FeatureRoute featureKey="/"><AdminDashboard /></FeatureRoute>} />
+          <Route path="/upload"              element={<FeatureRoute featureKey="/upload"><TeacherUpload /></FeatureRoute>} />
+          <Route path="/assessments"         element={<FeatureRoute featureKey="/assessments"><AssessmentsPage /></FeatureRoute>} />
           <Route path="/class/:classId"      element={<ClassDetails />} />
-          <Route path="/reports"             element={<ReportsPage />} />
-          <Route path="/messages"            element={<MessagesPage />} />
-          <Route path="/surveys"             element={<SurveysPage />} />
-          <Route path="/supervision"         element={<SupervisionPage />} />
+          <Route path="/reports"             element={<FeatureRoute featureKey="/reports"><ReportsPage /></FeatureRoute>} />
+          <Route path="/messages"            element={<FeatureRoute featureKey="/messages"><MessagesPage /></FeatureRoute>} />
+          <Route path="/surveys"             element={<FeatureRoute featureKey="/surveys"><SurveysPage /></FeatureRoute>} />
+          <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><SupervisionPage /></FeatureRoute>} />
           <Route path="/supervision/print/:id" element={<SupervisionPrint />} />
-          <Route path="/grades"              element={<GradesPage />} />
+          <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
           <Route path="/grades/print/student/:studentName" element={<GradesPrint />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
@@ -80,6 +97,12 @@ function Navbar() {
   const isAdminAuthed = sessionStorage.getItem("qatar_admin_auth") === "true";
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const hiddenFeatures = useHiddenFeatures();
+  // Combine all nav items, filter hidden, then split: first 4 in primary bar, rest in "المزيد"
+  const allVisible = [...PRIMARY_NAV, ...SECONDARY_NAV].filter(n => !hiddenFeatures.includes(n.to));
+  const PRIMARY_LIMIT = 5;
+  const visiblePrimary = allVisible.slice(0, PRIMARY_LIMIT);
+  const visibleSecondary = allVisible.slice(PRIMARY_LIMIT);
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
@@ -94,7 +117,7 @@ function Navbar() {
     window.location.href = "/";
   };
 
-  const moreActive = SECONDARY_NAV.some(n => isActive(n.to));
+  const moreActive = visibleSecondary.some(n => isActive(n.to));
 
   return (
     <nav className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl border-b border-slate-200/60" dir="rtl">
@@ -118,7 +141,7 @@ function Navbar() {
 
           {/* Desktop Nav */}
           <div className="hidden lg:flex items-center gap-0.5 flex-1 justify-center">
-            {PRIMARY_NAV.map(({ to, icon, label }) => {
+            {visiblePrimary.map(({ to, icon, label }) => {
               const active = isActive(to);
               return (
                 <Link key={to} to={to}
@@ -134,20 +157,28 @@ function Navbar() {
               );
             })}
 
-            {/* More dropdown */}
+            {/* More dropdown - only when there's something to show */}
             <div ref={moreRef} className="relative">
-              <button onClick={() => setMoreOpen(v => !v)}
-                className={`flex items-center gap-1 px-3.5 py-2 rounded-xl text-sm font-bold transition-all ${
-                  moreActive ? "text-qatar-maroon" : "text-slate-500 hover:text-qatar-maroon hover:bg-slate-50"
-                }`}>
-                <MoreHorizontal className="w-4 h-4"/>
-                المزيد
-                <ChevronDown className={`w-3 h-3 transition-transform ${moreOpen ? "rotate-180" : ""}`}/>
-              </button>
+              {visibleSecondary.length > 0 ? (
+                <button onClick={() => setMoreOpen(v => !v)}
+                  className={`flex items-center gap-1 px-3.5 py-2 rounded-xl text-sm font-bold transition-all ${
+                    moreActive ? "text-qatar-maroon" : "text-slate-500 hover:text-qatar-maroon hover:bg-slate-50"
+                  }`}>
+                  <MoreHorizontal className="w-4 h-4"/>
+                  المزيد
+                  <ChevronDown className={`w-3 h-3 transition-transform ${moreOpen ? "rotate-180" : ""}`}/>
+                </button>
+              ) : (
+                <button onClick={() => setMoreOpen(v => !v)}
+                  className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:text-qatar-maroon hover:bg-slate-50"
+                  title="الإدارة">
+                  <MoreHorizontal className="w-4 h-4"/>
+                </button>
+              )}
               {moreOpen && (
                 <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl shadow-slate-300/40 border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="p-2">
-                    {SECONDARY_NAV.map(({ to, icon, label }) => {
+                    {visibleSecondary.map(({ to, icon, label }) => {
                       const active = isActive(to);
                       return (
                         <Link key={to} to={to} onClick={() => setMoreOpen(false)}
@@ -162,28 +193,27 @@ function Navbar() {
                       );
                     })}
                   </div>
-                  {isAdminAuthed && (
-                    <>
-                      <div className="border-t border-slate-100 mx-2"/>
-                      <div className="p-2">
-                        <p className="text-[10px] font-black text-slate-400 px-3 py-1">الإدارة</p>
-                        {ADMIN_NAV.map(({ to, icon, label }) => {
-                          const active = isActive(to);
-                          return (
-                            <Link key={to} to={to} onClick={() => setMoreOpen(false)}
-                              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${
-                                active ? "bg-rose-50 text-qatar-maroon" : "text-slate-600 hover:bg-slate-50"
-                              }`}>
-                              <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${active ? "bg-qatar-maroon text-white" : "bg-slate-100 text-slate-500"}`}>
-                                {icon}
-                              </span>
-                              {label}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
+                  <div className="border-t border-slate-100 mx-2"/>
+                  <div className="p-2">
+                    <p className="text-[10px] font-black text-slate-400 px-3 py-1 flex items-center gap-1">
+                      <Shield className="w-2.5 h-2.5"/>الإدارة {!isAdminAuthed && "(يتطلب PIN)"}
+                    </p>
+                    {ADMIN_NAV.map(({ to, icon, label }) => {
+                      const active = isActive(to);
+                      return (
+                        <Link key={to} to={to} onClick={() => setMoreOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+                            active ? "bg-rose-50 text-qatar-maroon" : "text-slate-600 hover:bg-slate-50"
+                          }`}>
+                          <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${active ? "bg-qatar-maroon text-white" : "bg-slate-100 text-slate-500"}`}>
+                            {icon}
+                          </span>
+                          <span className="flex-1">{label}</span>
+                          {!isAdminAuthed && <Lock className="w-3 h-3 text-slate-300"/>}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -224,8 +254,13 @@ function BottomNav() {
     window.location.href = "/";
   };
 
+  const hiddenFeatures = useHiddenFeatures();
+  const allVisible = [...PRIMARY_NAV, ...SECONDARY_NAV].filter(n => !hiddenFeatures.includes(n.to));
+  const MOBILE_LIMIT = 4;
+  const visiblePrimary = allVisible.slice(0, MOBILE_LIMIT);
+  const visibleSecondary = allVisible.slice(MOBILE_LIMIT);
   const isAdminRouteActive = ADMIN_NAV.some(n => isActive(n.to));
-  const isSecondaryActive = SECONDARY_NAV.some(n => isActive(n.to));
+  const isSecondaryActive = visibleSecondary.some(n => isActive(n.to));
 
   return (
     <>
@@ -242,7 +277,7 @@ function BottomNav() {
             <div className="p-3">
               <p className="text-[10px] font-black text-slate-400 px-3 py-1.5">الميزات</p>
               <div className="grid grid-cols-2 gap-2">
-                {SECONDARY_NAV.map(({ to, icon, label }) => {
+                {visibleSecondary.map(({ to, icon, label }) => {
                   const active = isActive(to);
                   return (
                     <Link key={to} to={to} onClick={() => setShowAdminDrawer(false)}
@@ -258,34 +293,35 @@ function BottomNav() {
                 })}
               </div>
             </div>
-            {isAdminAuthed && (
-              <>
-                <div className="border-t border-slate-100 mx-3"/>
-                <div className="p-3">
-                  <p className="text-[10px] font-black text-slate-400 px-3 py-1.5">الإدارة</p>
-                  <div className="space-y-1.5">
-                    {ADMIN_NAV.map(({ to, icon, label }) => (
-                      <Link key={to} to={to} onClick={() => setShowAdminDrawer(false)}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl font-bold text-sm transition-colors ${
-                          isActive(to) ? "bg-qatar-maroon text-white" : "bg-slate-50 text-slate-700"
-                        }`}>
-                        <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${isActive(to) ? "bg-white/20" : "bg-white"}`}>
-                          {icon}
-                        </span>
-                        {label}
-                      </Link>
-                    ))}
-                    <button onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl font-bold text-sm text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors">
-                      <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center">
-                        <LogOut className="w-4 h-4"/>
-                      </span>
-                      تسجيل الخروج
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+            <div className="border-t border-slate-100 mx-3"/>
+            <div className="p-3">
+              <p className="text-[10px] font-black text-slate-400 px-3 py-1.5 flex items-center gap-1">
+                <Shield className="w-2.5 h-2.5"/>الإدارة {!isAdminAuthed && "(يتطلب PIN)"}
+              </p>
+              <div className="space-y-1.5">
+                {ADMIN_NAV.map(({ to, icon, label }) => (
+                  <Link key={to} to={to} onClick={() => setShowAdminDrawer(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl font-bold text-sm transition-colors ${
+                      isActive(to) ? "bg-qatar-maroon text-white" : "bg-slate-50 text-slate-700"
+                    }`}>
+                    <span className={`w-9 h-9 rounded-xl flex items-center justify-center ${isActive(to) ? "bg-white/20" : "bg-white"}`}>
+                      {icon}
+                    </span>
+                    <span className="flex-1">{label}</span>
+                    {!isAdminAuthed && <Lock className="w-3.5 h-3.5 text-slate-300"/>}
+                  </Link>
+                ))}
+                {isAdminAuthed && (
+                  <button onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl font-bold text-sm text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors">
+                    <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center">
+                      <LogOut className="w-4 h-4"/>
+                    </span>
+                    تسجيل الخروج
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="pb-2" />
           </div>
         </div>
@@ -295,7 +331,7 @@ function BottomNav() {
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-900/15 border border-white/60"
              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
           <div className="flex items-stretch h-14 px-1">
-            {PRIMARY_NAV.map(({ to, icon, label }) => {
+            {visiblePrimary.map(({ to, icon, label }) => {
               const active = isActive(to);
               return (
                 <Link key={to} to={to}

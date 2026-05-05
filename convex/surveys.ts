@@ -242,6 +242,18 @@ export const getRespondentResponse = query({
     },
 });
 
+export const deleteRespondentResponse = mutation({
+    args: { respondentId: v.id("surveyRespondents") },
+    handler: async (ctx, args) => {
+        const response = await ctx.db.query("surveyResponses")
+            .withIndex("by_respondent", q => q.eq("respondentId", args.respondentId))
+            .first();
+        if (response) await ctx.db.delete(response._id);
+        // Reset hasResponded so the teacher can answer again
+        await ctx.db.patch(args.respondentId, { hasResponded: false });
+    },
+});
+
 export const submitResponse = mutation({
     args: {
         respondentId: v.id("surveyRespondents"),

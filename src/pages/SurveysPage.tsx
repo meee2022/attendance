@@ -533,6 +533,7 @@ function TeachersManager({ survey }: { survey: Survey }) {
     const importSchoolTeachers = useMutation(api.surveys.importSchoolTeachers);
     const toggleParticipation = useMutation(api.surveys.toggleRespondentParticipation);
     const setBulkParticipation = useMutation(api.surveys.setBulkParticipation);
+    const deleteResponse = useMutation(api.surveys.deleteRespondentResponse);
     const [name, setName] = useState("");
     const [dept, setDept] = useState("");
     const [adding, setAdding] = useState(false);
@@ -679,7 +680,19 @@ function TeachersManager({ survey }: { survey: Survey }) {
                                                 className={`p-1.5 rounded-lg transition-colors ${r.isParticipating === false ? "text-slate-300 hover:bg-emerald-50 hover:text-emerald-600" : "text-emerald-500 hover:bg-slate-50 hover:text-slate-400"}`}>
                                                 {r.isParticipating === false ? <UserX className="w-3.5 h-3.5"/> : <UserCheck className="w-3.5 h-3.5"/>}
                                             </button>
+                                            {r.hasResponded && (
+                                                <button onClick={async () => {
+                                                    if (confirm(`سيتم حذف إجابة ${r.name} وإعادته لحالة "لم يجب". متابعة؟`)) {
+                                                        await deleteResponse({ respondentId: r._id as any });
+                                                    }
+                                                }}
+                                                    title="حذف الإجابة"
+                                                    className="p-1.5 rounded-lg hover:bg-amber-50 text-amber-500 hover:text-amber-600 transition-colors">
+                                                    <RotateCcw className="w-3.5 h-3.5"/>
+                                                </button>
+                                            )}
                                             <button onClick={async () => { if (confirm(`حذف ${r.name}؟`)) await removeRespondent({ respondentId: r._id as any }); }}
+                                                title="حذف المعلم نهائياً"
                                                 className="p-1.5 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors">
                                                 <Trash2 className="w-3.5 h-3.5"/>
                                             </button>

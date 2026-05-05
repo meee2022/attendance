@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap } from "lucide-react";
+import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap, ToggleRight } from "lucide-react";
 import ImportStudents from "./ImportStudents";
 import MessageTemplatesPage from "./MessageTemplatesPage";
 import SeedPage from "./SeedPage";
@@ -10,6 +10,7 @@ import { ManageTab, AnalyticsTab } from "./SurveysPage";
 import type { Survey } from "./SurveysPage";
 import SupervisionAdmin from "./SupervisionAdmin";
 import GradesAdmin from "./GradesAdmin";
+import FeatureToggleSection from "./FeatureToggleSection";
 
 const TRACKS = ["عام", "علمي", "أدبي", "تكنولوجي"];
 const GRADE_LABELS: Record<number, string> = { 10: "عاشر", 11: "حادي عشر", 12: "ثاني عشر" };
@@ -20,7 +21,7 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "settings" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades";
+type MainTab = "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades";
 
 export default function SettingsPage() {
     const [mainTab, setMainTab] = useState<MainTab>("settings");
@@ -28,6 +29,7 @@ export default function SettingsPage() {
 
     const MAIN_TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
         { id: "settings",  label: "الإعدادات العامة",  icon: <Settings className="w-4 h-4" /> },
+        { id: "features",  label: "إظهار/إخفاء الصفحات", icon: <ToggleRight className="w-4 h-4" /> },
         { id: "students",  label: "بيانات الطلاب",     icon: <Users className="w-4 h-4" /> },
         { id: "messages",  label: "إعدادات الرسائل",   icon: <MessagesSquare className="w-4 h-4" /> },
         { id: "surveys",   label: "الاستبانات",         icon: <ClipboardList className="w-4 h-4" /> },
@@ -82,6 +84,7 @@ export default function SettingsPage() {
                 </div>
             )}
 
+            {mainTab === "features" && <FeatureToggleSection />}
             {mainTab === "students" && <ImportStudents />}
             {mainTab === "messages" && <MessageTemplatesPage />}
             {mainTab === "surveys"  && <SurveysAdminSection />}

@@ -15,6 +15,8 @@ export default defineSchema({
         coordinatorPin: v.optional(v.string()), // افتراضي "1111"
         supervisorPin: v.optional(v.string()),  // افتراضي "2222"
         deputyPin: v.optional(v.string()),      // افتراضي "3333"
+        // Feature toggles: array of feature keys that are HIDDEN
+        hiddenFeatures: v.optional(v.array(v.string())),
     }),
     classes: defineTable({
         schoolId: v.id("schools"),

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap, ToggleRight } from "lucide-react";
+import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap, ToggleRight, FlaskConical } from "lucide-react";
 import ImportStudents from "./ImportStudents";
 import MessageTemplatesPage from "./MessageTemplatesPage";
 import SeedPage from "./SeedPage";
@@ -10,6 +10,7 @@ import { ManageTab, AnalyticsTab } from "./SurveysPage";
 import type { Survey } from "./SurveysPage";
 import SupervisionAdmin from "./SupervisionAdmin";
 import GradesAdmin from "./GradesAdmin";
+import PracticalExamsAdmin from "./PracticalExamsAdmin";
 import FeatureToggleSection from "./FeatureToggleSection";
 
 const TRACKS = ["عام", "علمي", "أدبي", "تكنولوجي"];
@@ -21,7 +22,7 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades";
+type MainTab = "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
 
 export default function SettingsPage() {
     const [mainTab, setMainTab] = useState<MainTab>("settings");
@@ -35,6 +36,7 @@ export default function SettingsPage() {
         { id: "surveys",   label: "الاستبانات",         icon: <ClipboardList className="w-4 h-4" /> },
         { id: "supervision", label: "الإشراف الصفي",   icon: <ClipboardCheck className="w-4 h-4" /> },
         { id: "grades",    label: "إدارة الدرجات",     icon: <GraduationCap className="w-4 h-4" /> },
+        { id: "practical", label: "الاختبارات العملية", icon: <FlaskConical className="w-4 h-4" /> },
         { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" /> },
     ];
 
@@ -90,6 +92,7 @@ export default function SettingsPage() {
             {mainTab === "surveys"  && <SurveysAdminSection />}
             {mainTab === "supervision" && <SupervisionAdmin />}
             {mainTab === "grades"   && <GradesAdmin />}
+            {mainTab === "practical" && <PracticalExamsAdmin />}
             {mainTab === "seed"     && <SeedPage />}
         </div>
     );

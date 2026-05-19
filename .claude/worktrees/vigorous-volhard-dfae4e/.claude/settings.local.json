@@ -37,7 +37,9 @@
       "Bash(node _analyze_assessments.mjs)",
       "Bash(node _extract_grades.mjs)",
       "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex logs --history 50)",
-      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 timeout 10 npx convex logs --history 100)"
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 timeout 10 npx convex logs --history 100)",
+      "Bash(cd \"C:\\\\Users\\\\M\\\\Desktop\\\\github for local\\\\taymia_attendance1\" && CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex deploy --yes 2>&1 | tail -8)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex run practicalExams:normalizeAllRecords '{}')"
     ]
   }
 }

@@ -12,6 +12,7 @@ export const FEATURES: { key: string; label: string; description: string }[] = [
     { key: "/supervision", label: "الإشراف الصفي",      description: "استمارات الإشراف على المعلمين" },
     { key: "/surveys",     label: "الاستبانات",         description: "استبانات حصر الاحتياجات" },
     { key: "/messages",    label: "الرسائل",            description: "رسائل أولياء الأمور" },
+    { key: "/practical-exams", label: "الاختبارات العملية", description: "رصد غياب اختبارات العملي/الشفوي/الاستماع" },
 ];
 
 export function useHiddenFeatures(): string[] {

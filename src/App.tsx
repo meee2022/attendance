@@ -1,5 +1,5 @@
 import { Routes, Route, Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen, Lock } from "lucide-react";
+import { LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen, Lock, FlaskConical } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import TeacherUpload from "./pages/TeacherUpload";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -19,6 +19,7 @@ import SupervisionPage from "./pages/SupervisionPage";
 import SupervisionPrint from "./pages/SupervisionPrint";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
+import PracticalExamsPage from "./pages/PracticalExamsPage";
 import { useHiddenFeatures } from "./lib/featureFlags";
 
 // Primary nav: most-used daily operations
@@ -32,6 +33,7 @@ const PRIMARY_NAV = [
 // Secondary nav: in dropdown menu
 const SECONDARY_NAV = [
     { to: "/assessments",icon: <FileCheck className="w-4 h-4" />,       label: "التطبيقات" },
+    { to: "/practical-exams", icon: <FlaskConical className="w-4 h-4" />, label: "الاختبارات العملية" },
     { to: "/supervision",icon: <ClipboardCheck className="w-4 h-4" />,  label: "الإشراف الصفي" },
     { to: "/surveys",   icon: <ClipboardList className="w-4 h-4" />,   label: "الاستبانات" },
     { to: "/messages",  icon: <MessageSquare className="w-4 h-4" />,   label: "الرسائل" },
@@ -79,6 +81,7 @@ function App() {
           <Route path="/supervision/print/:id" element={<SupervisionPrint />} />
           <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
           <Route path="/grades/print/student/:studentName" element={<GradesPrint />} />
+          <Route path="/practical-exams"     element={<FeatureRoute featureKey="/practical-exams"><PracticalExamsPage /></FeatureRoute>} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />

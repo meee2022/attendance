@@ -17,6 +17,15 @@ export default defineSchema({
         deputyPin: v.optional(v.string()),      // افتراضي "3333"
         // Feature toggles: array of feature keys that are HIDDEN
         hiddenFeatures: v.optional(v.array(v.string())),
+        // Practical exam categories: list of category labels (legacy, kept for compat)
+        practicalCategories: v.optional(v.array(v.string())),
+        // Practical exam subjects: subject ↔ category mapping
+        practicalSubjects: v.optional(v.array(v.object({
+            subject: v.string(),
+            category: v.string(),
+        }))),
+        // Practical exam WhatsApp template
+        practicalAbsenceTemplate: v.optional(v.string()),
     }),
     classes: defineTable({
         schoolId: v.id("schools"),
@@ -233,6 +242,23 @@ export default defineSchema({
         updatedAt: v.number(),
     }).index("by_school", ["schoolId"])
       .index("by_teacher", ["schoolId", "teacherName"]),
+
+    // ── Practical Absences (تبسيط: لا يوجد "اختبارات"، فقط تعليم غياب) ──
+    practicalAbsences: defineTable({
+        schoolId: v.id("schools"),
+        studentId: v.optional(v.id("students")),
+        studentName: v.string(),
+        className: v.string(),
+        grade: v.number(),
+        subject: v.optional(v.string()),  // المادة مثل "الفيزياء"
+        category: v.string(),             // الفئة مثل "عملي"
+        status: v.union(v.literal("absent"), v.literal("excused")),
+        notes: v.optional(v.string()),
+        markedAt: v.number(),
+        markedBy: v.optional(v.string()),
+    }).index("by_school", ["schoolId"])
+      .index("by_class", ["schoolId", "className"])
+      .index("by_student", ["schoolId", "studentName"]),
 
     supervisionVisits: defineTable({
         schoolId: v.id("schools"),

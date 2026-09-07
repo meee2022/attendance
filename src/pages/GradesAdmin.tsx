@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import { Upload, Save, Trash2, RotateCcw, Settings as Cog, Download, AlertCircle, CheckCircle2, FileSpreadsheet, Database } from "lucide-react";
 
 const KNOWN_TRACKS = ["عام", "علمي", "أدبي", "تكنولوجي"];
+const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
 
 function parseGrade(v: any) {
     if (v === undefined || v === null || v === "") return undefined;
@@ -37,7 +38,7 @@ export default function GradesAdmin() {
     return (
         <div dir="rtl" className="space-y-4">
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{background:"linear-gradient(135deg,#5C1523,#7A1E30)"}}>
                     <div className="flex gap-2">
                         <button onClick={() => setTab("import")}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black ${tab === "import" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
@@ -48,7 +49,7 @@ export default function GradesAdmin() {
                             <Cog className="w-3.5 h-3.5"/>الإعدادات
                         </button>
                     </div>
-                    <span className="font-black text-white text-sm">إدارة الدرجات · {allGrades?.length ?? 0} سجل</span>
+                    <span className="font-black text-white text-sm">إدارة التقييمات القصيرة · {allGrades?.length ?? 0} سجل</span>
                 </div>
                 <div className="p-5">
                     {tab === "import" && <ImportTab onImport={bulkImport}/>}
@@ -218,7 +219,7 @@ function ImportTab({ onImport }: { onImport: any }) {
 
                     <button onClick={handleImport} disabled={importing}
                         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-white font-black text-sm hover:opacity-90 disabled:opacity-50 qatar-card-shadow"
-                        style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
+                        style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
                         {importing ? <><RotateCcw className="w-4 h-4 animate-spin"/>جارٍ الاستيراد...</> : <><Upload className="w-4 h-4"/>استيراد الكل</>}
                     </button>
                 </div>
@@ -243,7 +244,11 @@ function ConfigTab({ settings, onUpdate }: { settings: any; onUpdate: any }) {
     const [pass, setPass] = useState(settings.passThreshold);
     const [excellence, setExcellence] = useState(settings.excellenceThreshold);
     const [labels, setLabels] = useState<string[]>(settings.assessmentLabels);
+    const [grades, setGrades] = useState<number[]>(settings.includedGrades ?? [10, 11, 12]);
     const [saved, setSaved] = useState(false);
+
+    const toggleGrade = (g: number) =>
+        setGrades(p => p.includes(g) ? p.filter(x => x !== g) : [...p, g].sort((a, b) => a - b));
 
     const handleSave = async () => {
         await onUpdate({
@@ -252,6 +257,7 @@ function ConfigTab({ settings, onUpdate }: { settings: any; onUpdate: any }) {
             passThreshold: pass,
             excellenceThreshold: excellence,
             assessmentLabels: labels,
+            includedGrades: grades,
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
@@ -280,6 +286,27 @@ function ConfigTab({ settings, onUpdate }: { settings: any; onUpdate: any }) {
                     <input type="number" step="0.1" value={excellence} onChange={e => setExcellence(Number(e.target.value))}
                         className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon"/>
                 </div>
+            </div>
+
+            <div>
+                <label className="block text-xs font-black text-slate-500 mb-2">الصفوف المشمولة بالتقييمات القصيرة</label>
+                <div className="flex flex-wrap gap-2">
+                    {[10, 11, 12].map(g => {
+                        const on = grades.includes(g);
+                        return (
+                            <button key={g} type="button" onClick={() => toggleGrade(g)} aria-pressed={on}
+                                className={`px-4 py-2 rounded-xl text-sm font-black border-2 transition-colors ${
+                                    on ? "bg-qatar-maroon text-white border-transparent"
+                                       : "bg-slate-50 text-slate-400 border-slate-100 hover:border-slate-300"
+                                }`}>
+                                الصف {GRADE_LABELS[g]}
+                            </button>
+                        );
+                    })}
+                </div>
+                <p className="text-[11px] text-slate-400 font-bold mt-2">
+                    الصفوف غير المحددة لن تظهر في صفحة التقييمات القصيرة إطلاقاً.
+                </p>
             </div>
 
             <div>

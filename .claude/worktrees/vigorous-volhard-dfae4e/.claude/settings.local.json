@@ -39,7 +39,14 @@
       "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex logs --history 50)",
       "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 timeout 10 npx convex logs --history 100)",
       "Bash(cd \"C:\\\\Users\\\\M\\\\Desktop\\\\github for local\\\\taymia_attendance1\" && CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex deploy --yes 2>&1 | tail -8)",
-      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex run practicalExams:normalizeAllRecords '{}')"
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex run practicalExams:normalizeAllRecords '{}')",
+      "Bash(cd \"C:\\\\Users\\\\M\\\\Desktop\\\\github for local\" && ls -la)",
+      "Bash(CONVEX_DEPLOYMENT=prod:hidden-badger-532 npx convex run practicalExams:addSubjectIfMissing '{\"subject\":\"الحاسوب\",\"category\":\"عملي\"}')",
+      "Bash(dir \"C:\\\\\\\\Users\\\\\\\\M\\\\\\\\Desktop\\\\\\\\github for local\\\\\\\\taymia_attendance1\\\\\\\\نظام الزيارات\")",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\Users\\\\M\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-M-Desktop-github-for-local-taymia-attendance1--claude-worktrees-vigorous-volhard-dfae4e\\\\0ad643b3-8d3c-476a-b6bd-2aaff687f96e\\\\tasks\\\\bunqdhb09.output' | Select-Object -Skip 24 -First 150\")",
+      "Bash(cmd /c \"npx tsc --noEmit 2>&1\")",
+      "Bash(dir \"E:/projects/taymia_attendance1/src\" /b)",
+      "Bash(xargs sed -i -e 's/#5C1A1B/#5C1523/g' -e 's/#7A2425/#7A1E30/g' -e 's/#3F0E0F/#4A0F1B/g' -e 's/#C9A876/#C9A96E/g' -e 's/#A88456/#A8853A/g' -e 's/#E5CFA6/#DFC48E/g' -e 's/#F8EFE2/#FCF9F2/g' -e 's/#2A1A1B/#2A1418/g' -e 's/#FAF6EF/#FCF9F2/g' -e 's/#EDE0CE/#F0EAD8/g')"
     ]
   }
 }

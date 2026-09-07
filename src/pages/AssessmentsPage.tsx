@@ -42,8 +42,8 @@ export default function AssessmentsPage() {
     const handleToggleExemption = async (studentId: string) => {
         try {
             await toggleExemption({ studentId: studentId as any });
-        } catch (e) {
-            console.error("Failed to toggle exemption", e);
+        } catch (e: any) {
+            alert("تعذر تحديث حالة الإعفاء: " + (e?.message ?? "خطأ غير معروف"));
         }
     };
 
@@ -56,8 +56,8 @@ export default function AssessmentsPage() {
                 subjectId: subjectId as any,
                 isCompleted,
             });
-        } catch (e) {
-            console.error("Failed to toggle all", e);
+        } catch (e: any) {
+            alert("تعذر تحديث التطبيقات: " + (e?.message ?? "خطأ غير معروف"));
         }
     };
 
@@ -70,8 +70,8 @@ export default function AssessmentsPage() {
                 studentId: studentId as any,
                 subjectId: subjectId as any,
             });
-        } catch (e) {
-            console.error("Failed to toggle assessment", e);
+        } catch (e: any) {
+            alert("تعذر تحديث التطبيق: " + (e?.message ?? "خطأ غير معروف"));
         }
     };
 
@@ -109,8 +109,8 @@ export default function AssessmentsPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-8 font-sans transition-all animate-in fade-in duration-500 pb-20 mt-4">
             {/* Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                 >
                 <div className="flex flex-col gap-1 p-5 sm:p-8">
                     <h1 className="text-3xl font-black text-white flex items-center gap-3">
                         <BookOpen className="w-8 h-8 text-white/80" />

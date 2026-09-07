@@ -8,6 +8,60 @@ async function getSchool(ctx: any) {
 }
 
 const DEFAULT_LABELS = ["تقييم 1", "تقييم 2", "تقييم 3", "تقييم 4", "تقييم 5"];
+const DEFAULT_INCLUDED_GRADES = [10, 11, 12];
+
+// Which grades take short assessments at all — the الثاني عشر does not.
+async function includedGrades(ctx: any, schoolId: any): Promise<number[]> {
+    const s = await ctx.db.query("gradeSettings")
+        .withIndex("by_school", (q: any) => q.eq("schoolId", schoolId))
+        .first();
+    return s?.includedGrades ?? DEFAULT_INCLUDED_GRADES;
+}
+
+// ── Roster helpers ────────────────────────────────────────────────────────
+// Grades are stored denormalised by student name, so a brand-new school year
+// starts with an empty studentGrades table. The roster therefore comes from the
+// real students/classes tables, and existing grade rows are merged on top —
+// that way imported rows whose name no longer matches a student still show up.
+
+type RosterEntry = {
+    studentId?: string;
+    studentName: string;
+    className: string;
+    grade: number;
+    track: string;
+};
+
+const byArabicName = (a: { studentName: string }, b: { studentName: string }) =>
+    a.studentName.localeCompare(b.studentName, "ar");
+
+async function activeClasses(ctx: any, schoolId: any) {
+    const classes = await ctx.db.query("classes")
+        .withIndex("by_school", (q: any) => q.eq("schoolId", schoolId))
+        .collect();
+    return classes.filter((c: any) => c.isActive !== false);
+}
+
+async function rosterForClass(ctx: any, schoolId: any, className: string): Promise<RosterEntry[]> {
+    const cls = (await activeClasses(ctx, schoolId))
+        .find((c: any) => c.name.trim() === className.trim());
+    if (!cls) return [];
+
+    const students = await ctx.db.query("students")
+        .withIndex("by_class", (q: any) => q.eq("classId", cls._id))
+        .collect();
+
+    return students
+        .filter((s: any) => s.isActive !== false)
+        .map((s: any) => ({
+            studentId: s._id,
+            studentName: s.fullName,
+            className: cls.name,
+            grade: cls.grade,
+            track: cls.track ?? "عام",
+        }))
+        .sort(byArabicName);
+}
 
 // ── Settings ──────────────────────────────────────────────────────────────
 export const getSettings = query({
@@ -18,13 +72,15 @@ export const getSettings = query({
         const s = await ctx.db.query("gradeSettings")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .first();
-        return s ?? {
+        if (s) return { ...s, includedGrades: s.includedGrades ?? DEFAULT_INCLUDED_GRADES };
+        return {
             schoolId: school._id,
             maxPerAssessment: 20,
             finalScoreOutOf: 5,
             passThreshold: 2.5,
             excellenceThreshold: 4.5,
             assessmentLabels: DEFAULT_LABELS,
+            includedGrades: DEFAULT_INCLUDED_GRADES,
         };
     },
 });
@@ -36,6 +92,7 @@ export const updateSettings = mutation({
         passThreshold: v.optional(v.number()),
         excellenceThreshold: v.optional(v.number()),
         assessmentLabels: v.optional(v.array(v.string())),
+        includedGrades: v.optional(v.array(v.number())),
     },
     handler: async (ctx, args) => {
         const school = await getSchool(ctx);
@@ -52,23 +109,51 @@ export const updateSettings = mutation({
                 passThreshold: args.passThreshold ?? 2.5,
                 excellenceThreshold: args.excellenceThreshold ?? 4.5,
                 assessmentLabels: args.assessmentLabels ?? DEFAULT_LABELS,
+                includedGrades: args.includedGrades ?? DEFAULT_INCLUDED_GRADES,
             });
         }
     },
 });
 
 // ── Queries ───────────────────────────────────────────────────────────────
+// Returns one row per student in the class — a saved grade row where one
+// exists, otherwise an empty placeholder so the sheet can be filled in.
 export const getGradesByClassSubject = query({
     args: { className: v.string(), subjectName: v.string() },
     handler: async (ctx, args) => {
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
-        return ctx.db.query("studentGrades")
+
+        const saved = await ctx.db.query("studentGrades")
             .withIndex("by_class_subject", q =>
                 q.eq("schoolId", school._id)
                  .eq("className", args.className)
                  .eq("subjectName", args.subjectName))
             .collect();
+
+        const savedByName = new Map(saved.map(g => [g.studentName.trim(), g]));
+        const roster = await rosterForClass(ctx, school._id, args.className);
+
+        const rows: any[] = roster.map(entry => {
+            const existing = savedByName.get(entry.studentName.trim());
+            if (existing) {
+                savedByName.delete(entry.studentName.trim());
+                return existing;
+            }
+            return {
+                studentId: entry.studentId,
+                studentName: entry.studentName,
+                className: entry.className,
+                grade: entry.grade,
+                track: entry.track,
+                subjectName: args.subjectName,
+            };
+        });
+
+        // Imported rows whose name no longer matches anyone on the roster —
+        // keep them visible rather than silently dropping entered marks.
+        const orphans = [...savedByName.values()].sort(byArabicName);
+        return [...rows, ...orphans];
     },
 });
 
@@ -88,9 +173,12 @@ export const getAllGrades = query({
     handler: async (ctx) => {
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
-        return ctx.db.query("studentGrades")
+        const included = await includedGrades(ctx, school._id);
+        const all = await ctx.db.query("studentGrades")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
+        // Keep the result views in step with the class list
+        return all.filter(g => included.includes(g.grade));
     },
 });
 
@@ -99,59 +187,112 @@ export const getClassRoster = query({
     handler: async (ctx, args) => {
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
+
+        const roster = await rosterForClass(ctx, school._id, args.className);
+        const known = new Set(roster.map(r => r.studentName.trim()));
+
+        // Names that only exist in imported grade rows
         const all = await ctx.db.query("studentGrades")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
-        const filtered = all.filter(g => g.className === args.className);
-        const seen = new Set<string>();
-        const roster: { studentName: string; studentId?: string; grade: number; track: string }[] = [];
-        for (const g of filtered) {
-            if (seen.has(g.studentName)) continue;
-            seen.add(g.studentName);
-            roster.push({ studentName: g.studentName, studentId: g.studentId as any, grade: g.grade, track: g.track });
+
+        const extras: RosterEntry[] = [];
+        for (const g of all) {
+            if (g.className !== args.className) continue;
+            const name = g.studentName.trim();
+            if (known.has(name)) continue;
+            known.add(name);
+            extras.push({
+                studentId: g.studentId as any,
+                studentName: g.studentName,
+                className: g.className,
+                grade: g.grade,
+                track: g.track,
+            });
         }
-        return roster.sort((a, b) => a.studentName.localeCompare(b.studentName, "ar"));
+
+        return [...roster, ...extras.sort(byArabicName)];
     },
 });
 
+// The class list comes from the school's real classes and the subject plan
+// (subjects.targetClasses, set in الإعدادات › المواد والخطة الدراسية), so grade
+// entry works on a fresh year before a single mark exists. Anything found only
+// in previously imported grade rows is merged in on top.
 export const getClassesAndSubjects = query({
     args: {},
     handler: async (ctx) => {
         const school = await ctx.db.query("schools").first();
-        if (!school) return { classes: [], subjects: [], trackSubjects: [] };
+        if (!school) return { classes: [], subjects: [], trackSubjects: [], includedGrades: DEFAULT_INCLUDED_GRADES };
+
+        const classesArr: { className: string; grade: number; track: string }[] = [];
+        const seenClass = new Set<string>();
+        const trackSubjects: { trackKey: string; grade: number; track: string; subjects: string[] }[] = [];
+        const seenSubject = new Set<string>();
+
+        const addClass = (className: string, grade: number, track: string) => {
+            if (!className || seenClass.has(className)) return;
+            seenClass.add(className);
+            classesArr.push({ className, grade, track });
+        };
+
+        const bucketFor = (grade: number, track: string) => {
+            const trackKey = `${grade}-${track}`;
+            let bucket = trackSubjects.find(t => t.trackKey === trackKey);
+            if (!bucket) {
+                bucket = { trackKey, grade, track, subjects: [] };
+                trackSubjects.push(bucket);
+            }
+            return bucket;
+        };
+
+        const included = await includedGrades(ctx, school._id);
+
+        for (const cls of await activeClasses(ctx, school._id)) {
+            if (!included.includes(cls.grade)) continue;
+            addClass(cls.name, cls.grade, cls.track ?? "عام");
+            bucketFor(cls.grade, cls.track ?? "عام");
+        }
+
+        // Subject plan: targetClasses entries look like "10-عام" / "11-علمي"
+        const subjects = await ctx.db.query("subjects")
+            .filter(q => q.eq(q.field("schoolId"), school._id))
+            .collect();
+
+        for (const subject of subjects) {
+            for (const target of subject.targetClasses ?? []) {
+                const bucket = trackSubjects.find(t => t.trackKey === target.trim());
+                if (!bucket) continue;
+                if (!bucket.subjects.includes(subject.name)) bucket.subjects.push(subject.name);
+                seenSubject.add(subject.name);
+            }
+        }
+
+        // Merge whatever previously imported grade rows refer to
         const all = await ctx.db.query("studentGrades")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
 
-        const classesArr: { className: string; grade: number; track: string }[] = [];
-        const seenClass: string[] = [];
-        const trackSubjects: { trackKey: string; grade: number; track: string; subjects: string[] }[] = [];
-        const seenSubject: string[] = [];
-
         for (const g of all) {
             if (!g.className) continue;
-            if (!seenClass.includes(g.className)) {
-                seenClass.push(g.className);
-                classesArr.push({ className: g.className, grade: g.grade ?? 0, track: g.track ?? "عام" });
-            }
-            const trackKey = `${g.grade ?? 0}-${g.track ?? "general"}`;
-            let bucket = trackSubjects.find(t => t.trackKey === trackKey);
-            if (!bucket) {
-                bucket = { trackKey, grade: g.grade ?? 0, track: g.track ?? "عام", subjects: [] };
-                trackSubjects.push(bucket);
-            }
-            if (g.subjectName && !bucket.subjects.includes(g.subjectName)) {
-                bucket.subjects.push(g.subjectName);
-            }
-            if (g.subjectName && !seenSubject.includes(g.subjectName)) {
-                seenSubject.push(g.subjectName);
-            }
+            if (!included.includes(g.grade ?? 0)) continue;
+            addClass(g.className, g.grade ?? 0, g.track ?? "عام");
+            if (!g.subjectName) continue;
+            const bucket = bucketFor(g.grade ?? 0, g.track ?? "عام");
+            if (!bucket.subjects.includes(g.subjectName)) bucket.subjects.push(g.subjectName);
+            seenSubject.add(g.subjectName);
+        }
+
+        for (const bucket of trackSubjects) {
+            bucket.subjects.sort((a, b) => a.localeCompare(b, "ar"));
         }
 
         return {
-            classes: classesArr.sort((a, b) => a.className < b.className ? -1 : 1),
+            classes: classesArr.sort((a, b) =>
+                (a.grade - b.grade) || a.className.localeCompare(b.className, "ar", { numeric: true })),
             trackSubjects,
-            subjects: seenSubject.sort(),
+            subjects: [...seenSubject].sort((a, b) => a.localeCompare(b, "ar")),
+            includedGrades: included,
         };
     },
 });

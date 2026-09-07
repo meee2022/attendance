@@ -64,7 +64,56 @@ export const seedDatabase = mutation({
     },
 });
 
-// Ensure all required classes exist: Grade 10 (8), Grade 11 (10), Grade 12 (10)
+// ── Canonical class structure ─────────────────────────────────────────────
+// Single source of truth for "تحديث هيكل الصفوف". Sections are numbered 1..n
+// plus an optional ESE section; the track follows the section number.
+// Importing a registry sheet overrides this with whatever the sheet says.
+const CLASS_STRUCTURE: { grade: number; sections: number; ese: boolean }[] = [
+    { grade: 10, sections: 10, ese: true },
+    { grade: 11, sections: 9,  ese: true },
+    { grade: 12, sections: 10, ese: true },
+];
+
+// Track from grade + section name: 1-3 علمي · 4-5 تكنولوجي · 6+ أدبي
+function trackForSection(grade: number, className: string): string {
+    if (grade === 10) return "عام";
+    const match = className.match(/-(\d+)$/);
+    if (!match) return "أدبي"; // ESE sections sit with the humanities track
+    const num = parseInt(match[1], 10);
+    if (num >= 1 && num <= 3) return "علمي";
+    if (num >= 4 && num <= 5) return "تكنولوجي";
+    return "أدبي";
+}
+
+function expandStructure(): { name: string; grade: number; track: string }[] {
+    const out: { name: string; grade: number; track: string }[] = [];
+    for (const { grade, sections, ese } of CLASS_STRUCTURE) {
+        for (let i = 1; i <= sections; i++) {
+            const name = `${grade}-${i}`;
+            out.push({ name, grade, track: trackForSection(grade, name) });
+        }
+        if (ese) {
+            const name = `${grade}-ESE`;
+            out.push({ name, grade, track: trackForSection(grade, name) });
+        }
+    }
+    return out;
+}
+
+// Exposed so the maintenance screen shows the real structure instead of a
+// hard-coded caption that drifts every school year.
+export const getClassStructure = query({
+    args: {},
+    handler: async () => {
+        return CLASS_STRUCTURE.map(({ grade, sections, ese }) => ({
+            grade,
+            sections,
+            ese,
+            label: `${grade}-1 إلى ${grade}-${sections}${ese ? ` + ${grade}-ESE` : ""}`,
+        }));
+    },
+});
+
 export const ensureAllClasses = mutation({
     args: {},
     handler: async (ctx) => {
@@ -75,61 +124,41 @@ export const ensureAllClasses = mutation({
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
 
-        const existingNames = new Set(existingClasses.map(c => c.name));
+        const byName = new Map(existingClasses.map(c => [c.name.trim(), c]));
 
-        const classesToCreate: { name: string; grade: number }[] = [];
+        const createdNames: string[] = [];
+        const updatedNames: string[] = [];
 
-        // Grade 10: 8 classes
-        for (let i = 1; i <= 8; i++) {
-            const name = `10-${i}`;
-            if (!existingNames.has(name)) {
-                classesToCreate.push({ name, grade: 10 });
+        for (const cls of expandStructure()) {
+            const existing = byName.get(cls.name);
+            if (!existing) {
+                await ctx.db.insert("classes", {
+                    schoolId: school._id,
+                    name: cls.name,
+                    grade: cls.grade,
+                    track: cls.track,
+                    isActive: true,
+                });
+                createdNames.push(cls.name);
+                continue;
             }
-        }
 
-        // Grade 11: 10 classes
-        for (let i = 1; i <= 10; i++) {
-            const name = `11-${i}`;
-            if (!existingNames.has(name)) {
-                classesToCreate.push({ name, grade: 11 });
+            // Reactivate and correct grade/track on classes that already exist
+            const patch: Record<string, unknown> = {};
+            if (existing.grade !== cls.grade) patch.grade = cls.grade;
+            if (existing.track !== cls.track) patch.track = cls.track;
+            if (existing.isActive !== true) patch.isActive = true;
+            if (Object.keys(patch).length > 0) {
+                await ctx.db.patch(existing._id, patch);
+                updatedNames.push(cls.name);
             }
-        }
-
-        // Grade 12: 10 classes
-        for (let i = 1; i <= 10; i++) {
-            const name = `12-${i}`;
-            if (!existingNames.has(name)) {
-                classesToCreate.push({ name, grade: 12 });
-            }
-        }
-
-        // Helper to determine track based on grade and class name
-        function getTrack(grade: number, className: string): string {
-            if (grade === 10) return "عام";
-
-            // Extract class number: "11-4" -> 4
-            const match = className.match(/-(\d+)$/);
-            const num = match ? parseInt(match[1], 10) : 0;
-
-            if (num >= 1 && num <= 3) return "علمي";
-            if (num >= 4 && num <= 5) return "تكنولوجي";
-            if (num >= 6 && num <= 10) return "أدبي";
-            return "عام";
-        }
-
-        for (const cls of classesToCreate) {
-            await ctx.db.insert("classes", {
-                schoolId: school._id,
-                name: cls.name,
-                grade: cls.grade,
-                track: getTrack(cls.grade, cls.name),
-                isActive: true,
-            });
         }
 
         return {
-            created: classesToCreate.length,
-            createdNames: classesToCreate.map(c => c.name),
+            created: createdNames.length,
+            createdNames,
+            updated: updatedNames.length,
+            updatedNames,
             totalExisting: existingClasses.length,
         };
     },

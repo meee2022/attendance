@@ -227,8 +227,8 @@ export default function TeacherUpload() {
 
     return (
         <div className="max-w-7xl mx-auto space-y-10 font-sans transition-all animate-in fade-in duration-500 pb-20">
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                 >
                 <div className="flex flex-col gap-1 p-5 sm:p-8">
                     <h1 className="text-3xl font-black text-white flex items-center gap-3">
                         <Upload className="w-8 h-8 text-white/80" />
@@ -241,7 +241,7 @@ export default function TeacherUpload() {
             {/* Step 1: Configuration & Upload */}
             {!draftResult && (
                 <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden animate-in slide-in-from-top-4 duration-500">
-                    <div className="bg-qatar-maroon px-8 py-5 flex items-center justify-between">
+                    <div className="bg-qatar-maroon px-5 py-3 flex items-center justify-between">
                         <h2 className="text-xl font-black text-white flex items-center gap-3">
                             <Layers className="w-6 h-6 text-white/50" />
                             ١. اختيار تفاصيل الحصة والملف
@@ -249,7 +249,7 @@ export default function TeacherUpload() {
                     </div>
 
                     <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="workspace-filter-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
                             {/* Class */}
                             <div className={`rounded-2xl border-2 p-4 transition-all ${selectedClass ? 'border-qatar-maroon bg-rose-50' : 'border-rose-200 bg-rose-50/40 hover:border-qatar-maroon/60'}`}>
@@ -262,7 +262,7 @@ export default function TeacherUpload() {
                                 </div>
                                 <select
                                     className={`w-full rounded-xl px-3 py-2.5 font-black text-sm outline-none appearance-none border transition-colors ${selectedClass ? 'bg-white border-qatar-maroon/30 text-qatar-maroon' : 'bg-white/70 border-rose-200 text-slate-500'}`}
-                                    value={selectedClass}
+                                    aria-label="الصف الدراسي" value={selectedClass}
                                     onChange={e => setSelectedClass(e.target.value)}
                                 >
                                     <option value="">-- اختر الصف --</option>
@@ -283,7 +283,7 @@ export default function TeacherUpload() {
                                 </div>
                                 <select
                                     className={`w-full rounded-xl px-3 py-2.5 font-black text-sm outline-none appearance-none border transition-colors ${selectedSubject ? 'bg-white border-blue-300 text-blue-700' : 'bg-white/70 border-blue-200 text-slate-500'}`}
-                                    value={selectedSubject}
+                                    aria-label="المادة" value={selectedSubject}
                                     onChange={e => setSelectedSubject(e.target.value)}
                                 >
                                     <option value="">-- اختر المادة --</option>
@@ -322,7 +322,7 @@ export default function TeacherUpload() {
                                 </div>
                                 <select
                                     className="w-full rounded-xl px-3 py-2.5 font-black text-sm text-amber-800 bg-white border border-amber-300 outline-none appearance-none"
-                                    value={periodNumber}
+                                    aria-label="رقم الحصة" value={periodNumber}
                                     onChange={e => setPeriodNumber(e.target.value)}
                                 >
                                     {Array.from({ length: data.schools?.[0]?.periodsPerDay ?? 5 }, (_, i) => i + 1).map(num => (
@@ -335,7 +335,7 @@ export default function TeacherUpload() {
 
                         {/* Upload Area */}
                         <div className="space-y-4">
-                        <div className={`relative flex justify-center px-10 py-14 border-2 border-dashed rounded-2xl transition-all duration-300 ${
+                        <div className={`workspace-upload-area relative flex justify-center px-10 py-14 border-2 border-dashed rounded-2xl transition-all duration-300 ${
                             file
                                 ? 'border-qatar-maroon bg-gradient-to-br from-rose-50 to-white'
                                 : 'border-slate-300 bg-gradient-to-br from-slate-50 to-white hover:border-qatar-maroon/50 hover:from-rose-50/30'
@@ -378,7 +378,7 @@ export default function TeacherUpload() {
                             <button
                                 onClick={handlePrepare}
                                 disabled={isProcessing || !file || !selectedClass}
-                                className="group relative overflow-hidden px-16 py-5 bg-slate-800 text-white font-black rounded-2xl shadow-xl hover:shadow-slate-400/30 transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                                className="group relative overflow-hidden px-6 py-3 bg-qatar-maroon text-white font-black rounded-2xl shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                             >
                                 <span className="relative z-10 flex items-center gap-3 text-lg">
                                     {isProcessing ? (
@@ -403,7 +403,7 @@ export default function TeacherUpload() {
             {draftResult && (
                 <div className="space-y-10 animate-in slide-in-from-bottom-6 duration-700">
                     <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
-                        <div className="bg-qatar-maroon px-8 py-5 flex items-center justify-between">
+                        <div className="bg-qatar-maroon px-5 py-3 flex items-center justify-between">
                             <h2 className="text-xl font-black text-white flex items-center gap-3">
                                 <CheckCircle2 className="w-6 h-6 text-white/50" />
                                 ٢. مراجعة وتدقيق كشف الحضور

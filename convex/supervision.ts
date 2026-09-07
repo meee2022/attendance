@@ -255,6 +255,7 @@ export const saveVisit = mutation({
         visitDate: v.string(),
         followUpType: v.union(v.literal("full"), v.literal("partial")),
         ratings: v.string(),  // JSON
+        praiseText: v.optional(v.string()),
         planningRec: v.optional(v.string()),
         executionRec: v.optional(v.string()),
         evalMgmtRec: v.optional(v.string()),
@@ -291,6 +292,7 @@ export const saveVisit = mutation({
                 ratings: args.ratings,
                 averageScore,
                 domainAverages: JSON.stringify(domainAverages),
+                praiseText: args.praiseText?.trim(),
                 planningRec: args.planningRec?.trim(),
                 executionRec: args.executionRec?.trim(),
                 evalMgmtRec: args.evalMgmtRec?.trim(),
@@ -332,6 +334,7 @@ export const saveVisit = mutation({
             ratings: args.ratings,
             averageScore,
             domainAverages: JSON.stringify(domainAverages),
+            praiseText: args.praiseText?.trim(),
             planningRec: args.planningRec?.trim(),
             executionRec: args.executionRec?.trim(),
             evalMgmtRec: args.evalMgmtRec?.trim(),
@@ -777,5 +780,102 @@ export const bulkImportVisits = mutation({
             inserted++;
         }
         return { inserted };
+    },
+});
+
+// ── Recommendation Bank ────────────────────────────────────────────────────
+
+const DEFAULT_RECOMMENDATIONS: { domain: "planning"|"execution"|"evaluation"|"management"|"general"; text: string }[] = [
+    // التخطيط
+    { domain: "planning", text: "الاهتمام بصياغة أهداف التعلم بصورة واضحة وقابلة للقياس." },
+    { domain: "planning", text: "تنويع أنشطة الدرس لتراعي الفروق الفردية بين الطلاب." },
+    { domain: "planning", text: "التأكد من توفر خطة الدرس وإتمام بنودها قبل دخول الفصل." },
+    // تنفيذ الدرس
+    { domain: "execution", text: "الاهتمام بتفعيل استراتيجيات التعلم النشط ومشاركة جميع الطلاب." },
+    { domain: "execution", text: "توظيف التقنية والوسائل التعليمية بصورة أكثر فاعلية." },
+    { domain: "execution", text: "الاهتمام بصياغة الأسئلة الصفية وتدرجها من البسيط إلى المركب." },
+    { domain: "execution", text: "ربط موضوع الدرس بالمواد الأخرى والحياة اليومية." },
+    { domain: "execution", text: "تعزيز تضمين القيم والكفايات الأساسية في الدرس." },
+    { domain: "execution", text: "إيلاء اهتمام أكبر للطلاب ذوي الصعوبات التعليمية." },
+    // التقويم
+    { domain: "evaluation", text: "تنويع أساليب التقويم الختامي والتكويني خلال الحصة." },
+    { domain: "evaluation", text: "متابعة دفاتر الطلاب وتقديم التغذية الراجعة الفورية." },
+    { domain: "evaluation", text: "التأكد من تصحيح أعمال الطلاب وتسجيل ملاحظات التحسين." },
+    // الإدارة الصفية
+    { domain: "management", text: "ضبط الوقت وتوزيعه بصورة مناسبة على مراحل الدرس." },
+    { domain: "management", text: "تعزيز بيئة الفصل الإيجابية وتفعيل قواعد السلوك." },
+    { domain: "management", text: "الاهتمام بترتيب الطلاب وتوزيعهم لتحقيق أفضل مخرجات تعلم." },
+    // عامة
+    { domain: "general", text: "الاطلاع على الدليل التدريبي الخاص بالمادة وتطبيق توصياته." },
+    { domain: "general", text: "المشاركة في برامج التطوير المهني المقدمة من المنسق والموجه." },
+    { domain: "general", text: "التواصل المستمر مع المنسق لمناقشة الصعوبات وإيجاد الحلول." },
+];
+
+export const getRecommendationBank = query({
+    args: {},
+    handler: async (ctx) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return [];
+        return ctx.db.query("supervisionRecommendationBank")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+    },
+});
+
+export const seedDefaultRecommendations = mutation({
+    args: {},
+    handler: async (ctx) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) throw new Error("لا توجد مدرسة");
+        const existing = await ctx.db.query("supervisionRecommendationBank")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        if (existing.length > 0) return { skipped: true };
+        let order = 0;
+        for (const r of DEFAULT_RECOMMENDATIONS) {
+            await ctx.db.insert("supervisionRecommendationBank", {
+                schoolId: school._id,
+                domain: r.domain,
+                text: r.text,
+                order: order++,
+                isActive: true,
+            });
+        }
+        return { seeded: DEFAULT_RECOMMENDATIONS.length };
+    },
+});
+
+export const addRecommendation = mutation({
+    args: { domain: v.union(v.literal("planning"),v.literal("execution"),v.literal("evaluation"),v.literal("management"),v.literal("general")), text: v.string() },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) throw new Error("لا توجد مدرسة");
+        const all = await ctx.db.query("supervisionRecommendationBank")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+        return ctx.db.insert("supervisionRecommendationBank", {
+            schoolId: school._id,
+            domain: args.domain,
+            text: args.text.trim(),
+            order: all.length,
+            isActive: true,
+        });
+    },
+});
+
+export const updateRecommendation = mutation({
+    args: { id: v.id("supervisionRecommendationBank"), text: v.optional(v.string()), isActive: v.optional(v.boolean()) },
+    handler: async (ctx, args) => {
+        const patch: any = {};
+        if (args.text !== undefined) patch.text = args.text.trim();
+        if (args.isActive !== undefined) patch.isActive = args.isActive;
+        await ctx.db.patch(args.id, patch);
+    },
+});
+
+export const deleteRecommendation = mutation({
+    args: { id: v.id("supervisionRecommendationBank") },
+    handler: async (ctx, args) => {
+        await ctx.db.delete(args.id);
     },
 });

@@ -1,9 +1,11 @@
+import { PageHeader } from "../components/ui";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap, ToggleRight, FlaskConical } from "lucide-react";
 import ImportStudents from "./ImportStudents";
+import StudentsPage from "./StudentsPage";
 import MessageTemplatesPage from "./MessageTemplatesPage";
 import SeedPage from "./SeedPage";
 import { ManageTab, AnalyticsTab } from "./SurveysPage";
@@ -22,78 +24,73 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
+type MainTab = "student-management" | "security" | "classes" | "subjects" | "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
 
 export default function SettingsPage() {
     const [mainTab, setMainTab] = useState<MainTab>("settings");
-    const [activeTab, setActiveTab] = useState<"classes" | "subjects">("classes");
 
-    const MAIN_TABS: { id: MainTab; label: string; icon: React.ReactNode }[] = [
-        { id: "settings",  label: "الإعدادات العامة",  icon: <Settings className="w-4 h-4" /> },
-        { id: "features",  label: "إظهار/إخفاء الصفحات", icon: <ToggleRight className="w-4 h-4" /> },
-        { id: "students",  label: "بيانات الطلاب",     icon: <Users className="w-4 h-4" /> },
-        { id: "messages",  label: "إعدادات الرسائل",   icon: <MessagesSquare className="w-4 h-4" /> },
-        { id: "surveys",   label: "الاستبانات",         icon: <ClipboardList className="w-4 h-4" /> },
-        { id: "supervision", label: "الإشراف الصفي",   icon: <ClipboardCheck className="w-4 h-4" /> },
-        { id: "grades",    label: "إدارة الدرجات",     icon: <GraduationCap className="w-4 h-4" /> },
-        { id: "practical", label: "الاختبارات العملية", icon: <FlaskConical className="w-4 h-4" /> },
-        { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" /> },
+
+    const MAIN_TABS: { id: MainTab; label: string; icon: React.ReactNode; group: string; description: string }[] = [
+        { id: "settings",  label: "اليوم الدراسي",  icon: <Settings className="w-4 h-4" />, group: "المدرسة", description: "تاريخ الرصد وعدد الحصص وقاعدة احتساب الغياب.", },
+        { id: "features",  label: "إتاحة أقسام التطبيق", icon: <ToggleRight className="w-4 h-4" />, group: "إدارة النظام", description: "تفعيل أقسام التطبيق أو تعطيلها لجميع المستخدمين.", },
+        { id: "student-management", label: "إدارة الطلاب", icon: <Users className="w-4 h-4"/>, group: "المدرسة", description: "إضافة الطلاب وتعديل بياناتهم ونقلهم بين الصفوف." },
+        { id: "students",  label: "استيراد الطلاب",     icon: <Users className="w-4 h-4" />, group: "المدرسة", description: "استيراد قوائم الطلاب وتنظيم بياناتهم.", },
+        { id: "messages",  label: "إعدادات الرسائل",   icon: <MessagesSquare className="w-4 h-4" />, group: "التقييم والمتابعة", description: "تخصيص نصوص الرسائل المرسلة لأولياء الأمور.", },
+        { id: "surveys",   label: "الاستبانات",         icon: <ClipboardList className="w-4 h-4" />, group: "التقييم والمتابعة", description: "إدارة الاستبانات ومراجعة نتائجها.", },
+        { id: "supervision", label: "الإشراف الصفي",   icon: <ClipboardCheck className="w-4 h-4" />, group: "التقييم والمتابعة", description: "إعداد معايير الإشراف الصفي وإدارة المعلمين.", },
+        { id: "grades",    label: "إدارة التقييمات القصيرة",     icon: <GraduationCap className="w-4 h-4" />, group: "التقييم والمتابعة", description: "استيراد الدرجات وضبط التقييمات وحدود النجاح.", },
+        { id: "practical", label: "الاختبارات العملية", icon: <FlaskConical className="w-4 h-4" />, group: "التقييم والمتابعة", description: "إعداد المواد والاختبارات العملية والشفوية.", },
+        { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" />, group: "إدارة النظام", description: "أدوات تهيئة البيانات وإعادة تنظيم هيكل المدرسة.", },
+        { id: "classes", label: "الصفوف الدراسية", icon: <Layers className="w-4 h-4"/>, group: "المدرسة", description: "تنظيم الصفوف والمسارات وإدارة الفصول." },
+        { id: "subjects", label: "المواد والخطة الدراسية", icon: <BookOpen className="w-4 h-4"/>, group: "المدرسة", description: "إدارة المواد وتوزيعها على الصفوف والمسارات." },
+        { id: "security", label: "رمز الدخول", icon: <Lock className="w-4 h-4"/>, group: "إدارة النظام", description: "تحديث رمز دخول المسؤول إلى الصفحات المحمية." },
     ];
 
+    const groups = ["المدرسة", "التقييم والمتابعة", "إدارة النظام"];
+    const selected = MAIN_TABS.find(item => item.id === mainTab)!;
     return (
-        <div className="max-w-5xl mx-auto space-y-6 font-sans animate-in fade-in duration-500 pb-20">
-            {/* Page Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
-                <div className="flex items-center gap-4 p-6 sm:p-8">
-                    <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-white border border-white/20">
-                        <Settings className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-white">إعدادات النظام</h1>
-                        <p className="text-white/70 font-medium text-sm">إدارة الإعدادات وبيانات الطلاب والرسائل وتهيئة النظام</p>
-                    </div>
+        <div className="settings-page max-w-7xl mx-auto space-y-5">
+            <PageHeader icon={<Settings className="w-5 h-5"/>} title="إعدادات النظام"
+                subtitle="إعدادات المدرسة وخدماتها في مكان واحد"/>
+            <div className="settings-layout">
+                <nav className="settings-sidebar" aria-label="أقسام الإعدادات">
+                    {groups.map(group => <div key={group} className="settings-nav-group">
+                        <p>{group}</p>
+                        {MAIN_TABS.filter(item => item.group === group).map(item =>
+                            <button key={item.id} onClick={() => setMainTab(item.id)} aria-pressed={mainTab === item.id}
+                                className={mainTab === item.id ? "is-active" : ""}>
+                                {item.icon}<span>{item.label}</span>
+                            </button>)}
+                    </div>)}
+                </nav>
+                <div className="settings-mobile-picker">
+                    <label htmlFor="settings-section">القسم</label>
+                    <select id="settings-section" value={mainTab} onChange={e => setMainTab(e.target.value as MainTab)}>
+                        {groups.map(group => <optgroup key={group} label={group}>
+                            {MAIN_TABS.filter(item => item.group === group).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+                        </optgroup>)}
+                    </select>
                 </div>
-                {/* Main Tab Bar inside header */}
-                <div className="flex gap-1 px-4 pb-3 overflow-x-auto">
-                    {MAIN_TABS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setMainTab(tab.id)}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-black whitespace-nowrap transition-all ${
-                                mainTab === tab.id
-                                    ? "bg-white text-qatar-maroon shadow-sm"
-                                    : "text-white/80 hover:bg-white/15 hover:text-white"
-                            }`}
-                        >
-                            {tab.icon}
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
+                <section className="settings-content" aria-labelledby="settings-section-title">
+                    <header className="settings-section-heading">
+                        <h2 id="settings-section-title">{selected.label}</h2>
+                        <p>{selected.description}</p>
+                    </header>
+                    {mainTab === "settings" && <GeneralSettings/>}
+                    {mainTab === "security" && <PinSettings/>}
+                    {mainTab === "classes" && <ClassesSection/>}
+                    {mainTab === "subjects" && <SubjectsSection/>}
+                    {mainTab === "features" && <FeatureToggleSection/>}
+                    {mainTab === "students" && <ImportStudents/>}
+                    {mainTab === "student-management" && <StudentsPage/>}
+                    {mainTab === "messages" && <MessageTemplatesPage/>}
+                    {mainTab === "surveys" && <SurveysAdminSection/>}
+                    {mainTab === "supervision" && <SupervisionAdmin/>}
+                    {mainTab === "grades" && <GradesAdmin/>}
+                    {mainTab === "practical" && <PracticalExamsAdmin/>}
+                    {mainTab === "seed" && <SeedPage/>}
+                </section>
             </div>
-
-            {/* Tab Content */}
-            {mainTab === "settings" && (
-                <div className="space-y-8">
-                    <GeneralSettings />
-                    <PinSettings />
-                    <div className="flex gap-2">
-                        <TabButton active={activeTab === "classes"} onClick={() => setActiveTab("classes")} icon={<Layers className="w-4 h-4" />} label="الصفوف الدراسية" />
-                        <TabButton active={activeTab === "subjects"} onClick={() => setActiveTab("subjects")} icon={<BookOpen className="w-4 h-4" />} label="المواد الدراسية" />
-                    </div>
-                    {activeTab === "classes" ? <ClassesSection /> : <SubjectsSection />}
-                </div>
-            )}
-
-            {mainTab === "features" && <FeatureToggleSection />}
-            {mainTab === "students" && <ImportStudents />}
-            {mainTab === "messages" && <MessageTemplatesPage />}
-            {mainTab === "surveys"  && <SurveysAdminSection />}
-            {mainTab === "supervision" && <SupervisionAdmin />}
-            {mainTab === "grades"   && <GradesAdmin />}
-            {mainTab === "practical" && <PracticalExamsAdmin />}
-            {mainTab === "seed"     && <SeedPage />}
         </div>
     );
 }
@@ -123,7 +120,7 @@ function SurveysAdminSection() {
     return (
         <div className="space-y-5">
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between">
+                <div className="px-5 py-3 flex items-center justify-between" style={{background:"linear-gradient(135deg,#5C1523,#7A1E30)"}}>
                     <div className="flex gap-2">
                         <button onClick={() => setAdminTab("manage")}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${adminTab === "manage" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
@@ -196,139 +193,39 @@ function GeneralSettings() {
         setTimeout(() => setThresholdSaved(false), 2500);
     };
 
+    if (!data) return <p role="status" className="text-sm text-slate-500 py-6">جاري تحميل إعدادات المدرسة…</p>;
     return (
-        <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border p-6">
-            <h3 className="font-black text-slate-700 mb-6 flex items-center gap-2 border-b border-qatar-gray-border pb-4">
-                <Settings className="w-4 h-4 text-qatar-maroon" />
-                الإعدادات العامة
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-
-                {/* ── Locked Date ── */}
-                <div className="rounded-2xl border-2 border-qatar-maroon/30 bg-rose-50/40 p-5 space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-xl bg-qatar-maroon text-white flex items-center justify-center flex-shrink-0">
-                            <CalendarDays className="w-4 h-4" />
-                        </div>
-                        <div>
-                            <p className="font-black text-qatar-maroon text-sm">تاريخ اليوم الدراسي</p>
-                            <p className="text-[11px] text-slate-400 font-medium">يُطبَّق على جميع صفحات الرفع ولا يمكن تعديله من قِبَل المعلمين</p>
-                        </div>
-                        <div className="mr-auto flex items-center gap-1 bg-qatar-maroon/10 text-qatar-maroon text-[10px] font-black px-2 py-1 rounded-full border border-qatar-maroon/20">
-                            <Lock className="w-3 h-3" />
-                            مقفول
-                        </div>
-                    </div>
-
-                    <input
-                        type="date"
-                        value={displayDate}
-                        onChange={e => setDateVal(e.target.value)}
-                        className="w-full border-2 border-qatar-maroon/20 rounded-xl px-4 py-3 font-black text-slate-700 bg-white outline-none focus:border-qatar-maroon text-center text-lg tracking-wider"
-                    />
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleSaveDate}
-                            disabled={dateVal === null}
-                            className="flex items-center gap-2 bg-qatar-maroon text-white px-5 py-2.5 rounded-xl font-black hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-                        >
-                            <Check className="w-4 h-4" />
-                            حفظ التاريخ وتثبيته
-                        </button>
-                        {dateSaved && (
-                            <span className="flex items-center gap-1 text-emerald-600 font-black text-sm animate-in fade-in">
-                                <Check className="w-4 h-4" /> تم التثبيت
-                            </span>
-                        )}
-                    </div>
+        <div className="settings-rows">
+            <div className="settings-row">
+                <div><label htmlFor="school-date">تاريخ اليوم الدراسي</label>
+                    <p>التاريخ المعتمد لرصد الحضور. يثبته المسؤول لجميع المعلمين.</p></div>
+                <div className="settings-row-control">
+                    <input id="school-date" type="date" value={displayDate} onChange={e => setDateVal(e.target.value)}/>
+                    <button onClick={handleSaveDate} disabled={!dateVal || dateVal === currentDate}>حفظ التاريخ</button>
+                    {dateSaved && <span role="status">تم تثبيت التاريخ</span>}
                 </div>
-
-                {/* ── Periods Per Day ── */}
-                <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/40 p-5 space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
-                            <Hash className="w-4 h-4" />
-                        </div>
-                        <div>
-                            <p className="font-black text-amber-700 text-sm">عدد حصص اليوم الدراسي</p>
-                            <p className="text-[11px] text-slate-400 font-medium">يُحدِّد عدد أعمدة الحصص في جدول الرصد وقائمة الاختيار</p>
-                        </div>
-                    </div>
-
-                    <input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={displayPeriods}
-                        onChange={e => setPeriodsVal(Math.max(1, Math.min(10, Number(e.target.value))))}
-                        className="w-full border-2 border-amber-300 rounded-xl px-4 py-3 font-black text-slate-700 bg-white outline-none focus:border-amber-500 text-center text-3xl tracking-wider"
-                    />
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleSavePeriods}
-                            disabled={periodsVal === null}
-                            className="flex items-center gap-2 bg-amber-500 text-white px-5 py-2.5 rounded-xl font-black hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-                        >
-                            <Check className="w-4 h-4" />
-                            حفظ العدد
-                        </button>
-                        {periodsSaved && (
-                            <span className="flex items-center gap-1 text-emerald-600 font-black text-sm animate-in fade-in">
-                                <Check className="w-4 h-4" /> تم الحفظ
-                            </span>
-                        )}
-                    </div>
+            </div>
+            <div className="settings-row">
+                <div><label htmlFor="school-periods">عدد حصص اليوم</label>
+                    <p>يحدد عدد الحصص في قوائم الرصد والجداول، من ١ إلى ١٠ حصص.</p></div>
+                <div className="settings-row-control">
+                    <input id="school-periods" type="number" min={1} max={10} value={displayPeriods}
+                        onChange={e => setPeriodsVal(Math.max(1, Math.min(10, Number(e.target.value))))}/>
+                    <button onClick={handleSavePeriods} disabled={periodsVal === null || periodsVal === currentPeriods}>حفظ العدد</button>
+                    {periodsSaved && <span role="status">تم حفظ العدد</span>}
                 </div>
-
-                {/* ── Daily Absence Threshold ── */}
-                <div className="rounded-2xl border-2 border-blue-300 bg-blue-50/40 p-5 space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center flex-shrink-0">
-                            <ShieldAlert className="w-4 h-4" />
-                        </div>
-                        <div>
-                            <p className="font-black text-blue-700 text-sm">عتبة الغياب اليومي</p>
-                            <p className="text-[11px] text-slate-400 font-medium">أقصى عدد حصص يغيبها الطالب ويظل يُعتبر حاضرًا في اليوم</p>
-                        </div>
-                    </div>
-
-                    <input
-                        type="number"
-                        min={0}
-                        max={currentPeriods}
-                        value={displayThreshold}
-                        onChange={e => setThresholdVal(Math.max(0, Math.min(currentPeriods, Number(e.target.value))))}
-                        className="w-full border-2 border-blue-300 rounded-xl px-4 py-3 font-black text-slate-700 bg-white outline-none focus:border-blue-500 text-center text-3xl tracking-wider"
-                    />
-
-                    {/* Contextual explanation */}
-                    <p className="text-[11px] text-slate-500 font-bold bg-white rounded-lg px-3 py-2 border border-blue-100">
-                        {displayThreshold === 0
-                            ? "أي غياب في أي حصة = غائب لليوم"
-                            : `الغياب في ${displayThreshold} حصة أو أقل = حاضر — الغياب في ${displayThreshold + 1} حصة أو أكثر = غائب`
-                        }
-                    </p>
-
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleSaveThreshold}
-                            disabled={thresholdVal === null}
-                            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-                        >
-                            <Check className="w-4 h-4" />
-                            حفظ العتبة
-                        </button>
-                        {thresholdSaved && (
-                            <span className="flex items-center gap-1 text-emerald-600 font-black text-sm animate-in fade-in">
-                                <Check className="w-4 h-4" /> تم الحفظ
-                            </span>
-                        )}
-                    </div>
+            </div>
+            <div className="settings-row">
+                <div><label htmlFor="school-threshold">احتساب الغياب اليومي</label>
+                    <p>أقصى عدد حصص يمكن أن يغيبها الطالب ويظل محسوبًا حاضرًا في اليوم.</p>
+                    <p className="settings-row-hint">{displayThreshold === 0 ? "أي غياب في حصة يُحسب غيابًا لليوم." :
+                        "الغياب في " + displayThreshold + " حصة أو أقل: حاضر. في " + (displayThreshold + 1) + " حصة أو أكثر: غائب."}</p></div>
+                <div className="settings-row-control">
+                    <input id="school-threshold" type="number" min={0} max={currentPeriods} value={displayThreshold}
+                        onChange={e => setThresholdVal(Math.max(0, Math.min(currentPeriods, Number(e.target.value))))}/>
+                    <button onClick={handleSaveThreshold} disabled={thresholdVal === null || thresholdVal === currentThreshold}>حفظ القاعدة</button>
+                    {thresholdSaved && <span role="status">تم حفظ القاعدة</span>}
                 </div>
-
             </div>
         </div>
     );
@@ -439,18 +336,6 @@ function PinSettings() {
     );
 }
 
-function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-    return (
-        <button
-            onClick={onClick}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-sm transition-colors border ${active ? "bg-qatar-maroon text-white border-qatar-maroon" : "bg-white text-slate-600 border-qatar-gray-border hover:bg-rose-50 hover:text-qatar-maroon"}`}
-        >
-            {icon}
-            {label}
-        </button>
-    );
-}
-
 function ClassesSection() {
     const data = useQuery(api.setup.getInitialData);
     const createClass = useMutation(api.settings.createClass);
@@ -473,11 +358,9 @@ function ClassesSection() {
             if (g[cls.grade]) g[cls.grade].push(cls);
         }
         for (const grade of [10, 11, 12]) {
-            g[grade].sort((a: any, b: any) => {
-                const na = parseInt(a.name.split("-")[1] || "0", 10);
-                const nb = parseInt(b.name.split("-")[1] || "0", 10);
-                return na - nb;
-            });
+            // numeric-aware: 10-2 < 10-10, and named sections (ESE, غير محدد) sort last
+            g[grade].sort((a: any, b: any) =>
+                a.name.localeCompare(b.name, "ar", { numeric: true }));
         }
         return g;
     }, [data]);
@@ -511,8 +394,12 @@ function ClassesSection() {
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {(grouped[grade] || []).map((cls: any) => (
-                                    <div key={cls._id} className="flex items-center justify-between gap-2 p-3 rounded-xl border border-qatar-gray-border bg-slate-50">
-                                        <span className="font-black text-slate-800 text-sm w-14 flex-shrink-0">{cls.name}</span>
+                                    <div key={cls._id} className={`flex items-center justify-between gap-2 p-3 rounded-xl border ${
+                                        cls.isActive === false
+                                            ? "border-dashed border-slate-300 bg-slate-100 opacity-70"
+                                            : "border-qatar-gray-border bg-slate-50"
+                                    }`}>
+                                        <span className="font-black text-slate-800 text-sm flex-shrink-0 max-w-[9rem] truncate" title={cls.name}>{cls.name}</span>
 
                                         {editingId === cls._id ? (
                                             <div className="flex items-center gap-1 flex-1">
@@ -535,14 +422,34 @@ function ClassesSection() {
                                                 <span className={`text-xs font-black px-2 py-0.5 rounded-full border ${TRACK_COLORS[cls.track || "عام"] || TRACK_COLORS["عام"]}`}>
                                                     {cls.track || "—"}
                                                 </span>
+                                                {cls.isActive === false && (
+                                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full border border-slate-300 bg-white text-slate-500">
+                                                        غير مفعّل
+                                                    </span>
+                                                )}
+                                                <button
+                                                    onClick={() => updateClass({ id: cls._id, isActive: cls.isActive === false })}
+                                                    title={cls.isActive === false ? "إعادة تفعيل الصف" : "إلغاء تفعيل الصف (يخفيه من الحضور والرسائل)"}
+                                                    className={`mr-auto p-1.5 rounded-lg transition-colors ${
+                                                        cls.isActive === false
+                                                            ? "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                                            : "text-slate-400 hover:text-amber-600 hover:bg-amber-50"
+                                                    }`}
+                                                >
+                                                    {cls.isActive === false ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
+                                                </button>
                                                 <button
                                                     onClick={() => { setEditingId(cls._id); setEditTrack(cls.track || "عام"); }}
-                                                    className="mr-auto p-1.5 text-slate-400 hover:text-qatar-maroon hover:bg-rose-50 rounded-lg transition-colors"
+                                                    className="p-1.5 text-slate-400 hover:text-qatar-maroon hover:bg-rose-50 rounded-lg transition-colors"
                                                 >
                                                     <Pencil className="w-3.5 h-3.5" />
                                                 </button>
                                                 <button
-                                                    onClick={() => deleteClass({ id: cls._id })}
+                                                    onClick={async () => {
+                                                        if (!window.confirm(`حذف الصف ${cls.name} نهائياً؟`)) return;
+                                                        try { await deleteClass({ id: cls._id }); }
+                                                        catch (e: any) { window.alert(e.message ?? "تعذر حذف الصف."); }
+                                                    }}
                                                     className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                                 >
                                                     <Trash2 className="w-3.5 h-3.5" />

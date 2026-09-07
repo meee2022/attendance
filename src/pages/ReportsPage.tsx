@@ -88,8 +88,8 @@ export default function ReportsPage() {
         <div className="max-w-7xl mx-auto space-y-6 pb-20 font-sans animate-in fade-in duration-500">
 
             {/* Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                 >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 sm:p-8">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
@@ -117,11 +117,12 @@ export default function ReportsPage() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-qatar-gray-border qatar-card-shadow w-fit">
+            <div className="workspace-tabs" role="group" aria-label="أنواع التقارير">
                 {tabs.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
+                        aria-pressed={activeTab === tab.id}
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-sm transition-all ${
                             activeTab === tab.id
                                 ? "bg-qatar-maroon text-white shadow-md"
@@ -590,7 +591,7 @@ function FrequentAbsencesTab({ schoolId, date }: { schoolId: string; date: strin
             {/* Sub-header */}
             <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
                 <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3"
-                     style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 100%)" }}>
+                     style={{ background: "linear-gradient(135deg, #5C1523 0%, #7A1E30 100%)" }}>
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
                             <AlertTriangle className="w-5 h-5 text-white" />

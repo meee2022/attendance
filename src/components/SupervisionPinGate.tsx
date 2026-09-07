@@ -12,14 +12,14 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
     deputy: "النائب الأكاديمي",
 };
 const ROLE_COLORS: Record<VisitorRole, string> = {
-    coordinator: "#5C1A1B",
+    coordinator: "#5C1523",
     supervisor: "#1e40af",
-    deputy: "#065f46",
+    deputy: "#5C1523",
 };
 
 const STORAGE_KEY = "supervision_role_session";
 
-export function getStoredRole(): { role: VisitorRole; expiresAt: number } | null {
+export function getStoredRole(): { role: VisitorRole; name: string; expiresAt: number } | null {
     try {
         const raw = sessionStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
@@ -37,6 +37,7 @@ export function clearStoredRole() {
 export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: VisitorRole) => void }) {
     const [selectedRole, setSelectedRole] = useState<VisitorRole | null>(null);
     const [pin, setPin] = useState("");
+    const [visitorName, setVisitorName] = useState("");
     const [showPin, setShowPin] = useState(false);
     const [error, setError] = useState("");
     const verify = useQuery(
@@ -45,9 +46,11 @@ export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: Visi
     );
 
     const handleSubmit = () => {
+        if (!visitorName.trim()) { setError("يرجى كتابة اسمك أولاً"); return; }
         if (verify === true && selectedRole) {
             sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
                 role: selectedRole,
+                name: visitorName.trim(),
                 expiresAt: Date.now() + 8 * 60 * 60 * 1000, // 8 ساعات
             }));
             onAuthed(selectedRole);
@@ -87,6 +90,14 @@ export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: Visi
                     <span className="font-black text-white">دخول {ROLE_LABELS[selectedRole]}</span>
                 </div>
                 <div className="p-5 space-y-4">
+                    <div>
+                        <label className="block text-xs font-black text-slate-500 mb-1.5">اسمك الكامل</label>
+                        <input type="text" value={visitorName}
+                            onChange={e => { setVisitorName(e.target.value); setError(""); }}
+                            placeholder={`اكتب اسمك كـ ${ROLE_LABELS[selectedRole]}...`}
+                            autoFocus
+                            className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-slate-200 focus:border-qatar-maroon text-right"/>
+                    </div>
                     <p className="text-sm text-slate-400 font-bold text-center">أدخل رمز PIN</p>
                     <div className="relative">
                         <input type={showPin ? "text" : "password"} value={pin}

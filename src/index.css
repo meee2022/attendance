@@ -1,23 +1,76 @@
 @import "tailwindcss";
+@import "./styles/workspace.css";
 
 @theme {
-  /* ── Brand palette inspired by Arirang Bakery ── */
-  --color-qatar-maroon: #5C1A1B;        /* Primary deep burgundy */
-  --color-qatar-maroon-dark: #3F0E0F;   /* Darker burgundy for hover */
-  --color-qatar-maroon-light: #7A2425;  /* Lighter burgundy */
-  --color-qatar-gold: #C9A876;          /* Accent gold/tan */
-  --color-qatar-gold-dark: #A88456;     /* Deeper gold */
-  --color-qatar-gold-light: #E5CFA6;    /* Light gold */
-  --color-qatar-cream: #F8EFE2;         /* Warm cream background */
-  --color-qatar-cream-dark: #EDE0CE;    /* Slightly darker cream */
-  --color-qatar-ink: #2A1A1B;           /* Deep ink text */
-  --color-qatar-ink-soft: #5C4F4F;      /* Soft ink */
+  --font-sans: 'Cairo', 'Segoe UI', sans-serif;
+  /* ── Brand palette — Ibn Taymiyyah School Official Colors ── */
+  --color-qatar-maroon: #5C1523;        /* Primary */
+  --color-qatar-maroon-dark: #4A0F1B;   /* Primary dark */
+  --color-qatar-maroon-light: #7A1E30;  /* Primary light */
+  --color-qatar-gold: #C9A96E;          /* Gold accent */
+  --color-qatar-gold-dark: #A8853A;     /* Gold dark */
+  --color-qatar-gold-light: #DFC48E;    /* Gold light */
+  --color-qatar-cream: #FCF9F2;         /* Cream background */
+  --color-qatar-cream-dark: #F0EAD8;    /* Cream darker */
+  --color-qatar-ink: #2A1418;           /* Deep ink text */
+  --color-qatar-ink-soft: #5C4448;      /* Soft ink */
 
-  /* Existing aliases for compatibility */
-  --color-qatar-gray-bg: #FAF6EF;       /* Warm bg replacing cold gray */
-  --color-qatar-gray-border: #E8DECF;   /* Warm border */
-  --color-qatar-gray-text: #6B5F58;     /* Warm gray text */
-  --color-qatar-gray-dark: #2A1A1B;     /* Deep ink */
+  /* Aliases */
+  --color-qatar-gray-bg: #FCF9F2;       /* Cream bg */
+  --color-qatar-gray-border: #E8D8C4;   /* Warm border */
+  --color-qatar-gray-text: #6B5058;     /* Warm gray text */
+  --color-qatar-gray-dark: #2A1418;     /* Deep ink */
+  --color-qatar-muted: #8A7A72;         /* Muted text */
+}
+
+/* Compact school workspace: keep document/print typography independent. */
+@media screen {
+  .app-shell { font-size: 0.875rem; line-height: 1.65; }
+  .app-shell h1 { font-size: 1.375rem; line-height: 1.5; letter-spacing: 0; }
+  .app-shell h2 { line-height: 1.5; }
+  .app-shell main { min-width: 0; }
+  .grades-page { --grade-surface: oklch(0.985 0.004 20); }
+  .grades-page .page-header { box-shadow: none; }
+  .grades-header-note { color: var(--color-qatar-gray-text); padding: 0.4rem 0; font-size: 0.75rem; }
+  .grades-tabs { display: flex; gap: 0.25rem; padding: 0.25rem; border-bottom: 1px solid var(--color-qatar-gray-border); overflow-x: auto; }
+  .grades-tab { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.65rem 1rem; border-radius: 0.5rem; color: var(--color-qatar-ink-soft); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; transition: background-color 160ms, color 160ms; }
+  .grades-tab:hover { background: var(--color-qatar-cream-dark); }
+  .grades-tab.is-active { background: var(--color-qatar-maroon); color: var(--color-qatar-cream); box-shadow: none; }
+  .grades-page select { border-width: 1px; border-color: var(--color-qatar-gray-border); background-color: var(--grade-surface); font-weight: 500; border-radius: 0.5rem; min-height: 42px; }
+  .grades-page table { font-size: 0.8125rem; font-variant-numeric: tabular-nums; border-collapse: separate; border-spacing: 0; }
+  .grades-page th { padding-block: 0.75rem; font-size: 0.75rem; line-height: 1.6; }
+  .grades-page td { padding-block: 0.5rem; }
+  .grades-page tbody tr:nth-child(even) { background-color: var(--grade-surface); }
+  .grades-page tbody tr:hover { background-color: var(--color-qatar-cream); }
+  .grades-page td.sticky { background: var(--grade-surface); z-index: 1; }
+  .grades-page th.sticky { z-index: 2; }
+  .grade-entry-table { min-width: 800px; }
+  .grade-entry-table input { min-height: 36px; font-size: 0.8125rem; font-weight: 600; border: 1px solid var(--color-qatar-gray-border); background-color: var(--grade-surface); border-radius: 0.375rem; }
+  .grade-entry-table td:has(input) { padding: 0.3rem; }
+  .grade-entry-table th:nth-child(2) { min-width: 210px; }
+  .grade-entry-table th:nth-child(n+3) { min-width: 80px; }
+  .grade-search input { border-width: 1px; border-radius: 0.5rem; }
+  @media (max-width: 639px) {
+    .grades-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; border: 0; background: var(--color-qatar-cream-dark); border-radius: 0.75rem; }
+    .grades-tab { flex: 1 0 auto; padding-inline: 0.65rem; font-size: 0.75rem; }
+    .grades-tab svg { width: 0.875rem; height: 0.875rem; }
+    .grade-entry-table th:nth-child(2) { min-width: 145px; }
+    .grade-entry-table td:nth-child(2) { max-width: 160px; }
+    .grades-page input:not([data-grade-cell]), .grades-page select { font-size: 1rem; }
+  }
+}
+
+@layer base {
+  button:not(:disabled), select:not(:disabled) { cursor: pointer; }
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-qatar-maroon);
+    outline-offset: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 @layer base {
@@ -33,13 +86,13 @@
   font-family: 'Cairo', sans-serif;
 }
 
-/* Custom shadow for cards — warm tinted */
+/* Custom shadow for cards */
 .qatar-card-shadow {
-  box-shadow: 0 1px 3px 0 rgba(92, 26, 27, 0.06), 0 1px 2px 0 rgba(92, 26, 27, 0.04);
+  box-shadow: 0 1px 3px 0 rgba(92, 21, 35, 0.07), 0 1px 2px 0 rgba(92, 21, 35, 0.05);
 }
 
 .qatar-card-shadow:hover {
-  box-shadow: 0 4px 12px -2px rgba(92, 26, 27, 0.12), 0 2px 6px -2px rgba(92, 26, 27, 0.08);
+  box-shadow: 0 4px 12px -2px rgba(92, 21, 35, 0.14), 0 2px 6px -2px rgba(92, 21, 35, 0.09);
 }
 
 /* iOS safe-area support */
@@ -56,7 +109,7 @@
 
 /* Smooth scroll on mobile */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -66,23 +119,45 @@ html {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Thin scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(92, 21, 35, 0.2);
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(92, 21, 35, 0.4);
+}
+
+/* Print */
+@media print {
+  nav, .no-print { display: none !important; }
+  body { background: white !important; }
+}
+
 /* ── Brand utility classes ── */
 .bg-brand-gradient {
-  background: linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%);
+  background: linear-gradient(135deg, #5C1523 0%, #7A1E30 50%, #5C1523 100%);
 }
 
 .bg-brand-gradient-soft {
-  background: linear-gradient(135deg, rgba(92, 26, 27, 0.06) 0%, rgba(201, 168, 118, 0.08) 100%);
+  background: linear-gradient(135deg, rgba(92, 21, 35, 0.06) 0%, rgba(201, 169, 110, 0.08) 100%);
 }
 
 .bg-gold-gradient {
-  background: linear-gradient(135deg, #C9A876 0%, #A88456 100%);
+  background: linear-gradient(135deg, #C9A96E 0%, #A8853A 100%);
 }
 
 .text-brand {
-  color: #5C1A1B;
+  color: #5C1523;
 }
 
 .border-brand {
-  border-color: #5C1A1B;
+  border-color: #5C1523;
 }

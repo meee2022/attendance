@@ -8,7 +8,7 @@ type VisitorRole = "coordinator" | "supervisor" | "deputy";
 type Domain = "planning" | "execution" | "evaluation" | "management";
 
 const ROLE_LABELS: Record<VisitorRole, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
-const ROLE_COLORS: Record<VisitorRole, string> = { coordinator: "#5C1A1B", supervisor: "#1e40af", deputy: "#065f46" };
+const ROLE_COLORS: Record<VisitorRole, string> = { coordinator: "#5C1523", supervisor: "#1e40af", deputy: "#065f46" };
 const DOMAIN_LABELS: Record<Domain, string> = { planning: "التخطيط", execution: "تنفيذ الدرس", evaluation: "التقويم", management: "الإدارة الصفية" };
 const DOMAIN_COLORS: Record<Domain, string> = { planning: "#3b82f6", execution: "#10b981", evaluation: "#f59e0b", management: "#8b5cf6" };
 const DOMAIN_ORDER: Domain[] = ["planning", "execution", "evaluation", "management"];
@@ -47,7 +47,7 @@ function RadarChart({ data, size = 280 }: { data: { label: string; value: number
                 const [x, y] = point(i, 1);
                 return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e2e8f0" strokeWidth="1"/>;
             })}
-            <polygon points={polygon} fill="#5C1A1B33" stroke="#5C1A1B" strokeWidth="2"/>
+            <polygon points={polygon} fill="#5C152333" stroke="#5C1523" strokeWidth="2"/>
             {data.map((d, i) => {
                 const [px, py] = point(i, d.value);
                 return <circle key={i} cx={px} cy={py} r="4" fill={d.color} stroke="#fff" strokeWidth="2"/>;
@@ -171,29 +171,65 @@ export default function SupervisionAnalytics() {
     const totalSigned = filtered.filter(v => v.teacherSignedAt).length;
     const overallAvg = filtered.reduce((a, v) => a + v.averageScore, 0) / filtered.length;
 
+    // Score distribution
+    const excellent = filtered.filter(v => v.averageScore >= 0.8).length;
+    const good = filtered.filter(v => v.averageScore >= 0.6 && v.averageScore < 0.8).length;
+    const needsDev = filtered.filter(v => v.averageScore < 0.6).length;
+
     return (
         <div dir="rtl" className="space-y-5 animate-in fade-in duration-300">
             {/* KPIs */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <ClipboardCheck className="w-4 h-4 text-qatar-maroon mb-1"/>
-                    <p className="text-2xl font-black text-qatar-maroon">{filtered.length}</p>
-                    <p className="text-[10px] font-bold text-slate-400">زيارة مُقَدَّمة</p>
+                {[
+                    { icon: ClipboardCheck, val: filtered.length, label: "زيارة مُقَدَّمة", grad: "from-qatar-maroon to-[#7A1E30]", light: "#5C1523" },
+                    { icon: TrendingUp, val: `${(overallAvg * 100).toFixed(0)}%`, label: "المعدل العام", grad: `from-[${pctColor(overallAvg)}] to-[${pctColor(overallAvg)}cc]`, light: pctColor(overallAvg) },
+                    { icon: Users, val: teacherStats.length, label: "معلم مُقَيَّم", grad: "from-blue-600 to-blue-500", light: "#2563eb" },
+                    { icon: FileSignature, val: totalSigned, label: "موقَّعة من المعلم", grad: "from-emerald-600 to-emerald-500", light: "#059669" },
+                ].map(({ icon: Icon, val, label, light }) => (
+                    <div key={label} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-shadow">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center mb-2" style={{ background: light + "18" }}>
+                            <Icon className="w-4 h-4" style={{ color: light }}/>
+                        </div>
+                        <p className="text-2xl font-black" style={{ color: light }}>{val}</p>
+                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">{label}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Score distribution */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400">{filtered.length} زيارة</span>
+                    <span className="font-black text-slate-700 text-sm flex items-center gap-2"><BarChart3 className="w-3.5 h-3.5 text-slate-400"/>توزيع مستويات الأداء</span>
                 </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <TrendingUp className="w-4 h-4 mb-1" style={{ color: pctColor(overallAvg) }}/>
-                    <p className="text-2xl font-black" style={{ color: pctColor(overallAvg) }}>{(overallAvg * 100).toFixed(0)}%</p>
-                    <p className="text-[10px] font-bold text-slate-400">المعدل العام</p>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <Users className="w-4 h-4 text-blue-500 mb-1"/>
-                    <p className="text-2xl font-black text-blue-600">{teacherStats.length}</p>
-                    <p className="text-[10px] font-bold text-slate-400">معلم مُقَيَّم</p>
-                </div>
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <FileSignature className="w-4 h-4 text-emerald-500 mb-1"/>
-                    <p className="text-2xl font-black text-emerald-600">{totalSigned}</p>
-                    <p className="text-[10px] font-bold text-slate-400">موقَّعة من المعلم</p>
+                <div className="p-4">
+                    <div className="flex gap-2 mb-3">
+                        {[
+                            { label: "ممتاز ≥ 80%", cnt: excellent, color: "#10b981" },
+                            { label: "جيد 60-79%", cnt: good, color: "#f59e0b" },
+                            { label: "يحتاج تطوير < 60%", cnt: needsDev, color: "#ef4444" },
+                        ].map(({ label, cnt, color }) => (
+                            <div key={label} className="flex-1 rounded-xl p-3 text-center" style={{ background: color + "12" }}>
+                                <p className="text-2xl font-black" style={{ color }}>{cnt}</p>
+                                <p className="text-[9px] font-black mt-0.5" style={{ color: color + "cc" }}>{label}</p>
+                            </div>
+                        ))}
+                    </div>
+                    {/* Stacked bar */}
+                    <div className="h-3 rounded-full overflow-hidden flex">
+                        {excellent > 0 && <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(excellent/filtered.length)*100}%` }}/>}
+                        {good > 0 && <div className="h-full bg-amber-400 transition-all" style={{ width: `${(good/filtered.length)*100}%` }}/>}
+                        {needsDev > 0 && <div className="h-full bg-red-400 transition-all" style={{ width: `${(needsDev/filtered.length)*100}%` }}/>}
+                    </div>
+                    {/* Role breakdown */}
+                    <div className="flex gap-2 mt-3 flex-wrap">
+                        {(Object.keys(ROLE_LABELS) as VisitorRole[]).map(r => byRole[r] > 0 && (
+                            <div key={r} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: ROLE_COLORS[r] + "12" }}>
+                                <span className="w-2 h-2 rounded-full" style={{ background: ROLE_COLORS[r] }}/>
+                                <span className="text-[11px] font-black" style={{ color: ROLE_COLORS[r] }}>{ROLE_LABELS[r]}: {byRole[r]}</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -265,7 +301,7 @@ export default function SupervisionAnalytics() {
             {/* Top needs (lowest performance) */}
             {topNeeds.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#7c2d12,#5C1A1B)" }}>
+                    <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#7c2d12,#5C1523)" }}>
                         <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">5</span>
                         <span className="font-black text-white text-sm">أعلى الاحتياجات (أضعف 5 معايير)</span>
                     </div>
@@ -318,12 +354,30 @@ export default function SupervisionAnalytics() {
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
                     <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{teacherStats.length}</span>
-                    <span className="font-black text-white text-sm">ترتيب المعلمين</span>
+                    <span className="font-black text-white text-sm">ترتيب المعلمين حسب الأداء</span>
                 </div>
-                <div className="p-4 space-y-2.5 max-h-96 overflow-y-auto">
-                    {teacherStats.map(t => (
-                        <HBar key={t.teacher} label={t.teacher} value={t.avg} color={pctColor(t.avg)} total={` · ${t.cnt} زيارة`}/>
-                    ))}
+                <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto">
+                    {teacherStats.map((t, idx) => {
+                        const color = pctColor(t.avg);
+                        return (
+                            <div key={t.teacher} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
+                                <span className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black text-white flex-shrink-0"
+                                    style={{ background: idx === 0 ? "#f59e0b" : idx === 1 ? "#94a3b8" : idx === 2 ? "#d97706" : "#e2e8f0", color: idx < 3 ? "white" : "#94a3b8" }}>
+                                    {idx + 1}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black text-slate-700 truncate">{t.teacher}</p>
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
+                                        <div className="h-full rounded-full transition-all" style={{ width: `${t.avg * 100}%`, background: color }}/>
+                                    </div>
+                                </div>
+                                <div className="text-center flex-shrink-0">
+                                    <span className="text-base font-black" style={{ color }}>{(t.avg * 100).toFixed(0)}%</span>
+                                    <p className="text-[9px] font-bold text-slate-400">{t.cnt} زيارة</p>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         </div>

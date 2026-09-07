@@ -8,7 +8,7 @@ const ACTION_LABELS: Record<string, { label: string; color: string; icon: any }>
     updated:   { label: "تعديل",  color: "#3b82f6", icon: Pencil },
     deleted:   { label: "حذف",    color: "#ef4444", icon: Trash2 },
     signed:    { label: "توقيع",  color: "#8b5cf6", icon: FileSignature },
-    submitted: { label: "إرسال",  color: "#5C1A1B", icon: Send },
+    submitted: { label: "إرسال",  color: "#5C1523", icon: Send },
 };
 
 const ROLE_LABELS: Record<string, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب" };

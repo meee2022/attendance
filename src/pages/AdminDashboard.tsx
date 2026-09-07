@@ -107,7 +107,7 @@ export default function AdminDashboard() {
             {/* Hero Header — modern minimal */}
             <div className="relative">
                 <div className="absolute inset-0 rounded-3xl opacity-5"
-                     style={{ background: "radial-gradient(circle at 30% 50%, #5C1A1B 0%, transparent 50%)" }}/>
+                     style={{ background: "radial-gradient(circle at 30% 50%, #5C1523 0%, transparent 50%)" }}/>
                 <div className="relative flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
                     <div>
                         <p className="text-xs font-black text-qatar-maroon tracking-widest mb-1">DAILY OVERVIEW · {formatArabicDate(date)}</p>

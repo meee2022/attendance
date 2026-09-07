@@ -8,7 +8,7 @@ type VisitorRole = "coordinator" | "supervisor" | "deputy";
 type Domain = "planning" | "execution" | "evaluation" | "management";
 
 const ROLE_LABELS: Record<VisitorRole, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
-const ROLE_COLORS: Record<VisitorRole, string> = { coordinator: "#5C1A1B", supervisor: "#1e40af", deputy: "#065f46" };
+const ROLE_COLORS: Record<VisitorRole, string> = { coordinator: "#5C1523", supervisor: "#1e40af", deputy: "#065f46" };
 const DOMAIN_LABELS: Record<Domain, string> = { planning: "التخطيط", execution: "تنفيذ الدرس", evaluation: "التقويم", management: "الإدارة الصفية" };
 const DOMAIN_COLORS: Record<Domain, string> = { planning: "#3b82f6", execution: "#10b981", evaluation: "#f59e0b", management: "#8b5cf6" };
 
@@ -229,7 +229,7 @@ function TrendView({ visits, teachers, selected, onSelect }: { visits: any[]; te
                                 );
                             })}
                             {/* Line */}
-                            <path d={pathD} fill="none" stroke="#5C1A1B" strokeWidth="2.5"/>
+                            <path d={pathD} fill="none" stroke="#5C1523" strokeWidth="2.5"/>
                             {/* Points */}
                             {points.map((p, i) => (
                                 <g key={i}>

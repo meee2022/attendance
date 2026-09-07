@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "migrate-convex": "tsx scripts/migrateConvexData.ts"
+    "migrate-convex": "tsx scripts/migrateConvexData.ts",
+    "import-registry": "tsx --env-file=.env.local scripts/importRegistry.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

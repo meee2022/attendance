@@ -21,9 +21,9 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
     deputy: "النائب الأكاديمي",
 };
 const ROLE_COLORS: Record<VisitorRole, string> = {
-    coordinator: "#5C1A1B",
+    coordinator: "#5C1523",
     supervisor: "#1e40af",
-    deputy: "#065f46",
+    deputy: "#5C1523",
 };
 const DOMAIN_LABELS: Record<Domain, string> = {
     planning: "التخطيط",
@@ -56,6 +56,40 @@ const SUBJECTS = [
 
 const FOLLOW_UP = { full: "كليّة", partial: "جزئيّة" };
 
+// Map teacher department → subject name (fuzzy match)
+function departmentToSubject(dept: string): string {
+    if (!dept) return "";
+    const d = dept.trim();
+    // exact match first
+    if (SUBJECTS.includes(d)) return d;
+    // partial / keyword match
+    const map: [string, string][] = [
+        ["رياضيات",   "الرياضيات"],
+        ["إسلامية",   "التربية الإسلامية"],
+        ["اسلامية",   "التربية الإسلامية"],
+        ["دين",       "التربية الإسلامية"],
+        ["إنجليز",    "اللغة الإنجليزية"],
+        ["انجليز",    "اللغة الإنجليزية"],
+        ["عربي",      "اللغة العربية"],
+        ["كيمياء",    "الكيمياء"],
+        ["فيزياء",    "الفيزياء"],
+        ["أحياء",     "الأحياء"],
+        ["احياء",     "الأحياء"],
+        ["اجتماعي",   "العلوم الاجتماعية"],
+        ["اجتماعية",  "العلوم الاجتماعية"],
+        ["حوسبة",     "الحوسبة وتكنولوجيا المعلومات"],
+        ["تقنية",     "الحوسبة وتكنولوجيا المعلومات"],
+        ["علوم",      "العلوم"],
+        ["رياضة",     "التربية الرياضية"],
+        ["بدنية",     "التربية الرياضية"],
+        ["مهارات",    "المهارات الحياتية"],
+    ];
+    for (const [key, val] of map) {
+        if (d.includes(key)) return val;
+    }
+    return "";
+}
+
 type Criterion = { _id: string; domain: Domain; text: string; order: number; isActive: boolean };
 type Visit = any;
 
@@ -67,6 +101,7 @@ export default function SupervisionPage() {
     const seedDefault = useMutation(api.supervision.seedDefaultCriteria);
     const [tab, setTab] = useState<Tab>("new");
     const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
+    const [completedVisitId, setCompletedVisitId] = useState<string | null>(null);
     const [seeding, setSeeding] = useState(false);
     const [authedRole, setAuthedRole] = useState<VisitorRole | null>(getStoredRole()?.role ?? null);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -131,8 +166,8 @@ export default function SupervisionPage() {
     if (criteria.length === 0) {
         return (
             <div dir="rtl" className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
-                <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                    style={{ background: "linear-gradient(135deg,#5C1A1B 0%,#7A2425 50%,#5C1A1B 100%)" }}>
+                <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                    >
                     <div className="p-5 sm:p-7">
                         <h1 className="text-2xl font-black text-white flex items-center gap-3">
                             <ClipboardCheck className="w-7 h-7 text-white/80"/>الإشراف الصفي
@@ -147,7 +182,7 @@ export default function SupervisionPage() {
                     <button onClick={async () => { setSeeding(true); try { await seedDefault({}); } finally { setSeeding(false); } }}
                         disabled={seeding}
                         className="flex items-center gap-2 px-6 py-3 rounded-2xl text-white font-black text-sm hover:opacity-90 disabled:opacity-50 qatar-card-shadow"
-                        style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
+                        style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
                         {seeding ? <><RotateCcw className="w-4 h-4 animate-spin"/>جارٍ التهيئة...</> : <><Plus className="w-4 h-4"/>تهيئة المعايير الافتراضية</>}
                     </button>
                 </div>
@@ -158,8 +193,8 @@ export default function SupervisionPage() {
     return (
         <div dir="rtl" className="max-w-5xl mx-auto space-y-5 animate-in fade-in duration-500 pb-20">
             {/* Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                style={{ background: `linear-gradient(135deg,${ROLE_COLORS[authedRole]},${ROLE_COLORS[authedRole]}dd)` }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 sm:p-7">
                     <div>
                         <h1 className="text-2xl font-black text-white flex items-center gap-3">
@@ -209,23 +244,36 @@ export default function SupervisionPage() {
                 </div>
             </div>
 
-            {tab === "new" && <VisitForm criteria={criteria} editingId={editingVisitId} authedRole={authedRole} isOnline={isOnline} onSaved={() => { setTab("visits"); setEditingVisitId(null); setOfflineDrafts(getOfflineDrafts()); }}/>}
-            {tab === "visits" && <VisitsList criteria={criteria} authedRole={authedRole} offlineDrafts={offlineDrafts} onEdit={(id) => { setEditingVisitId(id); setTab("new"); }} onView={(id) => { setEditingVisitId(id); setTab("new"); }} onDraftsChanged={() => setOfflineDrafts(getOfflineDrafts())}/>}
-            {tab === "teacher" && <TeacherFile criteria={criteria}/>}
+            {completedVisitId ? (
+                <VisitComplete
+                    visitId={completedVisitId}
+                    criteria={criteria}
+                    onNewVisit={() => { setCompletedVisitId(null); setEditingVisitId(null); setTab("new"); }}
+                    onGoList={() => { setCompletedVisitId(null); setEditingVisitId(null); setTab("visits"); }}
+                />
+            ) : (
+                <>
+                    {tab === "new" && <VisitForm criteria={criteria} editingId={editingVisitId} authedRole={authedRole} isOnline={isOnline} onSaved={(id) => { setEditingVisitId(null); setOfflineDrafts(getOfflineDrafts()); if (id) setCompletedVisitId(id); else setTab("visits"); }}/>}
+                    {tab === "visits" && <VisitsList criteria={criteria} authedRole={authedRole} offlineDrafts={offlineDrafts} onEdit={(id) => { setEditingVisitId(id); setTab("new"); }} onView={(id) => { setCompletedVisitId(id); }} onDraftsChanged={() => setOfflineDrafts(getOfflineDrafts())}/>}
+                    {tab === "teacher" && <TeacherFile criteria={criteria} onView={(id) => setCompletedVisitId(id)}/>}
+                </>
+            )}
         </div>
     );
 }
 
 // ── Visit Form (Multi-step Wizard) ────────────────────────────────────────
-function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { criteria: Criterion[]; editingId: string | null; authedRole: VisitorRole; isOnline: boolean; onSaved: () => void }) {
+function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { criteria: Criterion[]; editingId: string | null; authedRole: VisitorRole; isOnline: boolean; onSaved: (id: string | null) => void }) {
     const existing = useQuery(api.supervision.getVisit, editingId ? { id: editingId as any } : "skip" as any) as Visit | null | undefined;
     const schoolTeachers = useQuery(api.supervision.getSchoolTeachers) as any[] | undefined;
     const supervisorsAll = useQuery(api.supervision.getSupervisors) as any[] | undefined;
     const saveVisit = useMutation(api.supervision.saveVisit);
+    const recommendationBank = useQuery(api.supervision.getRecommendationBank) as any[] | undefined;
+    const seedRecs = useMutation(api.supervision.seedDefaultRecommendations);
 
     const [step, setStep] = useState(1);
     const [visitorRole, setVisitorRole] = useState<VisitorRole>(authedRole);
-    const [visitorName, setVisitorName] = useState("");
+    const [visitorName, setVisitorName] = useState(getStoredRole()?.name ?? "");
     const [teacherName, setTeacherName] = useState("");
     const [teacherDepartment, setTeacherDepartment] = useState("");
     const [subjectName, setSubjectName] = useState("");
@@ -234,10 +282,12 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
     const [visitDate, setVisitDate] = useState(new Date().toISOString().slice(0, 10));
     const [followUpType, setFollowUpType] = useState<"full" | "partial">("full");
     const [ratings, setRatings] = useState<Record<string, number | "not_measured">>({});
+    const [praiseText, setPraiseText] = useState("");
     const [planningRec, setPlanningRec] = useState("");
     const [executionRec, setExecutionRec] = useState("");
     const [evalMgmtRec, setEvalMgmtRec] = useState("");
     const [notes, setNotes] = useState("");
+    const [recBankOpen, setRecBankOpen] = useState<string | null>(null); // which textarea has bank open
     const [saving, setSaving] = useState(false);
     const [searchTeacher, setSearchTeacher] = useState("");
 
@@ -254,6 +304,7 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
             setVisitDate(existing.visitDate);
             setFollowUpType(existing.followUpType);
             try { setRatings(JSON.parse(existing.ratings)); } catch {}
+            setPraiseText(existing.praiseText ?? "");
             setPlanningRec(existing.planningRec ?? "");
             setExecutionRec(existing.executionRec ?? "");
             setEvalMgmtRec(existing.evalMgmtRec ?? "");
@@ -329,18 +380,18 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                     ratings: ratings as any, planningRec, executionRec, evalMgmtRec, notes,
                     savedAt: Date.now(),
                 });
-                onSaved();
+                onSaved(null);
                 return;
             }
-            await saveVisit({
+            const savedId = await saveVisit({
                 id: editingId ? editingId as any : undefined,
                 visitorRole, visitorName, teacherName, teacherDepartment,
                 subjectName, className, lessonTopic, visitDate, followUpType,
                 ratings: JSON.stringify(ratings),
-                planningRec, executionRec, evalMgmtRec, notes,
+                praiseText, planningRec, executionRec, evalMgmtRec, notes,
                 status,
             });
-            onSaved();
+            onSaved(status === "submitted" ? (savedId as string) : null);
         } catch (e) {
             // Network error fallback
             saveOfflineDraft({
@@ -350,160 +401,238 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                 ratings: ratings as any, planningRec, executionRec, evalMgmtRec, notes,
                 savedAt: Date.now(),
             });
-            onSaved();
+            onSaved(null);
         } finally { setSaving(false); }
     };
 
+    // shared input / label class helpers
+    const inputCls = "w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-qatar-maroon bg-white font-bold text-slate-800 transition-colors placeholder:text-slate-300 placeholder:font-normal";
+    const labelCls = "block text-xs font-black text-slate-500 mb-2 tracking-wide uppercase";
+    const fieldCard = "bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden";
+    const sectionHeader = (color: string, title: string, subtitle?: string) => (
+        <div className="px-6 py-4 flex items-center gap-3" style={{ background: `linear-gradient(135deg,${color}18,${color}06)`, borderBottom: `1px solid ${color}22`, borderRight: `4px solid ${color}` }}>
+            <div>
+                <p className="font-black text-slate-800">{title}</p>
+                {subtitle && <p className="text-[11px] text-slate-400 font-bold mt-0.5">{subtitle}</p>}
+            </div>
+        </div>
+    );
+    const navBtn = (onClick: () => void, label: string, icon: React.ReactNode, disabled?: boolean, primary?: boolean) => (
+        <button onClick={onClick} disabled={disabled}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black transition-all ${
+                primary
+                    ? "text-white shadow-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+            style={primary ? { background: "linear-gradient(135deg,#5C1523,#7A1E30)" } : {}}>
+            {icon}{label}
+        </button>
+    );
+
     return (
         <div className="space-y-4">
-            {/* Step indicator */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3">
-                <div className="flex items-center justify-between gap-2">
+            {/* ── Step indicator ── */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <div className="flex items-center gap-0">
                     {[
-                        { n: 1, label: "الزائر والمعلم", icon: <User className="w-3.5 h-3.5"/> },
-                        { n: 2, label: "تفاصيل الحصة", icon: <BookOpen className="w-3.5 h-3.5"/> },
-                        { n: 3, label: "التقييم", icon: <ClipboardCheck className="w-3.5 h-3.5"/> },
-                        { n: 4, label: "التوصيات", icon: <FileText className="w-3.5 h-3.5"/> },
-                    ].map((s, i) => (
-                        <div key={s.n} className="flex items-center gap-1.5 flex-1">
-                            <button onClick={() => setStep(s.n)}
-                                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-black transition-all flex-1 justify-center ${
-                                    step === s.n ? "text-white shadow" : step > s.n ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-400"
-                                }`}
-                                style={step === s.n ? { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" } : {}}>
-                                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
-                                    step === s.n ? "bg-white/30" : step > s.n ? "bg-emerald-200" : "bg-slate-200"
-                                }`}>{step > s.n ? <Check className="w-3 h-3"/> : s.n}</span>
-                                <span className="hidden sm:inline">{s.label}</span>
-                            </button>
-                            {i < 3 && <div className={`h-0.5 w-2 ${step > s.n ? "bg-emerald-300" : "bg-slate-200"}`}/>}
-                        </div>
-                    ))}
+                        { n: 1, label: "الزائر والمعلم",  icon: <User className="w-4 h-4"/> },
+                        { n: 2, label: "تفاصيل الحصة",   icon: <BookOpen className="w-4 h-4"/> },
+                        { n: 3, label: "التقييم",          icon: <ClipboardCheck className="w-4 h-4"/> },
+                        { n: 4, label: "التوصيات",         icon: <FileText className="w-4 h-4"/> },
+                    ].map((s, i) => {
+                        const done = step > s.n;
+                        const active = step === s.n;
+                        return (
+                            <div key={s.n} className="flex items-center flex-1 min-w-0">
+                                <button onClick={() => setStep(s.n)} className="flex flex-col items-center flex-1 gap-1.5 py-2 px-1 rounded-xl transition-all group">
+                                    <span className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-sm transition-all
+                                        ${active ? "text-white shadow-lg scale-110" : done ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200"}`}
+                                        style={active ? { background: "linear-gradient(135deg,#5C1523,#7A1E30)", boxShadow: "0 4px 14px #5C152350" } : {}}>
+                                        {done ? <Check className="w-4 h-4"/> : s.icon}
+                                    </span>
+                                    <span className={`text-[10px] font-black hidden sm:block whitespace-nowrap ${active ? "text-qatar-maroon" : done ? "text-emerald-600" : "text-slate-400"}`}>{s.label}</span>
+                                </button>
+                                {i < 3 && (
+                                    <div className={`h-0.5 w-6 sm:w-10 flex-shrink-0 rounded-full transition-all ${done ? "bg-emerald-300" : "bg-slate-200"}`}/>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Step 1: Visitor + Teacher */}
+            {/* ── Step 1: Visitor + Teacher ── */}
             {step === 1 && (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3.5 border-b border-slate-100" style={{ background: "linear-gradient(135deg,#5C1A1B22,#5C1A1B0a)", borderRight: "4px solid #5C1A1B" }}>
-                        <span className="font-black text-slate-800 text-sm">بيانات الزائر والمعلم</span>
-                    </div>
-                    <div className="p-5 space-y-5">
-                        {/* Role selection */}
+                <div className={fieldCard}>
+                    {sectionHeader("#5C1523", "بيانات الزائر والمعلم", "اختر صفتك وحدد المعلم المُزار")}
+                    <div className="p-6 space-y-6">
+
+                        {/* Role */}
                         <div>
-                            <label className="block text-xs font-black text-slate-500 mb-2">صفة الزائر</label>
-                            <div className="grid grid-cols-3 gap-2">
+                            <p className={labelCls}>صفة الزائر</p>
+                            <div className="grid grid-cols-3 gap-3">
                                 {(Object.keys(ROLE_LABELS) as VisitorRole[]).map(r => {
                                     const sel = visitorRole === r;
                                     return (
                                         <button key={r} onClick={() => setVisitorRole(r)}
-                                            className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${sel ? "text-white border-transparent shadow-md" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                                            style={sel ? { background: ROLE_COLORS[r], boxShadow: `0 4px 12px ${ROLE_COLORS[r]}40` } : {}}>
+                                            className={`py-3.5 rounded-xl text-sm font-black transition-all border-2 ${sel ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"}`}
+                                            style={sel ? { background: `linear-gradient(135deg,${ROLE_COLORS[r]},${ROLE_COLORS[r]}cc)`, boxShadow: `0 4px 16px ${ROLE_COLORS[r]}45` } : {}}>
                                             {ROLE_LABELS[r]}
                                         </button>
                                     );
                                 })}
                             </div>
                         </div>
+
                         {/* Visitor name */}
                         <div>
-                            <label className="block text-xs font-black text-slate-500 mb-1.5">اسم الزائر</label>
-                            <input value={visitorName} onChange={e => setVisitorName(e.target.value)} list="visitor-suggestions"
-                                placeholder="اكتب اسم الزائر أو اختر من القائمة..."
-                                className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 font-bold text-slate-700"/>
+                            <p className={labelCls}>اسم الزائر</p>
+                            <div className="relative">
+                                <User className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                                <input value={visitorName} onChange={e => setVisitorName(e.target.value)} list="visitor-suggestions"
+                                    placeholder="اكتب الاسم الكامل..."
+                                    className={inputCls + " pr-11"}/>
+                            </div>
                             <datalist id="visitor-suggestions">
                                 {visitorSuggestions.map(n => <option key={n} value={n}/>)}
                             </datalist>
-                            <p className="text-[10px] text-slate-400 font-bold mt-1">تم تسجيل دخولك كـ <span className="font-black" style={{ color: ROLE_COLORS[authedRole] }}>{ROLE_LABELS[authedRole]}</span></p>
+                            <p className="text-[10px] text-slate-400 font-bold mt-1.5">
+                                مسجَّل دخولك كـ <span className="font-black" style={{ color: ROLE_COLORS[authedRole] }}>{ROLE_LABELS[authedRole]}</span>
+                            </p>
                         </div>
-                        {/* Teacher selection */}
+
+                        {/* Teacher */}
                         <div>
-                            <label className="block text-xs font-black text-slate-500 mb-1.5">المعلم المُقَيَّم</label>
-                            <div className="relative mb-2">
-                                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                            <p className={labelCls}>المعلم المُقَيَّم</p>
+                            <div className="relative mb-3">
+                                <Search className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
                                 <input value={searchTeacher} onChange={e => setSearchTeacher(e.target.value)}
                                     placeholder="بحث بالاسم أو القسم..."
-                                    className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
+                                    className={inputCls + " pr-11"}/>
                             </div>
                             {teacherName ? (
-                                <div className="flex items-center justify-between bg-emerald-50 border-2 border-emerald-200 rounded-xl px-4 py-3">
-                                    <div>
-                                        <p className="font-black text-emerald-800 text-sm">{teacherName}</p>
-                                        {teacherDepartment && <p className="text-xs text-emerald-600 font-bold mt-0.5">{teacherDepartment}</p>}
+                                <div className="flex items-center justify-between bg-emerald-50 border-2 border-emerald-200 rounded-xl px-4 py-3.5">
+                                    <div className="flex items-center gap-3">
+                                        <span className="w-9 h-9 rounded-full bg-emerald-200 flex items-center justify-center text-emerald-800 font-black text-sm">
+                                            {teacherName.charAt(0)}
+                                        </span>
+                                        <div>
+                                            <p className="font-black text-emerald-800 text-sm">{teacherName}</p>
+                                            {teacherDepartment && <p className="text-xs text-emerald-600 font-bold mt-0.5">{teacherDepartment}</p>}
+                                        </div>
                                     </div>
-                                    <button onClick={() => { setTeacherName(""); setTeacherDepartment(""); }}
-                                        className="text-emerald-600 hover:bg-emerald-100 p-1.5 rounded-lg">
+                                    <button onClick={() => { setTeacherName(""); setTeacherDepartment(""); setSubjectName(""); }}
+                                        className="p-2 rounded-xl text-emerald-600 hover:bg-emerald-100 transition-colors">
                                         <X className="w-4 h-4"/>
                                     </button>
                                 </div>
                             ) : (
-                                <div className="border-2 border-slate-100 rounded-xl max-h-64 overflow-y-auto bg-slate-50">
+                                <div className="border-2 border-slate-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
                                     {filteredTeachers.length === 0 ? (
-                                        <p className="text-xs text-slate-400 font-bold text-center py-6">لا يوجد معلمون — أضفهم أولاً من قسم الاستبانات أو استورد قائمة المدرسة</p>
-                                    ) : filteredTeachers.slice(0, 60).map(t => (
-                                        <button key={t.name} onClick={() => { setTeacherName(t.name); setTeacherDepartment(t.department ?? ""); }}
-                                            className="w-full text-right px-4 py-2.5 hover:bg-white border-b border-slate-100 last:border-b-0 transition-colors">
-                                            <p className="font-bold text-slate-700 text-sm">{t.name}</p>
-                                            {t.department && <p className="text-[10px] text-slate-400 font-bold">{t.department}</p>}
+                                        <div className="py-8 text-center">
+                                            <User className="w-8 h-8 mx-auto text-slate-300 mb-2"/>
+                                            <p className="text-xs text-slate-400 font-bold">لا يوجد معلمون — أضفهم من قسم الاستبانات</p>
+                                        </div>
+                                    ) : filteredTeachers.slice(0, 60).map((t, idx) => (
+                                        <button key={t.name} onClick={() => { setTeacherName(t.name); setTeacherDepartment(t.department ?? ""); const mapped = departmentToSubject(t.department ?? ""); if (mapped) setSubjectName(mapped); }}
+                                            className={`w-full text-right px-4 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors ${idx < filteredTeachers.length - 1 ? "border-b border-slate-100" : ""}`}>
+                                            <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-black text-xs flex-shrink-0">
+                                                {t.name.charAt(0)}
+                                            </span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-slate-700 text-sm truncate">{t.name}</p>
+                                                {t.department && <p className="text-[11px] text-slate-400 font-bold">{t.department}</p>}
+                                            </div>
                                         </button>
                                     ))}
                                 </div>
                             )}
                         </div>
-                        <div className="flex justify-end pt-2">
-                            <button onClick={() => setStep(2)} disabled={!canStep2}
-                                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-qatar-maroon text-white text-sm font-black hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
-                                التالي <ChevronLeft className="w-4 h-4"/>
-                            </button>
+
+                        <div className="flex justify-end pt-1">
+                            {navBtn(() => setStep(2), "التالي", <ChevronLeft className="w-4 h-4"/>, !canStep2, true)}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Step 2: Lesson details */}
+            {/* ── Step 2: Lesson details ── */}
             {step === 2 && (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3.5 border-b border-slate-100" style={{ background: "linear-gradient(135deg,#3b82f622,#3b82f60a)", borderRight: "4px solid #3b82f6" }}>
-                        <span className="font-black text-slate-800 text-sm">تفاصيل الحصة</span>
-                    </div>
-                    <div className="p-5 space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className={fieldCard}>
+                    {sectionHeader("#3b82f6", "تفاصيل الحصة", "معلومات المادة والدرس والتاريخ")}
+                    <div className="p-6 space-y-5">
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
-                                <label className="block text-xs font-black text-slate-500 mb-1.5">المادة</label>
-                                <select value={subjectName} onChange={e => setSubjectName(e.target.value)}
-                                    className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 font-bold text-slate-700">
-                                    <option value="">— اختر المادة —</option>
-                                    {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className={labelCls + " mb-0"}>المادة الدراسية</p>
+                                    {subjectName && departmentToSubject(teacherDepartment) === subjectName && (
+                                        <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
+                                            <Check className="w-3 h-3"/>تم التعبئة تلقائياً
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="relative">
+                                    <select value={subjectName} onChange={e => setSubjectName(e.target.value)}
+                                        className={inputCls + " appearance-none cursor-pointer"}>
+                                        <option value="">اختر المادة...</option>
+                                        {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <ChevronLeft className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none rotate-[-90deg]"/>
+                                </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-500 mb-1.5">الصف</label>
-                                <input value={className} onChange={e => setClassName(e.target.value)}
-                                    placeholder="مثال: حادي عشر 3"
-                                    className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 font-bold text-slate-700"/>
+                                <p className={labelCls}>الصف الدراسي</p>
+                                <div className="relative">
+                                    <GraduationCap className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                                    <input value={className} onChange={e => setClassName(e.target.value)}
+                                        placeholder="مثال: حادي عشر 3"
+                                        className={inputCls + " pr-11"}/>
+                                </div>
                             </div>
                         </div>
+
                         <div>
-                            <label className="block text-xs font-black text-slate-500 mb-1.5">عنوان الدرس / الموضوع</label>
-                            <input value={lessonTopic} onChange={e => setLessonTopic(e.target.value)}
-                                placeholder="مثال: الحركة التوافقية البسيطة"
-                                className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50 font-bold text-slate-700"/>
+                            <p className={labelCls}>عنوان الدرس / الموضوع</p>
+                            <div className="relative">
+                                <BookOpen className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                                <input value={lessonTopic} onChange={e => setLessonTopic(e.target.value)}
+                                    placeholder="مثال: الحركة التوافقية البسيطة"
+                                    className={inputCls + " pr-11"}/>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                        {/* Praise */}
+                        <div className="rounded-xl border-2 border-amber-200 overflow-hidden" style={{ background: "linear-gradient(135deg,#fef9ee,#fffbf0)" }}>
+                            <div className="px-4 py-2.5 flex items-center gap-2 border-b border-amber-100">
+                                <span className="text-amber-500 text-base">★</span>
+                                <p className="text-xs font-black text-amber-700 tracking-wide uppercase">إطراء وشكر للمعلم (اختياري)</p>
+                            </div>
+                            <div className="p-4">
+                                <textarea value={praiseText} onChange={e => setPraiseText(e.target.value)} rows={2}
+                                    placeholder="اكتب ما يُثنى عليه المعلم في هذه الزيارة..."
+                                    className="w-full bg-transparent border-none outline-none text-sm font-bold text-slate-700 resize-none leading-relaxed placeholder:text-amber-300 placeholder:font-normal"/>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
-                                <label className="block text-xs font-black text-slate-500 mb-1.5">تاريخ الزيارة</label>
-                                <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} dir="ltr"
-                                    className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
+                                <p className={labelCls}>تاريخ الزيارة</p>
+                                <div className="relative">
+                                    <Calendar className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                                    <input type="date" value={visitDate} onChange={e => setVisitDate(e.target.value)} dir="ltr"
+                                        className={inputCls + " pr-11 text-right"}/>
+                                </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-500 mb-1.5">نوع المتابعة</label>
+                                <p className={labelCls}>نوع المتابعة</p>
                                 <div className="grid grid-cols-2 gap-2">
                                     {(["full", "partial"] as const).map(t => {
                                         const sel = followUpType === t;
                                         return (
                                             <button key={t} onClick={() => setFollowUpType(t)}
-                                                className={`py-2.5 rounded-xl text-sm font-black transition-all border-2 ${sel ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-600"}`}
-                                                style={sel ? { background: "linear-gradient(135deg,#5C1A1B,#7A2425)" } : {}}>
+                                                className={`py-3 rounded-xl text-sm font-black transition-all border-2 ${sel ? "text-white border-transparent shadow-md" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                                                style={sel ? { background: "linear-gradient(135deg,#5C1523,#7A1E30)", boxShadow: "0 4px 14px #5C152345" } : {}}>
                                                 {FOLLOW_UP[t]}
                                             </button>
                                         );
@@ -511,33 +640,31 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                                 </div>
                             </div>
                         </div>
-                        <div className="flex justify-between pt-2">
-                            <button onClick={() => setStep(1)}
-                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-black hover:bg-slate-200">
-                                <ChevronRight className="w-4 h-4"/> السابق
-                            </button>
-                            <button onClick={() => setStep(3)} disabled={!canStep3}
-                                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-qatar-maroon text-white text-sm font-black hover:opacity-90 disabled:opacity-40">
-                                التالي <ChevronLeft className="w-4 h-4"/>
-                            </button>
+
+                        <div className="flex justify-between pt-1">
+                            {navBtn(() => setStep(1), "السابق", <ChevronRight className="w-4 h-4"/>)}
+                            {navBtn(() => setStep(3), "التالي", <ChevronLeft className="w-4 h-4"/>, !canStep3, true)}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Step 3: Ratings */}
+            {/* ── Step 3: Ratings ── */}
             {step === 3 && (
                 <div className="space-y-4">
                     {/* Scale legend */}
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                        <div className="px-5 py-2.5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-                            <span className="text-[11px] font-black text-slate-400">{previewAvgs.ratedCount}/{previewAvgs.totalCount}</span>
-                            <span className="text-[11px] font-black text-slate-500">مقياس التقييم</span>
+                    <div className={fieldCard}>
+                        <div className="px-5 py-3 flex items-center justify-between border-b border-slate-100 bg-slate-50">
+                            <span className="text-xs font-black text-slate-500">
+                                تم تقييم <span className="text-slate-800">{previewAvgs.ratedCount}</span> من <span className="text-slate-800">{previewAvgs.totalCount}</span> معيار
+                            </span>
+                            <span className="text-xs font-black text-slate-500">مقياس التقييم</span>
                         </div>
                         <div className="grid grid-cols-5">
                             {RATING_OPTS.map((o, i) => (
-                                <div key={o.val} className={`py-2.5 px-1 text-center ${i < 4 ? "border-l border-slate-100" : ""}`}
-                                    style={{ background: o.color + "10" }}>
+                                <div key={o.val} className={`py-3 px-2 text-center ${i < 4 ? "border-l border-slate-100" : ""}`}
+                                    style={{ background: o.color + "12" }}>
+                                    <div className="w-2.5 h-2.5 rounded-full mx-auto mb-1.5" style={{ background: o.color }}/>
                                     <p className="text-[10px] font-black leading-tight" style={{ color: o.color }}>{o.short}</p>
                                 </div>
                             ))}
@@ -549,41 +676,42 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                         if (dCriteria.length === 0) return null;
                         const dRated = dCriteria.filter(c => ratings[c._id] !== undefined).length;
                         const dColor = DOMAIN_COLORS[domain];
+                        const pct = dRated / dCriteria.length;
                         return (
-                            <div key={domain} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                                <div className="px-5 py-3.5 flex items-center justify-between" style={{ background: `linear-gradient(135deg,${dColor}22,${dColor}0a)`, borderRight: `4px solid ${dColor}` }}>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-sm" style={{ background: dColor }}>
-                                            {dRated}/{dCriteria.length}
-                                        </span>
-                                        <div className="w-16 h-1.5 rounded-full bg-white/60 overflow-hidden">
-                                            <div className="h-full rounded-full transition-all duration-500"
-                                                style={{ width: `${(dRated / dCriteria.length) * 100}%`, background: dColor }}/>
+                            <div key={domain} className={fieldCard}>
+                                <div className="px-5 py-4 flex items-center justify-between" style={{ background: `linear-gradient(135deg,${dColor}18,${dColor}06)`, borderBottom: `1px solid ${dColor}20`, borderRight: `4px solid ${dColor}` }}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-right">
+                                            <span className="text-xs font-black" style={{ color: dColor }}>{dRated}/{dCriteria.length} معيار</span>
+                                            <div className="w-20 h-1.5 rounded-full mt-1 overflow-hidden" style={{ background: dColor + "25" }}>
+                                                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct * 100}%`, background: dColor }}/>
+                                            </div>
                                         </div>
                                     </div>
-                                    <span className="font-black text-slate-800 text-sm">{DOMAIN_LABELS[domain]}</span>
+                                    <span className="font-black text-slate-800">{DOMAIN_LABELS[domain]}</span>
                                 </div>
-                                <div className="bg-white p-3 space-y-2">
+                                <div className="p-4 space-y-3">
                                     {dCriteria.map((c, i) => {
                                         const cur = ratings[c._id];
                                         const hasAns = cur !== undefined;
+                                        const selOpt = RATING_OPTS.find(o => o.val === cur);
                                         return (
-                                            <div key={c._id} className="rounded-xl p-3 border transition-all"
-                                                style={{ background: hasAns ? `${dColor}08` : "#f8fafc", borderColor: hasAns ? `${dColor}30` : "#f1f5f9" }}>
-                                                <div className="flex items-start gap-2 mb-2.5">
-                                                    <span className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-black flex-shrink-0"
+                                            <div key={c._id} className="rounded-xl border-2 transition-all overflow-hidden"
+                                                style={{ borderColor: hasAns ? `${selOpt?.color ?? dColor}40` : "#e2e8f0", background: hasAns ? `${selOpt?.color ?? dColor}08` : "white" }}>
+                                                <div className="flex items-start gap-3 p-3 pb-2.5">
+                                                    <span className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-black flex-shrink-0 mt-0.5"
                                                         style={{ background: dColor }}>{i + 1}</span>
                                                     <p className="text-[13px] font-bold text-slate-700 leading-relaxed flex-1">{c.text}</p>
                                                 </div>
-                                                <div className="grid grid-cols-5 gap-1.5">
+                                                <div className="grid grid-cols-5 gap-0 px-3 pb-3">
                                                     {RATING_OPTS.map(o => {
                                                         const sel = cur === o.val;
                                                         return (
                                                             <button key={o.val} onClick={() => setRate(c._id, o.val as any)}
-                                                                className={`py-2 rounded-xl text-[10px] font-black text-center transition-all border leading-tight ${
-                                                                    sel ? "text-white border-transparent shadow-md scale-105" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200 hover:bg-slate-50"
+                                                                className={`py-2 mx-0.5 rounded-lg text-[10px] font-black text-center transition-all leading-tight border ${
+                                                                    sel ? "text-white border-transparent shadow-sm scale-105" : "bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50"
                                                                 }`}
-                                                                style={sel ? { background: o.color, boxShadow: `0 4px 12px ${o.color}40` } : {}}>
+                                                                style={sel ? { background: o.color, boxShadow: `0 2px 8px ${o.color}50` } : {}}>
                                                                 {o.short}
                                                             </button>
                                                         );
@@ -597,72 +725,99 @@ function VisitForm({ criteria, editingId, authedRole, isOnline, onSaved }: { cri
                         );
                     })}
 
-                    <div className="flex justify-between pt-2">
-                        <button onClick={() => setStep(2)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-black hover:bg-slate-200">
-                            <ChevronRight className="w-4 h-4"/> السابق
-                        </button>
-                        <button onClick={() => setStep(4)}
-                            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-qatar-maroon text-white text-sm font-black hover:opacity-90">
-                            التالي <ChevronLeft className="w-4 h-4"/>
-                        </button>
+                    <div className="flex justify-between pt-1">
+                        {navBtn(() => setStep(2), "السابق", <ChevronRight className="w-4 h-4"/>)}
+                        {navBtn(() => setStep(4), "التالي", <ChevronLeft className="w-4 h-4"/>, false, true)}
                     </div>
                 </div>
             )}
 
-            {/* Step 4: Recommendations + Submit */}
+            {/* ── Step 4: Recommendations + Submit ── */}
             {step === 4 && (
                 <div className="space-y-4">
-                    {/* Preview averages */}
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                        <p className="text-xs font-black text-slate-500 mb-3">المعدلات المحسوبة</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {/* Averages preview */}
+                    <div className={fieldCard}>
+                        <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50">
+                            <p className="text-xs font-black text-slate-500">ملخص نتائج التقييم</p>
+                        </div>
+                        <div className="p-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
                             {DOMAIN_ORDER.map(d => (
-                                <div key={d} className="rounded-xl p-3 text-center" style={{ background: DOMAIN_COLORS[d] + "15" }}>
-                                    <p className="text-[10px] font-black mb-0.5" style={{ color: DOMAIN_COLORS[d] }}>{DOMAIN_LABELS[d]}</p>
-                                    <p className="text-xl font-black" style={{ color: DOMAIN_COLORS[d] }}>{(previewAvgs.domain[d] * 100).toFixed(0)}%</p>
+                                <div key={d} className="rounded-xl p-3 text-center border border-slate-100" style={{ background: DOMAIN_COLORS[d] + "0d" }}>
+                                    <p className="text-[10px] font-black mb-1" style={{ color: DOMAIN_COLORS[d] }}>{DOMAIN_LABELS[d]}</p>
+                                    <p className="text-2xl font-black leading-none" style={{ color: DOMAIN_COLORS[d] }}>{(previewAvgs.domain[d] * 100).toFixed(0)}<span className="text-xs">%</span></p>
                                 </div>
                             ))}
-                            <div className="rounded-xl p-3 text-center bg-qatar-maroon/10">
-                                <p className="text-[10px] font-black mb-0.5 text-qatar-maroon">المعدل العام</p>
-                                <p className="text-xl font-black text-qatar-maroon">{(previewAvgs.overall * 100).toFixed(0)}%</p>
+                            <div className="rounded-xl p-3 text-center border-2 border-qatar-maroon/20" style={{ background: "#5C15230d" }}>
+                                <p className="text-[10px] font-black mb-1 text-qatar-maroon">المعدل العام</p>
+                                <p className="text-2xl font-black leading-none text-qatar-maroon">{(previewAvgs.overall * 100).toFixed(0)}<span className="text-xs">%</span></p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Recommendations */}
-                    {[
-                        { label: "توصيات التخطيط", val: planningRec, set: setPlanningRec, color: "#3b82f6" },
-                        { label: "توصيات تنفيذ الدرس", val: executionRec, set: setExecutionRec, color: "#10b981" },
-                        { label: "توصيات التقويم والإدارة الصفية", val: evalMgmtRec, set: setEvalMgmtRec, color: "#f59e0b" },
-                        { label: "ملاحظات وتوصيات عامة", val: notes, set: setNotes, color: "#64748b" },
-                    ].map(({ label, val, set, color }) => (
-                        <div key={label} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                            <div className="px-5 py-3.5 border-b border-slate-100" style={{ background: `linear-gradient(135deg,${color}22,${color}0a)`, borderRight: `4px solid ${color}` }}>
+                    {/* Recommendation fields */}
+                    {([
+                        { label: "توصيات التخطيط", val: planningRec, set: setPlanningRec, color: "#3b82f6", bankKey: "planning-rec", domains: ["planning","general"] },
+                        { label: "توصيات تنفيذ الدرس", val: executionRec, set: setExecutionRec, color: "#10b981", bankKey: "execution-rec", domains: ["execution","general"] },
+                        { label: "توصيات التقويم والإدارة الصفية", val: evalMgmtRec, set: setEvalMgmtRec, color: "#f59e0b", bankKey: "eval-rec", domains: ["evaluation","management","general"] },
+                        { label: "ملاحظات وتوصيات عامة", val: notes, set: setNotes, color: "#64748b", bankKey: "notes-rec", domains: ["general","planning","execution","evaluation","management"] },
+                    ] as const).map(({ label, val, set, color, bankKey, domains }) => {
+                        const bankItems = (recommendationBank ?? []).filter(r => r.isActive && (domains as readonly string[]).includes(r.domain));
+                        const isOpen = recBankOpen === bankKey;
+                        return (
+                        <div key={bankKey} className={fieldCard}>
+                            <div className="px-5 py-3.5 flex items-center justify-between" style={{ background: `linear-gradient(135deg,${color}18,${color}06)`, borderBottom: `1px solid ${color}20`, borderRight: `4px solid ${color}` }}>
+                                <button onClick={() => setRecBankOpen(isOpen ? null : bankKey)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black transition-all border ${isOpen ? "text-white border-transparent" : "border-current bg-white/60 hover:bg-white"}`}
+                                    style={isOpen ? { background: color } : { color }}>
+                                    <BookOpen className="w-3.5 h-3.5"/>
+                                    بنك التوصيات {bankItems.length > 0 && `(${bankItems.length})`}
+                                </button>
                                 <span className="font-black text-slate-800 text-sm">{label}</span>
                             </div>
+                            {isOpen && (
+                                <div className="border-b border-slate-100 p-4" style={{ background: color + "08" }}>
+                                    {bankItems.length > 0 ? (
+                                        <>
+                                            <p className="text-[10px] font-black text-slate-400 mb-2.5">اضغط لإضافة التوصية للنص</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {bankItems.map((r: any) => (
+                                                    <button key={r._id}
+                                                        onClick={() => { set((v: string) => v ? v + "\n" + r.text : r.text); }}
+                                                        className="text-right px-3 py-2 rounded-xl border-2 text-xs font-bold text-slate-700 bg-white hover:shadow-md transition-all text-start leading-snug"
+                                                        style={{ borderColor: color + "40" }}>
+                                                        {r.text}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center py-2">
+                                            <p className="text-xs font-bold text-slate-400 mb-2">لا توجد توصيات بعد</p>
+                                            <button onClick={async () => { await seedRecs({}); }}
+                                                className="text-xs font-black text-qatar-maroon underline">تحميل التوصيات الافتراضية</button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <div className="p-4">
                                 <textarea value={val} onChange={e => set(e.target.value)} rows={4}
-                                    placeholder="اكتب التوصيات هنا..."
-                                    className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 text-sm focus:outline-none resize-none bg-slate-50 font-bold text-slate-700 leading-relaxed"
-                                    style={{ borderColor: undefined }}/>
+                                    placeholder="اكتب التوصيات هنا أو اختر من البنك أعلاه..."
+                                    className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-qatar-maroon resize-none bg-white font-bold text-slate-800 leading-relaxed placeholder:text-slate-300 placeholder:font-normal transition-colors"/>
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
 
-                    <div className="flex justify-between pt-2 gap-2 flex-wrap">
-                        <button onClick={() => setStep(3)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-black hover:bg-slate-200">
-                            <ChevronRight className="w-4 h-4"/> السابق
-                        </button>
+                    <div className="flex justify-between pt-1 gap-2 flex-wrap">
+                        {navBtn(() => setStep(3), "السابق", <ChevronRight className="w-4 h-4"/>)}
                         <div className="flex gap-2 flex-wrap">
                             <button onClick={() => handleSave("draft")} disabled={saving}
-                                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-black hover:bg-slate-200 disabled:opacity-50">
-                                <Save className="w-4 h-4"/>حفظ كمسودة
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-black hover:bg-slate-200 disabled:opacity-50 transition-colors">
+                                <Save className="w-4 h-4"/>حفظ مسودة
                             </button>
                             <button onClick={() => handleSave("submitted")} disabled={saving || !canStep2 || !canStep3}
-                                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-white text-sm font-black hover:opacity-90 disabled:opacity-40 qatar-card-shadow"
-                                style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
+                                className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-black hover:opacity-90 disabled:opacity-40 shadow-md transition-all"
+                                style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)", boxShadow: "0 4px 16px #5C152345" }}>
                                 <Send className="w-4 h-4"/>{saving ? "جارٍ الحفظ..." : editingId ? "حفظ التعديلات" : "تأكيد وإرسال"}
                             </button>
                         </div>
@@ -760,49 +915,72 @@ function VisitsList({ criteria, authedRole, offlineDrafts, onEdit, onView, onDra
                     <p className="font-black text-slate-400">لا توجد زيارات</p>
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                     {filtered.map(v => {
                         const isDraft = v.status === "draft";
-                        const score = (v.averageScore * 100).toFixed(0);
+                        const pct = v.averageScore;
+                        const scoreColor = pct >= 0.8 ? "#10b981" : pct >= 0.6 ? "#f59e0b" : "#ef4444";
+                        let domAvgs: Record<string, number> = {};
+                        try { domAvgs = JSON.parse(v.domainAverages || "{}"); } catch {}
                         return (
-                            <div key={v._id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div key={v._id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                                style={{ borderRight: `4px solid ${scoreColor}` }}>
                                 <div className="p-4">
-                                    <div className="flex items-start justify-between gap-3 mb-2">
+                                    {/* Top row */}
+                                    <div className="flex items-start justify-between gap-3 mb-3">
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-[10px] font-black px-2 py-0.5 rounded text-white" style={{ background: ROLE_COLORS[v.visitorRole as VisitorRole] }}>
+                                            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-white" style={{ background: ROLE_COLORS[v.visitorRole as VisitorRole] }}>
                                                     {ROLE_LABELS[v.visitorRole as VisitorRole]}
                                                 </span>
-                                                {isDraft && (
-                                                    <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-100 text-amber-700">مسودة</span>
-                                                )}
-                                                {v.teacherSignedAt && (
-                                                    <span className="text-[10px] font-black px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 flex items-center gap-1">
-                                                        <FileSignature className="w-2.5 h-2.5"/>موقَّعة
-                                                    </span>
-                                                )}
+                                                {isDraft && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">مسودة</span>}
+                                                {v.teacherSignedAt && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-0.5"><FileSignature className="w-2.5 h-2.5"/>موقَّع</span>}
+                                                <span className="text-[10px] font-bold text-slate-400">زيارة #{v.visitNumber}</span>
                                             </div>
-                                            <p className="font-black text-slate-800 text-sm">{v.teacherName}</p>
-                                            <p className="text-xs text-slate-500 font-bold mt-0.5">
-                                                {v.subjectName} · {v.className} · {v.lessonTopic}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                                                {v.visitDate} · زيارة #{v.visitNumber} · {v.visitorName}
-                                            </p>
+                                            <p className="font-black text-slate-800 text-base">{v.teacherName}</p>
+                                            <p className="text-xs text-slate-500 font-bold mt-0.5">{v.subjectName} · {v.className}</p>
+                                            <p className="text-[11px] text-slate-400 font-bold mt-0.5 truncate">{v.lessonTopic}</p>
+                                            <p className="text-[10px] text-slate-300 font-bold mt-0.5">{v.visitDate} · {v.visitorName}</p>
                                         </div>
-                                        <div className="text-center flex-shrink-0">
-                                            <p className="text-2xl font-black" style={{ color: v.averageScore >= 0.8 ? "#10b981" : v.averageScore >= 0.6 ? "#f59e0b" : "#ef4444" }}>{score}%</p>
-                                            <p className="text-[9px] font-bold text-slate-400">معدل عام</p>
+                                        {/* Score circle */}
+                                        <div className="flex-shrink-0">
+                                            <ScoreGauge pct={pct} size={72}/>
                                         </div>
                                     </div>
-                                    <div className="flex gap-1.5 pt-2 border-t border-slate-100">
+                                    {/* Domain mini-bars */}
+                                    {!isDraft && (
+                                        <div className="grid grid-cols-4 gap-1.5 mb-3">
+                                            {DOMAIN_ORDER.map(d => {
+                                                const val = domAvgs[d] ?? 0;
+                                                const c = DOMAIN_COLORS[d];
+                                                return (
+                                                    <div key={d}>
+                                                        <div className="flex justify-between mb-0.5">
+                                                            <span className="text-[9px] font-black" style={{ color: c }}>{(val * 100).toFixed(0)}%</span>
+                                                        </div>
+                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className="h-full rounded-full" style={{ width: `${val * 100}%`, background: c }}/>
+                                                        </div>
+                                                        <p className="text-[8px] font-black text-slate-400 mt-0.5 truncate">{DOMAIN_LABELS[d]}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {/* Action buttons */}
+                                    <div className="flex gap-1.5 pt-2 border-t border-slate-50">
                                         <button onClick={() => onView(v._id)}
-                                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 text-[11px] font-black">
-                                            <Eye className="w-3 h-3"/>عرض/تعديل
+                                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-white text-[11px] font-black hover:opacity-90"
+                                            style={{ background: scoreColor }}>
+                                            <Eye className="w-3 h-3"/>التقرير الكامل
+                                        </button>
+                                        <button onClick={() => onEdit(v._id)}
+                                            className="flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 text-[11px] font-black">
+                                            <Pencil className="w-3 h-3"/>تعديل
                                         </button>
                                         <button onClick={() => window.open(`/supervision/print/${v._id}`, "_blank")}
                                             className="flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-black">
-                                            <Printer className="w-3 h-3"/>طباعة
+                                            <Printer className="w-3 h-3"/>
                                         </button>
                                         <button onClick={async () => {
                                             if (v.teacherSignedAt) { alert("لا يمكن حذف زيارة موقَّعة من المعلم"); return; }
@@ -811,8 +989,8 @@ function VisitsList({ criteria, authedRole, offlineDrafts, onEdit, onView, onDra
                                                 catch (e: any) { alert(e.message ?? "تعذر الحذف"); }
                                             }
                                         }}
-                                            className="flex items-center justify-center py-1.5 px-3 rounded-lg bg-red-50 text-red-500 hover:bg-red-100">
-                                            <Trash2 className="w-3.5 h-3.5"/>
+                                            className="flex items-center justify-center py-1.5 px-2.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100">
+                                            <Trash2 className="w-3 h-3"/>
                                         </button>
                                     </div>
                                 </div>
@@ -826,7 +1004,7 @@ function VisitsList({ criteria, authedRole, offlineDrafts, onEdit, onView, onDra
 }
 
 // ── Teacher File (View teacher's visits + sign) ───────────────────────────
-function TeacherFile({ criteria }: { criteria: Criterion[] }) {
+function TeacherFile({ criteria, onView }: { criteria: Criterion[]; onView?: (id: string) => void }) {
     const visits = useQuery(api.supervision.getVisits, {}) as Visit[] | undefined;
     const signVisit = useMutation(api.supervision.signVisitAsTeacher);
     const [selectedTeacher, setSelectedTeacher] = useState<string>("");
@@ -867,12 +1045,20 @@ function TeacherFile({ criteria }: { criteria: Criterion[] }) {
                         const avg = tVisits.length > 0 ? tVisits.reduce((a, v) => a + v.averageScore, 0) / tVisits.length : 0;
                         return (
                             <button key={t} onClick={() => setSelectedTeacher(t)}
-                                className="w-full text-right px-4 py-3 hover:bg-slate-50 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-base font-black" style={{ color: avg >= 0.8 ? "#10b981" : avg >= 0.6 ? "#f59e0b" : "#ef4444" }}>{(avg * 100).toFixed(0)}%</span>
-                                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{tVisits.length} زيارة</span>
+                                className="w-full text-right px-4 py-3.5 hover:bg-slate-50 flex items-center gap-3 transition-colors">
+                                <span className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                                    style={{ background: avg >= 0.8 ? "#10b981" : avg >= 0.6 ? "#f59e0b" : "#ef4444" }}>
+                                    {t.charAt(0)}
+                                </span>
+                                <div className="flex-1 min-w-0 text-right">
+                                    <p className="font-black text-slate-800 text-sm truncate">{t}</p>
+                                    <p className="text-[11px] text-slate-400 font-bold mt-0.5">{tVisits.length} زيارة</p>
                                 </div>
-                                <p className="font-black text-slate-700 text-sm">{t}</p>
+                                <div className="flex-shrink-0 text-left">
+                                    <span className="text-lg font-black" style={{ color: avg >= 0.8 ? "#10b981" : avg >= 0.6 ? "#f59e0b" : "#ef4444" }}>
+                                        {(avg * 100).toFixed(0)}%
+                                    </span>
+                                </div>
                             </button>
                         );
                     })}
@@ -909,8 +1095,9 @@ function TeacherFile({ criteria }: { criteria: Criterion[] }) {
                                 {(v.averageScore * 100).toFixed(0)}%
                             </p>
                         </div>
-                        {(v.planningRec || v.executionRec || v.evalMgmtRec || v.notes) && (
+                        {(v.praiseText || v.planningRec || v.executionRec || v.evalMgmtRec || v.notes) && (
                             <div className="space-y-2 pt-2 border-t border-slate-100">
+                                {v.praiseText && <RecBlock label="★ إطراء" text={v.praiseText} color="#d97706"/>}
                                 {v.planningRec && <RecBlock label="توصيات التخطيط" text={v.planningRec} color="#3b82f6"/>}
                                 {v.executionRec && <RecBlock label="توصيات تنفيذ الدرس" text={v.executionRec} color="#10b981"/>}
                                 {v.evalMgmtRec && <RecBlock label="توصيات التقويم والإدارة" text={v.evalMgmtRec} color="#f59e0b"/>}
@@ -918,6 +1105,10 @@ function TeacherFile({ criteria }: { criteria: Criterion[] }) {
                             </div>
                         )}
                         <div className="flex gap-2 pt-2 mt-2 border-t border-slate-100">
+                            {onView && <button onClick={() => onView(v._id)}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-50 text-slate-600 text-[11px] font-black hover:bg-slate-100">
+                                <Eye className="w-3 h-3"/>التقرير الكامل
+                            </button>}
                             <button onClick={() => window.open(`/supervision/print/${v._id}`, "_blank")}
                                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-[11px] font-black hover:bg-blue-100">
                                 <Printer className="w-3 h-3"/>طباعة
@@ -928,16 +1119,275 @@ function TeacherFile({ criteria }: { criteria: Criterion[] }) {
                                     await signVisit({ id: v._id as any });
                                 }}
                                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-[11px] font-black hover:bg-emerald-100">
-                                    <FileSignature className="w-3 h-3"/>توقيع المعلم
+                                    <FileSignature className="w-3 h-3"/>توقيع
                                 </button>
                             ) : (
                                 <span className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-[11px] font-black">
-                                    <CheckCircle2 className="w-3 h-3"/>موقَّع · {new Date(v.teacherSignedAt).toLocaleDateString("ar-EG")}
+                                    <CheckCircle2 className="w-3 h-3"/>موقَّع
                                 </span>
                             )}
                         </div>
                     </div>
                 ))}
+            </div>
+        </div>
+    );
+}
+
+// ── Visit Complete (Post-submission Premium Report) ───────────────────────
+function ScoreGauge({ pct, size = 120 }: { pct: number; size?: number }) {
+    const r = size * 0.38;
+    const circ = 2 * Math.PI * r;
+    const dash = circ * pct;
+    const color = pct >= 0.8 ? "#10b981" : pct >= 0.6 ? "#f59e0b" : "#ef4444";
+    const label = pct >= 0.8 ? "ممتاز" : pct >= 0.6 ? "جيد" : "يحتاج تطوير";
+    const cx = size / 2, cy = size / 2;
+    return (
+        <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+            <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth={size * 0.09}/>
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={size * 0.09}
+                    strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+                    style={{ transition: "stroke-dasharray 1s ease" }}/>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="font-black leading-none" style={{ fontSize: size * 0.22, color }}>{(pct * 100).toFixed(0)}%</span>
+                <span className="font-black leading-none mt-0.5" style={{ fontSize: size * 0.1, color: color + "cc" }}>{label}</span>
+            </div>
+        </div>
+    );
+}
+
+function VisitComplete({ visitId, criteria, onNewVisit, onGoList }: {
+    visitId: string; criteria: Criterion[];
+    onNewVisit: () => void; onGoList: () => void;
+}) {
+    const visit = useQuery(api.supervision.getVisit, { id: visitId as any }) as Visit | null | undefined;
+    const signVisit = useMutation(api.supervision.signVisitAsTeacher);
+
+    if (visit === undefined) return (
+        <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-qatar-maroon"/></div>
+    );
+    if (!visit) return (
+        <div className="text-center py-20 text-slate-400 font-bold">تعذر تحميل الزيارة</div>
+    );
+
+    let domAvgs: Record<string, number> = {};
+    try { domAvgs = JSON.parse(visit.domainAverages || "{}"); } catch {}
+    const score = visit.averageScore;
+    const scoreColor = score >= 0.8 ? "#10b981" : score >= 0.6 ? "#f59e0b" : "#ef4444";
+    const roleColor = ROLE_COLORS[visit.visitorRole as VisitorRole] ?? "#5C1523";
+
+    return (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Success header */}
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                >
+                <div className="p-5 sm:p-7">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                            <CheckCircle2 className="w-6 h-6 text-white"/>
+                        </div>
+                        <div>
+                            <p className="text-white/70 text-xs font-bold">تم حفظ الزيارة بنجاح</p>
+                            <p className="text-white font-black text-lg">زيارة #{visit.visitNumber}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-white">
+                        {[
+                            { label: "المعلم", val: visit.teacherName },
+                            { label: "المادة", val: visit.subjectName },
+                            { label: "الفصل", val: visit.className },
+                            { label: "التاريخ", val: visit.visitDate },
+                        ].map(({ label, val }) => (
+                            <div key={label} className="bg-white/15 rounded-xl px-3 py-2">
+                                <p className="text-white/60 text-[10px] font-bold">{label}</p>
+                                <p className="text-white font-black text-sm truncate">{val}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-3">
+                        <p className="text-white/70 text-[10px] font-bold">موضوع الدرس</p>
+                        <p className="text-white font-bold text-sm">{visit.lessonTopic}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Score + Domain breakdown */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-400">التقييم الإجمالي</span>
+                    <span className="text-xs font-black text-slate-600">نتائج الزيارة</span>
+                </div>
+                <div className="p-5">
+                    <div className="flex flex-col sm:flex-row items-center gap-6">
+                        {/* Gauge */}
+                        <div className="flex-shrink-0">
+                            <ScoreGauge pct={score} size={140}/>
+                        </div>
+                        {/* Domain bars */}
+                        <div className="flex-1 w-full space-y-3">
+                            {DOMAIN_ORDER.map(d => {
+                                const val = domAvgs[d] ?? 0;
+                                const c = DOMAIN_COLORS[d];
+                                return (
+                                    <div key={d}>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-black" style={{ color: c }}>{(val * 100).toFixed(0)}%</span>
+                                            <span className="text-xs font-black text-slate-600">{DOMAIN_LABELS[d]}</span>
+                                        </div>
+                                        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-full rounded-full transition-all duration-700"
+                                                style={{ width: `${val * 100}%`, background: `linear-gradient(90deg,${c},${c}cc)` }}/>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Rating scale legend */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                <p className="text-[10px] font-black text-slate-400 mb-3 text-center tracking-widest uppercase">مقياس التقييم</p>
+                <div className="grid grid-cols-5 gap-2">
+                    {RATING_OPTS.map(o => (
+                        <div key={o.val} className="rounded-xl py-2.5 px-1 text-center border" style={{ background: o.color + "12", borderColor: o.color + "30" }}>
+                            <div className="w-3 h-3 rounded-full mx-auto mb-1.5" style={{ background: o.color }}/>
+                            <p className="text-[10px] font-black leading-tight" style={{ color: o.color }}>{o.short}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Detailed criteria breakdown */}
+            {DOMAIN_ORDER.map(domain => {
+                const domCriteria = criteria.filter(c => c.isActive && c.domain === domain).sort((a, b) => a.order - b.order);
+                if (!domCriteria.length) return null;
+                let parsedRatings: Record<string, any> = {};
+                try { parsedRatings = JSON.parse(visit.ratings || "{}"); } catch {}
+                const dColor = DOMAIN_COLORS[domain];
+                const dPct = ((domAvgs[domain] ?? 0) * 100).toFixed(0);
+                const ratedCount = domCriteria.filter(c => parsedRatings[c._id] !== undefined).length;
+                return (
+                    <div key={domain} className="rounded-2xl overflow-hidden shadow-sm border" style={{ borderColor: dColor + "30" }}>
+                        {/* Domain header */}
+                        <div className="px-5 py-4 flex items-center justify-between gap-3"
+                            style={{ background: `linear-gradient(135deg,${dColor},${dColor}dd)` }}>
+                            <div className="flex items-center gap-2">
+                                <div className="bg-white/20 rounded-xl px-3 py-1.5 text-center min-w-[60px]">
+                                    <p className="text-white font-black text-xl leading-none">{dPct}<span className="text-sm">%</span></p>
+                                </div>
+                                <div className="h-8 w-px bg-white/20"/>
+                                <div>
+                                    <p className="text-white/70 text-[10px] font-bold">{ratedCount} من {domCriteria.length} معيار</p>
+                                    <div className="w-20 h-1 rounded-full bg-white/20 mt-1 overflow-hidden">
+                                        <div className="h-full rounded-full bg-white/70" style={{ width: `${(ratedCount/domCriteria.length)*100}%` }}/>
+                                    </div>
+                                </div>
+                            </div>
+                            <p className="text-white font-black text-base">{DOMAIN_LABELS[domain]}</p>
+                        </div>
+
+                        {/* Criteria rows */}
+                        <div className="bg-white">
+                            {domCriteria.map((c, i) => {
+                                const val = parsedRatings[c._id];
+                                const opt = RATING_OPTS.find(o => o.val === val);
+                                const isEven = i % 2 === 0;
+                                return (
+                                    <div key={c._id}
+                                        className="flex items-center gap-3 px-4 py-3 transition-colors"
+                                        style={{
+                                            background: opt ? `${opt.color}08` : isEven ? "#f8fafc" : "white",
+                                            borderBottom: i < domCriteria.length - 1 ? "1px solid #f1f5f9" : "none",
+                                            borderRight: opt ? `3px solid ${opt.color}50` : `3px solid transparent`,
+                                        }}>
+                                        {/* Number badge — RIGHT in RTL */}
+                                        <span className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-black flex-shrink-0 text-white"
+                                            style={{ background: opt ? opt.color : dColor + "60" }}>{i + 1}</span>
+                                        {/* Text */}
+                                        <p className="text-sm font-bold text-slate-700 flex-1 leading-relaxed">{c.text}</p>
+                                        {/* Rating badge — LEFT in RTL */}
+                                        {opt ? (
+                                            <span className="flex-shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-black text-white shadow-sm"
+                                                style={{ background: opt.color, boxShadow: `0 2px 8px ${opt.color}40` }}>
+                                                {opt.short}
+                                            </span>
+                                        ) : (
+                                            <span className="flex-shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-black bg-slate-100 text-slate-400">
+                                                —
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            })}
+
+            {/* Praise + Recommendations */}
+            {(visit.praiseText || visit.planningRec || visit.executionRec || visit.evalMgmtRec || visit.notes) && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
+                        <span className="font-black text-slate-700 text-sm">الإطراء والتوصيات</span>
+                    </div>
+                    <div className="p-4 space-y-3">
+                        {visit.praiseText && (
+                            <div className="rounded-xl p-4" style={{ background: "#fef3c7", borderRight: "4px solid #d97706" }}>
+                                <p className="text-[11px] font-black text-amber-700 mb-1.5">★ أشكر المعلم على</p>
+                                <p className="text-sm font-bold text-amber-900 leading-relaxed">{visit.praiseText}</p>
+                            </div>
+                        )}
+                        {visit.planningRec && <RecBlock label="توصيات التخطيط" text={visit.planningRec} color="#3b82f6"/>}
+                        {visit.executionRec && <RecBlock label="توصيات تنفيذ الدرس" text={visit.executionRec} color="#10b981"/>}
+                        {visit.evalMgmtRec && <RecBlock label="توصيات التقويم والإدارة الصفية" text={visit.evalMgmtRec} color="#f59e0b"/>}
+                        {visit.notes && <RecBlock label="ملاحظات وتوصيات عامة" text={visit.notes} color="#64748b"/>}
+                    </div>
+                </div>
+            )}
+
+            {/* Teacher signature */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                {visit.teacherSignedAt ? (
+                    <div className="flex items-center gap-3 text-emerald-700">
+                        <CheckCircle2 className="w-5 h-5"/>
+                        <div>
+                            <p className="font-black text-sm">تم توقيع المعلم</p>
+                            <p className="text-xs font-bold text-emerald-600">{new Date(visit.teacherSignedAt).toLocaleDateString("ar-QA")}</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <p className="text-xs font-bold text-slate-500">هل اطلع المعلم على الاستمارة ووافق عليها؟</p>
+                        <button onClick={async () => {
+                            if (!confirm("هل تؤكد اطلاعك على هذه الاستمارة وتوقيعك عليها؟")) return;
+                            await signVisit({ id: visitId as any });
+                        }}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-sm font-black hover:bg-emerald-100">
+                            <FileSignature className="w-4 h-4"/>توقيع المعلم
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 flex-wrap">
+                <button onClick={() => window.open(`/supervision/print/${visitId}`, "_blank")}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-black hover:bg-blue-100">
+                    <Printer className="w-4 h-4"/>طباعة الاستمارة
+                </button>
+                <button onClick={onNewVisit}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-sm font-black hover:opacity-90 qatar-card-shadow"
+                    style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
+                    <Plus className="w-4 h-4"/>زيارة جديدة
+                </button>
+                <button onClick={onGoList}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-black hover:bg-slate-200">
+                    <Layers className="w-4 h-4"/>قائمة الزيارات
+                </button>
             </div>
         </div>
     );

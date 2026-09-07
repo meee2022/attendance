@@ -31,20 +31,18 @@ export default function StatCard({ label, value, subValue, icon, color = "maroon
 
     return (
         <div className={`relative overflow-hidden rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow flex ${c.cardBg}`}>
-            {/* Colored side bar */}
-            <div className={`w-1.5 flex-shrink-0 rounded-r-none rounded-l-2xl ${c.bar}`} />
 
             {/* Card content */}
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 sm:py-5 flex-1 min-w-0 bg-white/70">
+            <div className="flex items-center justify-between gap-3 px-4 py-4 flex-1 min-w-0 bg-white/70">
                 {/* Text side */}
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
-                    <p className={`text-[10px] sm:text-xs font-black uppercase tracking-wider truncate ${c.labelText}`}>{label}</p>
-                    <p className="text-2xl sm:text-3xl font-black text-slate-800 leading-none">{value}</p>
-                    {subValue && <p className="text-[10px] sm:text-xs font-bold text-slate-400 truncate">{subValue}</p>}
+                    <p className={`text-xs font-medium leading-relaxed ${c.labelText}`}>{label}</p>
+                    <p className="text-2xl font-bold tabular-nums text-slate-800 leading-none">{value}</p>
+                    {subValue && <p className="text-[10px] sm:text-xs font-normal text-slate-500">{subValue}</p>}
                 </div>
 
                 {/* Icon side */}
-                <div className={`w-11 h-11 sm:w-13 sm:h-13 rounded-xl flex items-center justify-center flex-shrink-0 ${c.iconBg} ${c.iconText}`}>
+                <div className={`w-9 h-9 [&>svg]:w-5 [&>svg]:h-5 rounded-xl flex items-center justify-center flex-shrink-0 ${c.iconBg} ${c.iconText}`}>
                     {icon}
                 </div>
             </div>

@@ -3,13 +3,29 @@ import { useQuery, useMutation } from "convex/react";
 import * as xlsx from "xlsx";
 import {
     UserPlus, FileSpreadsheet, CheckCircle2, AlertCircle,
-    Users, GraduationCap, Layers, Phone, BookOpen, BarChart3
+    Users, GraduationCap, Layers, Phone, BookOpen, BarChart3, Trash2, Hash
 } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
+import { UNASSIGNED_LABEL, resolveClass } from "../../convex/classHelpers";
 import StatCard from "../components/StatCard";
 
-type ParsedRow = { fullName: string; className: string; phones: string };
+type ParsedRow = {
+    fullName: string;
+    className: string;   // raw section cell, e.g. "10/1" or "-"
+    phones: string;
+    nationalId: string;
+    sourceGrade: string; // raw "الصف" cell, e.g. "12-Science"
+};
+
+// Column aliases, so a sheet exported with slightly different headers still works.
+const COLUMNS = {
+    nationalId: ["الرقم", "الرقم الشخصي", "رقم الطالب", "ID"],
+    fullName:   ["الاسم", "اسم الطالب", "Name"],
+    grade:      ["الصف", "المرحلة", "Grade"],
+    section:    ["الشعبة الصفية", "الشعبة", "Class", "Section"],
+    phones:     ["رقم الهاتف", "رقم التليفون", "الهاتف", "Phone"],
+};
 
 const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
 const TRACK_COLORS: Record<string, string> = {
@@ -24,12 +40,17 @@ export default function ImportStudents() {
     // @ts-ignore
     const counts = useQuery(api.setup.getStudentCounts);
     const importStudents = useMutation(api.students.importStudentsFromSheet);
+    // @ts-ignore
+    const deleteAll = useMutation(api.students.deleteAllStudentsAndAttendance);
 
     const [file, setFile]               = useState<File | null>(null);
     const [parsedRows, setParsedRows]   = useState<ParsedRow[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [progress, setProgress]       = useState("");
+    const [replaceExisting, setReplaceExisting] = useState(false);
     const [result, setResult]           = useState<any>(null);
     const [importedRows, setImportedRows] = useState<ParsedRow[]>([]);
+    const [sheetNames, setSheetNames]   = useState<string[]>([]);
     const [error, setError]             = useState("");
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,22 +59,59 @@ export default function ImportStudents() {
         setFile(uploadedFile);
         setError("");
         setParsedRows([]);
+        setSheetNames([]);
         setResult(null);
 
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
                 const wb = xlsx.read(evt.target?.result, { type: "binary" });
-                const ws = wb.Sheets[wb.SheetNames[0]];
-                const rows = xlsx.utils.sheet_to_json<any>(ws);
                 const newRows: ParsedRow[] = [];
-                for (const row of rows) {
-                    const fullName = (row["الاسم"] || row["اسم الطالب"] || row["Name"] || "").toString().trim();
-                    const rawClass = (row["الشعبة الصفية"] || row["الشعبة"] || row["الصف"] || row["Class"] || "").toString().trim().replace(/\//g, "-");
-                    const phones   = (row["رقم الهاتف"] || row["رقم التليفون"] || row["الهاتف"] || row["Phone"] || "").toString().trim();
-                    if (fullName && rawClass) newRows.push({ fullName, className: rawClass, phones });
+
+                // سجل القيد splits the school across one sheet per grade — read them all.
+                for (const sheetName of wb.SheetNames) {
+                    const grid = xlsx.utils.sheet_to_json<any[]>(wb.Sheets[sheetName], {
+                        header: 1, raw: false, defval: "",
+                    });
+
+                    // The real header sits below a couple of title rows.
+                    const headerIndex = grid.findIndex(r =>
+                        r.some(cell => COLUMNS.fullName.includes(String(cell ?? "").trim())));
+                    if (headerIndex === -1) continue;
+
+                    const header = grid[headerIndex].map(c => String(c ?? "").trim());
+                    const columnOf = (aliases: string[]) =>
+                        header.findIndex(h => aliases.includes(h));
+
+                    const idx = {
+                        nationalId: columnOf(COLUMNS.nationalId),
+                        fullName:   columnOf(COLUMNS.fullName),
+                        grade:      columnOf(COLUMNS.grade),
+                        section:    columnOf(COLUMNS.section),
+                        phones:     columnOf(COLUMNS.phones),
+                    };
+                    if (idx.fullName === -1) continue;
+
+                    const cell = (row: any[], i: number) =>
+                        i === -1 ? "" : String(row[i] ?? "").trim();
+
+                    for (const row of grid.slice(headerIndex + 1)) {
+                        const fullName = cell(row, idx.fullName);
+                        if (!fullName) continue;
+                        newRows.push({
+                            fullName,
+                            nationalId: cell(row, idx.nationalId),
+                            sourceGrade: cell(row, idx.grade),
+                            className: cell(row, idx.section),
+                            phones: cell(row, idx.phones),
+                        });
+                    }
                 }
-                if (newRows.length === 0) setError("لم يتم العثور على بيانات. تأكد من الأعمدة: الاسم، الشعبة الصفية، رقم الهاتف");
+
+                if (newRows.length === 0) {
+                    setError("لم يتم العثور على بيانات. تأكد من الأعمدة: الرقم، الاسم، الصف، الشعبة الصفية، رقم الهاتف");
+                }
+                setSheetNames(wb.SheetNames);
                 setParsedRows(newRows);
             } catch {
                 setError("فشل في قراءة الملف. تأكد من صيغة Excel.");
@@ -67,10 +125,31 @@ export default function ImportStudents() {
         if (!data) return;
         const schoolId = data.schools[0]?._id;
         if (!schoolId || parsedRows.length === 0) { setError("لا يوجد بيانات للاستيراد."); return; }
+
+        if (replaceExisting && !window.confirm(
+            `سيتم حذف جميع الطلاب الحاليين (${counts?.total ?? "?"}) وسجلات الحضور والدرجات المرتبطة بهم نهائياً، ثم استيراد ${parsedRows.length} طالب. هل أنت متأكد؟`
+        )) return;
+
         setIsProcessing(true);
         setError("");
         try {
-            const res = await importStudents({ schoolId, rows: parsedRows });
+            if (replaceExisting) {
+                // The reset runs in batches; keep calling until it reports done.
+                let removed = 0;
+                for (let guard = 0; guard < 500; guard++) {
+                    const res: any = await deleteAll({ schoolId, includeGrades: true });
+                    removed += res.students;
+                    setProgress(`جاري حذف البيانات القديمة… (${removed} طالب)`);
+                    if (res.done) break;
+                }
+            }
+
+            setProgress("جاري استيراد الطلاب…");
+            const res = await importStudents({
+                schoolId,
+                rows: parsedRows,
+                deactivateMissingClasses: true,
+            });
             setResult(res);
             setImportedRows(parsedRows);
             setParsedRows([]);
@@ -79,8 +158,15 @@ export default function ImportStudents() {
             setError("خطأ أثناء الاستيراد: " + err.message);
         } finally {
             setIsProcessing(false);
+            setProgress("");
         }
     };
+
+    const activeClasses = (data?.classes ?? []).filter((c: any) => c.isActive !== false);
+
+    // Same resolution the mutation applies, so the preview matches what is saved.
+    const classNameFor = (r: ParsedRow) =>
+        resolveClass(r.sourceGrade, r.className)?.className ?? "—";
 
     // Build class breakdown (keyed by className)
     const classMap = useMemo(() => {
@@ -90,35 +176,38 @@ export default function ImportStudents() {
         return m;
     }, [data]);
 
-    // Per-class counts from parsedRows (preview)
-    const previewBreakdown = useMemo(() => {
+    const breakdownOf = (rows: ParsedRow[]) => {
         const counts: Record<string, number> = {};
-        parsedRows.forEach(r => { counts[r.className] = (counts[r.className] || 0) + 1; });
-        return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [parsedRows]);
+        rows.forEach(r => {
+            const cn = classNameFor(r);
+            counts[cn] = (counts[cn] || 0) + 1;
+        });
+        return Object.entries(counts)
+            .sort((a, b) => a[0].localeCompare(b[0], "ar", { numeric: true }));
+    };
+
+    // Per-class counts from parsedRows (preview)
+    const previewBreakdown = useMemo(() => breakdownOf(parsedRows), [parsedRows]);
 
     // Per-class counts from importedRows (result)
-    const resultBreakdown = useMemo(() => {
-        const counts: Record<string, number> = {};
-        importedRows.forEach(r => { counts[r.className] = (counts[r.className] || 0) + 1; });
-        return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [importedRows]);
+    const resultBreakdown = useMemo(() => breakdownOf(importedRows), [importedRows]);
+
+    const unassignedPreview = useMemo(
+        () => parsedRows.filter(r => classNameFor(r).includes(UNASSIGNED_LABEL)).length,
+        [parsedRows]);
 
     // Per-grade & per-track summary
     const gradeTrackSummary = useMemo(() => {
         const grades: Record<number, { total: number; tracks: Record<string, number> }> = {};
-        for (const [cn, count] of resultBreakdown) {
-            const cls = classMap[cn];
-            const grade = cls?.grade ?? (parseInt(cn.split("-")[0]) || 0);
-            const track = cls?.track || "—";
-            if (!grades[grade]) grades[grade] = { total: 0, tracks: {} };
-            grades[grade].total += count;
-            grades[grade].tracks[track] = (grades[grade].tracks[track] || 0) + count;
+        for (const r of importedRows) {
+            const target = resolveClass(r.sourceGrade, r.className);
+            if (!target) continue;
+            const bucket = grades[target.grade] ??= { total: 0, tracks: {} };
+            bucket.total += 1;
+            bucket.tracks[target.track] = (bucket.tracks[target.track] || 0) + 1;
         }
         return grades;
-    }, [resultBreakdown, classMap]);
-
-    const totalClasses = data?.classes?.length ?? 0;
+    }, [importedRows]);
 
     if (!data) return (
         <div className="flex items-center justify-center min-h-[400px]">
@@ -130,8 +219,8 @@ export default function ImportStudents() {
         <div className="max-w-5xl mx-auto space-y-8 font-sans animate-in fade-in duration-500 pb-20">
 
             {/* ── Page Header ── */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                 >
                 <div className="p-6 sm:p-8">
                     <h1 className="text-3xl font-black text-white">
                         استيراد بيانات الطلاب
@@ -150,7 +239,7 @@ export default function ImportStudents() {
                 />
                 <StatCard
                     label="الصفوف المُعدَّة"
-                    value={data.classes?.length ?? 0}
+                    value={activeClasses.length}
                     icon={<Layers className="w-5 h-5" />}
                     color="blue"
                 />
@@ -170,10 +259,12 @@ export default function ImportStudents() {
 
                 <div className="p-8 space-y-6">
                     {/* Instructions */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {[
+                            { icon: <Hash className="w-4 h-4" />, label: "الرقم", desc: "الرقم الشخصي — اختياري", color: "bg-slate-50 border-slate-200 text-slate-600" },
                             { icon: <BookOpen className="w-4 h-4" />, label: "الاسم", desc: "اسم الطالب الكامل", color: "bg-blue-50 border-blue-200 text-blue-700" },
-                            { icon: <Layers className="w-4 h-4" />, label: "الشعبة الصفية", desc: "مثال: 11-3 أو 11/3", color: "bg-amber-50 border-amber-200 text-amber-700" },
+                            { icon: <GraduationCap className="w-4 h-4" />, label: "الصف", desc: "مثال: 12-Science", color: "bg-purple-50 border-purple-200 text-purple-700" },
+                            { icon: <Layers className="w-4 h-4" />, label: "الشعبة الصفية", desc: "مثال: 11/3 أو 11/ESE", color: "bg-amber-50 border-amber-200 text-amber-700" },
                             { icon: <Phone className="w-4 h-4" />, label: "رقم الهاتف", desc: "اختياري", color: "bg-emerald-50 border-emerald-200 text-emerald-700" },
                         ].map(col => (
                             <div key={col.label} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${col.color}`}>
@@ -200,14 +291,50 @@ export default function ImportStudents() {
                             </span>
                             <input type="file" className="sr-only" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} />
                         </label>
-                        {!file && <p className="text-slate-400 text-sm font-medium">يدعم xlsx, xls, csv</p>}
+                        {!file && <p className="text-slate-400 text-sm font-medium">يدعم xlsx, xls, csv — تُقرأ جميع أوراق الملف</p>}
                         {file && parsedRows.length > 0 && (
-                            <div className="flex items-center gap-2 bg-white border border-emerald-200 text-emerald-700 px-5 py-2 rounded-full shadow-sm">
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span className="font-black text-sm">{parsedRows.length} طالب جاهز للاستيراد</span>
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                                <div className="flex items-center gap-2 bg-white border border-emerald-200 text-emerald-700 px-5 py-2 rounded-full shadow-sm">
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    <span className="font-black text-sm">{parsedRows.length} طالب جاهز للاستيراد</span>
+                                </div>
+                                {sheetNames.length > 1 && (
+                                    <div className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-5 py-2 rounded-full shadow-sm">
+                                        <FileSpreadsheet className="w-4 h-4" />
+                                        <span className="font-black text-sm">{sheetNames.length} أوراق: {sheetNames.join("، ")}</span>
+                                    </div>
+                                )}
+                                {unassignedPreview > 0 && (
+                                    <div className="flex items-center gap-2 bg-white border border-amber-200 text-amber-700 px-5 py-2 rounded-full shadow-sm">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span className="font-black text-sm">{unassignedPreview} بدون شعبة → صفوف «{UNASSIGNED_LABEL}»</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
+
+                    {/* Replace-existing toggle */}
+                    <label className={`flex items-start gap-3 px-5 py-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                        replaceExisting ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                    }`}>
+                        <input
+                            type="checkbox"
+                            className="mt-1 w-5 h-5 accent-red-600"
+                            checked={replaceExisting}
+                            onChange={e => setReplaceExisting(e.target.checked)}
+                        />
+                        <span>
+                            <span className={`flex items-center gap-2 font-black text-sm ${replaceExisting ? 'text-red-800' : 'text-slate-700'}`}>
+                                <Trash2 className="w-4 h-4" />
+                                استبدال البيانات الحالية (بداية سنة دراسية جديدة)
+                            </span>
+                            <span className="block text-[11px] font-medium mt-1 text-slate-500 leading-relaxed">
+                                يحذف جميع الطلاب الحاليين وسجلات الحضور والدرجات والغياب العملي المرتبطة بهم، ثم يستورد الكشف الجديد.
+                                بدون تفعيله يُضاف الطلاب الجدد فوق الموجودين.
+                            </span>
+                        </span>
+                    </label>
 
                     {error && (
                         <div className="flex items-center gap-3 bg-rose-50 text-rose-800 px-5 py-4 rounded-xl border border-rose-200">
@@ -249,6 +376,7 @@ export default function ImportStudents() {
                                     <thead>
                                         <tr className="bg-qatar-maroon text-white">
                                             <th className="px-5 py-3 font-black text-xs w-12 text-center">#</th>
+                                            <th className="px-5 py-3 font-black text-xs">الرقم</th>
                                             <th className="px-5 py-3 font-black text-xs">اسم الطالب</th>
                                             <th className="px-5 py-3 font-black text-xs">الشعبة</th>
                                             <th className="px-5 py-3 font-black text-xs">الهاتف</th>
@@ -258,16 +386,17 @@ export default function ImportStudents() {
                                         {parsedRows.slice(0, 8).map((r, i) => (
                                             <tr key={i} className={`transition-colors hover:bg-rose-50/30 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                                                 <td className="px-5 py-2.5 text-slate-400 text-center font-bold text-xs">{i + 1}</td>
+                                                <td className="px-5 py-2.5 text-slate-400 text-xs font-mono" dir="ltr">{r.nationalId || "─"}</td>
                                                 <td className="px-5 py-2.5 font-black text-slate-800">{r.fullName}</td>
                                                 <td className="px-5 py-2.5">
-                                                    <span className="bg-rose-50 text-qatar-maroon border border-rose-200 px-2 py-0.5 rounded-lg text-xs font-black">{r.className}</span>
+                                                    <span className="bg-rose-50 text-qatar-maroon border border-rose-200 px-2 py-0.5 rounded-lg text-xs font-black">{classNameFor(r)}</span>
                                                 </td>
                                                 <td className="px-5 py-2.5 text-slate-400 text-xs font-mono" dir="ltr">{r.phones || "─"}</td>
                                             </tr>
                                         ))}
                                         {parsedRows.length > 8 && (
                                             <tr className="bg-slate-50">
-                                                <td colSpan={4} className="px-5 py-3 text-center text-xs font-black text-slate-400 italic">
+                                                <td colSpan={5} className="px-5 py-3 text-center text-xs font-black text-slate-400 italic">
                                                     ... و {parsedRows.length - 8} طلاب آخرين
                                                 </td>
                                             </tr>
@@ -279,18 +408,24 @@ export default function ImportStudents() {
                     )}
 
                     {/* Submit Button */}
-                    <div className="flex justify-center pt-2">
+                    <div className="flex flex-col items-center gap-3 pt-2">
                         <button
                             onClick={handleSubmit}
                             disabled={isProcessing || parsedRows.length === 0}
-                            className="flex items-center gap-3 px-14 py-4 bg-qatar-maroon text-white font-black text-lg rounded-2xl shadow-lg hover:opacity-90 transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                            className={`flex items-center gap-3 px-14 py-4 text-white font-black text-lg rounded-2xl shadow-lg hover:opacity-90 transition-all active:scale-95 disabled:opacity-30 disabled:pointer-events-none ${
+                                replaceExisting ? 'bg-red-600' : 'bg-qatar-maroon'
+                            }`}
                         >
                             {isProcessing ? (
                                 <><div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />جاري الاستيراد...</>
                             ) : (
-                                <><UserPlus className="w-5 h-5" />تأكيد استيراد {parsedRows.length || ""} طالب</>
+                                <>
+                                    {replaceExisting ? <Trash2 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
+                                    {replaceExisting ? "استبدال الكشف بـ" : "تأكيد استيراد"} {parsedRows.length || ""} طالب
+                                </>
                             )}
                         </button>
+                        {progress && <p className="text-xs font-black text-slate-500">{progress}</p>}
                     </div>
                 </div>
             </div>
@@ -307,13 +442,46 @@ export default function ImportStudents() {
                             <h3 className="text-2xl font-black text-white">تم الاستيراد بنجاح</h3>
                             <p className="text-white/70 text-sm font-bold">تفاصيل ما تم إضافته للنظام</p>
                         </div>
-                        <div className="mr-auto text-right">
-                            <div className="text-5xl font-black text-white">{result.importedCount}</div>
-                            <div className="text-white/70 text-xs font-black uppercase tracking-widest">طالب مُضاف</div>
+                        <div className="mr-auto text-right flex items-center gap-6">
+                            <div>
+                                <div className="text-5xl font-black text-white">{result.importedCount}</div>
+                                <div className="text-white/70 text-xs font-black uppercase tracking-widest">طالب مُضاف</div>
+                            </div>
+                            {result.updatedCount > 0 && (
+                                <div>
+                                    <div className="text-5xl font-black text-white/80">{result.updatedCount}</div>
+                                    <div className="text-white/70 text-xs font-black uppercase tracking-widest">طالب مُحدَّث</div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
                     <div className="p-8 space-y-8">
+                        {/* What changed in the class structure */}
+                        {(result.createdClasses?.length > 0 || result.updatedClasses?.length > 0
+                          || result.deactivatedClasses?.length > 0 || result.unassignedCount > 0) && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {[
+                                    { show: result.createdClasses?.length,  title: "صفوف جديدة أُنشئت", items: result.createdClasses,  color: "bg-emerald-50 border-emerald-200 text-emerald-800" },
+                                    { show: result.updatedClasses?.length,  title: "صفوف حُدِّث مسارها", items: result.updatedClasses,  color: "bg-blue-50 border-blue-200 text-blue-800" },
+                                    { show: result.deactivatedClasses?.length, title: "صفوف أُلغي تفعيلها (لم تعد بالكشف)", items: result.deactivatedClasses, color: "bg-amber-50 border-amber-200 text-amber-800" },
+                                ].filter(b => b.show).map(b => (
+                                    <div key={b.title} className={`rounded-xl border p-4 ${b.color}`}>
+                                        <p className="font-black text-xs mb-2">{b.title} ({b.items.length})</p>
+                                        <p className="text-[11px] font-bold leading-relaxed">{b.items.join("، ")}</p>
+                                    </div>
+                                ))}
+                                {result.unassignedCount > 0 && (
+                                    <div className="rounded-xl border p-4 bg-slate-50 border-slate-200 text-slate-700">
+                                        <p className="font-black text-xs mb-2">طلاب بدون شعبة ({result.unassignedCount})</p>
+                                        <p className="text-[11px] font-bold leading-relaxed">
+                                            وُضعوا في صفوف «{UNASSIGNED_LABEL}» حسب المسار — يمكن نقلهم لشعبهم من صفحة الطلاب.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Per-grade cards */}
                         <div>
                             <h4 className="font-black text-slate-700 mb-4 flex items-center gap-2">

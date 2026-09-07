@@ -5,6 +5,8 @@ import { Database, Trash2, AlertCircle, GraduationCap, Layers, BookOpen, Users, 
 import { api } from "../../convex/_generated/api";
 import StatCard from "../components/StatCard";
 
+const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
+
 export default function SeedPage() {
     const [msg, setMsg] = useState<string>("");
     const [classMsg, setClassMsg] = useState<string>("");
@@ -20,16 +22,19 @@ export default function SeedPage() {
     const data = useQuery(api.setup.getInitialData);
     // @ts-ignore
     const counts = useQuery(api.setup.getStudentCounts);
+    // @ts-ignore
+    const structure = useQuery(api.setup.getClassStructure);
 
     const handleEnsureClasses = async () => {
         setClassLoading(true);
         try {
             const res = await ensureAllClasses();
-            if (res.created === 0) {
-                setClassMsg("✅ جميع الصفوف موجودة بالفعل - لا يحتاج إلى إضافة.");
-            } else {
-                setClassMsg(`✅ تم إنشاء ${res.created} صف جديد: ${res.createdNames.join("، ")}`);
-            }
+            const parts: string[] = [];
+            if (res.created > 0) parts.push(`تم إنشاء ${res.created} صف جديد: ${res.createdNames.join("، ")}`);
+            if (res.updated > 0) parts.push(`وتصحيح مسار ${res.updated} صف: ${res.updatedNames.join("، ")}`);
+            setClassMsg(parts.length === 0
+                ? "✅ جميع الصفوف موجودة ومطابقة للهيكل المعتمد."
+                : "✅ " + parts.join(" — "));
         } catch (error: any) {
             setClassMsg("❌ " + error.message);
         } finally {
@@ -41,8 +46,17 @@ export default function SeedPage() {
         if (!data?.schools?.[0]?._id) return;
         setLoading(true);
         try {
-            const res = await deleteAll({ schoolId: data.schools[0]._id });
-            setMsg(`✅ تم حذف ${res.students} طالب و ${res.periods} حصة و ${res.attendance} سجل حضور بنجاح.`);
+            // The reset is batched server-side; keep going until it reports done.
+            const totals = { students: 0, periods: 0, attendance: 0 };
+            for (let guard = 0; guard < 500; guard++) {
+                const res = await deleteAll({ schoolId: data.schools[0]._id });
+                totals.students += res.students;
+                totals.periods += res.periods;
+                totals.attendance += res.attendance;
+                setMsg(`⏳ جاري الحذف… ${totals.students} طالب`);
+                if (res.done) break;
+            }
+            setMsg(`✅ تم حذف ${totals.students} طالب و ${totals.periods} حصة و ${totals.attendance} سجل حضور بنجاح.`);
             setDeleteAllConfirm(false);
         } catch (e: any) {
             setMsg(`❌ خطأ: ${e.message}`);
@@ -50,6 +64,10 @@ export default function SeedPage() {
             setLoading(false);
         }
     };
+
+    // Retired classes stay in the table so they can be restored or deleted
+    // from the settings screen, but they should not be counted as live ones.
+    const activeClasses = (data?.classes ?? []).filter((c: any) => c.isActive !== false);
 
     if (!data) return (
         <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -60,8 +78,8 @@ export default function SeedPage() {
     return (
         <div className="max-w-6xl mx-auto space-y-10 font-sans transition-all animate-in fade-in duration-500 pb-20 mt-6">
 
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                 style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 50%, #5C1A1B 100%)" }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                 >
                 <div className="flex flex-col gap-1 p-5 sm:p-8">
                     <h1 className="text-3xl font-black text-white flex items-center gap-3">
                         <Database className="w-8 h-8 text-white/80" />
@@ -74,7 +92,7 @@ export default function SeedPage() {
             {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard label="المدارس المسجلة" value={data.schools?.length || 0} icon={<Users className="w-6 h-6" />} color="maroon" />
-                <StatCard label="إجمالي الصفوف" value={data.classes?.length || 0} icon={<Layers className="w-6 h-6" />} color="blue" />
+                <StatCard label="إجمالي الصفوف" value={activeClasses.length} icon={<Layers className="w-6 h-6" />} color="blue" />
                 <StatCard label="المواد الدراسية" value={data.subjects?.length || 0} icon={<BookOpen className="w-6 h-6" />} color="teal" />
                 <StatCard label="إجمالي الطلاب" value={counts?.total ?? "..."} icon={<GraduationCap className="w-6 h-6" />} color="amber" />
             </div>
@@ -83,7 +101,7 @@ export default function SeedPage() {
                 {/* Ensure Classes */}
                 <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden flex flex-col">
                     <div className="px-8 py-5 flex items-center justify-between"
-                         style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 60%, #5C1A1B 100%)" }}>
+                         style={{ background: "linear-gradient(135deg, #5C1523 0%, #7A1E30 60%, #5C1523 100%)" }}>
                         <h2 className="text-lg font-black text-white">إعداد هيكل الصفوف</h2>
                         <Layers className="w-5 h-5 text-white/30" />
                     </div>
@@ -92,25 +110,19 @@ export default function SeedPage() {
                             سيقوم النظام بإنشاء جميع الصفوف الدراسية المطلوبة تلقائياً مع الالتزام بالترقيم المعتمد.
                         </p>
                         <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-2">
-                            <div className="flex justify-between text-xs font-black">
-                                <span className="text-slate-500">العاشر</span>
-                                <span className="text-qatar-maroon">10-1 إلى 10-8</span>
-                            </div>
-                            <div className="flex justify-between text-xs font-black">
-                                <span className="text-slate-500">الحادي عشر</span>
-                                <span className="text-qatar-maroon">11-1 إلى 11-10</span>
-                            </div>
-                            <div className="flex justify-between text-xs font-black">
-                                <span className="text-slate-500">الثاني عشر</span>
-                                <span className="text-qatar-maroon">12-1 إلى 12-10</span>
-                            </div>
+                            {(structure ?? []).map((s: any) => (
+                                <div key={s.grade} className="flex justify-between text-xs font-black">
+                                    <span className="text-slate-500">{GRADE_LABELS[s.grade] ?? s.grade}</span>
+                                    <span className="text-qatar-maroon" dir="ltr">{s.label}</span>
+                                </div>
+                            ))}
                         </div>
                         <div className="mt-auto pt-4">
                             <button
                                 onClick={handleEnsureClasses}
                                 disabled={classLoading}
                                 className="w-full disabled:opacity-30 text-white font-black py-4 px-6 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-3"
-                                style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 60%, #5C1A1B 100%)" }}
+                                style={{ background: "linear-gradient(135deg, #5C1523 0%, #7A1E30 60%, #5C1523 100%)" }}
                             >
                                 {classLoading ? <div className="animate-spin w-5 h-5 border-2 border-white/20 border-t-white rounded-full"></div> : <Layers className="w-5 h-5" />}
                                 {classLoading ? "جاري الإنشاء..." : "تحديث هيكل الصفوف"}
@@ -186,18 +198,21 @@ export default function SeedPage() {
             {data?.classes && data.classes.length > 0 && (
                 <div className="bg-white rounded-2xl qatar-card-shadow border border-qatar-gray-border overflow-hidden">
                     <div className="px-8 py-5 border-b border-qatar-gray-border flex items-center justify-between"
-                         style={{ background: "linear-gradient(135deg, #5C1A1B 0%, #7A2425 60%, #5C1A1B 100%)" }}>
+                         style={{ background: "linear-gradient(135deg, #5C1523 0%, #7A1E30 60%, #5C1523 100%)" }}>
                         <h2 className="text-lg font-black text-white">توزيع الصفوف الحالية</h2>
-                        <span className="text-white/70 text-sm font-bold">{data.classes.length} صف</span>
+                        <span className="text-white/70 text-sm font-bold">{activeClasses.length} صف</span>
                     </div>
                     <div className="p-6 sm:p-8 space-y-8">
                         {[10, 11, 12].map(grade => {
-                            const gradeLabel = grade === 10 ? "العاشر" : grade === 11 ? "الحادي عشر" : "الثاني عشر";
-                            const required = grade === 10 ? 8 : 10;
+                            const gradeLabel = GRADE_LABELS[grade];
+                            const plan = (structure ?? []).find((s: any) => s.grade === grade);
+                            // Sections + the ESE section, when the structure defines one
+                            const required = plan ? plan.sections + (plan.ese ? 1 : 0) : 0;
                             const existing = (data.classes || [])
-                                .filter((c: any) => c.grade === grade)
-                                .sort((a: any, b: any) => parseInt(a.name.split("-")[1]||"0") - parseInt(b.name.split("-")[1]||"0"));
-                            const percent = (existing.length / required) * 100;
+                                .filter((c: any) => c.grade === grade && c.isActive !== false)
+                                // numeric-aware so 10-2 < 10-10 and 10-ESE lands last
+                                .sort((a: any, b: any) => a.name.localeCompare(b.name, "ar", { numeric: true }));
+                            const percent = required ? (existing.length / required) * 100 : 0;
                             const gradeTotal = existing.reduce((sum: number, c: any) => sum + (counts?.perClass?.[c._id] ?? 0), 0);
 
                             const GRADE_COLORS: Record<number, { bar: string; badge: string; num: string; bg: string }> = {
@@ -222,7 +237,7 @@ export default function SeedPage() {
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
                                             <span className={`text-[10px] font-black uppercase tracking-widest ${percent >= 100 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                {existing.length} / {required} صف
+                                                {existing.length} / {required || "…"} صف
                                             </span>
                                             <div className="w-40 h-2 bg-slate-100 rounded-full overflow-hidden">
                                                 <div className={`h-full transition-all duration-1000 ${percent >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>

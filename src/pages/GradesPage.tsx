@@ -8,11 +8,12 @@ import {
     CheckCircle2, Filter, Users, X, MessageSquare, RotateCcw, Plus,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { EmptyState, PageHeader } from "../components/ui";
 
 type GradeValue = number | "absent" | "excused" | null;
 
 const TRACK_COLORS: Record<string, string> = {
-    "عام": "#5C1A1B",
+    "عام": "#5C1523",
     "علمي": "#1e40af",
     "أدبي": "#f59e0b",
     "تكنولوجي": "#7c3aed",
@@ -61,42 +62,34 @@ export default function GradesPage() {
     const allGrades = useQuery(api.grades.getAllGrades) as any[] | undefined;
     const [view, setView] = useState<"entry" | "student" | "class" | "analytics">("entry");
 
-    if (!settings || !meta) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-qatar-maroon"/></div>;
+    if (!settings || !meta || allGrades === undefined) return <GradesLoading/>;
 
-    const isEmpty = !allGrades || allGrades.length === 0;
+    // Entry works off the live class roster, so it is available before any mark
+    // exists. Only prompt for an import when there is no class structure either.
+    const hasClasses = (meta.classes?.length ?? 0) > 0;
+    const hasGrades = (allGrades?.length ?? 0) > 0;
+    const isEmpty = !hasClasses && !hasGrades;
+    const resultViewsEmpty = !hasGrades;
 
     return (
-        <div dir="rtl" className="max-w-7xl mx-auto space-y-5 animate-in fade-in duration-500 pb-20">
+        <div dir="rtl" className="grades-page max-w-7xl mx-auto space-y-5">
             {/* Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                style={{ background: "linear-gradient(135deg,#5C1A1B 0%,#7A2425 50%,#5C1A1B 100%)" }}>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 sm:p-7">
-                    <div>
-                        <h1 className="text-2xl font-black text-white flex items-center gap-3">
-                            <GraduationCap className="w-7 h-7 text-white/80"/>رصد الدرجات
-                        </h1>
-                        <p className="text-white/80 font-bold text-sm mt-1">
-                            {settings.assessmentLabels?.length ?? 5} تقييمات لكل مادة · من {settings.maxPerAssessment} درجة
-                        </p>
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                        {([
-                            { key: "entry" as const, label: "إدخال الدرجات", icon: <BookOpen className="w-4 h-4"/> },
-                            { key: "student" as const, label: "بطاقة الطالب", icon: <Users className="w-4 h-4"/> },
-                            { key: "class" as const, label: "ملف الفصل", icon: <Layers className="w-4 h-4"/> },
-                            { key: "analytics" as const, label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
-                        ]).map(({ key, label, icon }) => (
-                            <button key={key} onClick={() => setView(key)}
-                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-sm transition-all border ${
-                                    view === key
-                                        ? "bg-white text-qatar-maroon border-white shadow"
-                                        : "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                                }`}>
-                                {icon}{label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+            <PageHeader icon={<GraduationCap className="w-5 h-5"/>} title="التقييمات القصيرة"
+                subtitle="إدخال التقييمات ومتابعة نتائج الطلاب والفصول">
+                <span className="grades-header-note">{settings.assessmentLabels?.length ?? 5} تقييمات · {settings.maxPerAssessment} درجة لكل تقييم</span>
+            </PageHeader>
+            <div className="grades-tabs" role="group" aria-label="طرق عرض الدرجات">
+                {([
+                    { key: "entry" as const, label: "إدخال الدرجات", icon: <BookOpen className="w-4 h-4"/> },
+                    { key: "student" as const, label: "بطاقة الطالب", icon: <Users className="w-4 h-4"/> },
+                    { key: "class" as const, label: "ملف الفصل", icon: <Layers className="w-4 h-4"/> },
+                    { key: "analytics" as const, label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
+                ]).map(({ key, label, icon }) => (
+                    <button key={key} onClick={() => setView(key)} aria-pressed={view === key}
+                        className={`grades-tab ${view === key ? "is-active" : ""}`}>
+                        {icon}{label}
+                    </button>
+                ))}
             </div>
 
             {isEmpty ? (
@@ -104,13 +97,30 @@ export default function GradesPage() {
             ) : (
                 <>
                     {view === "entry" && <EntryView meta={meta} settings={settings}/>}
-                    {view === "student" && <StudentView allGrades={allGrades} settings={settings}/>}
-                    {view === "class" && <ClassView allGrades={allGrades} settings={settings} meta={meta}/>}
-                    {view === "analytics" && <GradesAnalyticsView allGrades={allGrades} settings={settings}/>}
+                    {view !== "entry" && resultViewsEmpty ? (
+                        <EmptyState icon={<BarChart3 className="w-6 h-6"/>}
+                            title="لا توجد درجات مرصودة بعد"
+                            description="ابدأ من تبويب «إدخال الدرجات» — ستظهر النتائج والتحليلات هنا فور رصد أول درجة."/>
+                    ) : (
+                        <>
+                            {view === "student" && <StudentView allGrades={allGrades} settings={settings}/>}
+                            {view === "class" && <ClassView allGrades={allGrades} settings={settings} meta={meta}/>}
+                            {view === "analytics" && <GradesAnalyticsView allGrades={allGrades} settings={settings}/>}
+                        </>
+                    )}
                 </>
             )}
         </div>
     );
+}
+
+function GradesLoading() {
+    return <div role="status" aria-label="جاري تحميل الدرجات" className="space-y-4">
+        <div className="h-24 rounded-2xl bg-qatar-maroon/5 animate-pulse"/>
+        <div className="h-12 rounded-xl bg-slate-100 animate-pulse"/>
+        <div className="h-64 rounded-2xl border border-slate-200 bg-white"/>
+        <span className="sr-only">جاري تحميل الدرجات…</span>
+    </div>;
 }
 
 // ── Import Prompt ─────────────────────────────────────────────────────────
@@ -121,12 +131,12 @@ function ImportPrompt() {
                 <Upload className="w-8 h-8 text-qatar-maroon"/>
             </div>
             <div className="text-center">
-                <p className="font-black text-slate-700 text-lg">لم يتم استيراد الدرجات بعد</p>
-                <p className="text-sm text-slate-400 mt-1 max-w-md">يمكن استيراد بيانات الدرجات من الإعدادات → "إدارة الدرجات"</p>
+                <p className="font-semibold text-slate-700 text-lg">لم يتم استيراد الدرجات بعد</p>
+                <p className="text-sm text-slate-400 mt-1 max-w-md">يمكن استيراد بيانات الدرجات من الإعدادات → "إدارة التقييمات القصيرة"</p>
             </div>
             <Link to="/settings"
-                className="flex items-center gap-2 px-6 py-3 rounded-2xl text-white font-black text-sm hover:opacity-90 qatar-card-shadow"
-                style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
+                className="flex items-center gap-2 px-6 py-3 rounded-2xl text-white font-semibold text-sm hover:opacity-90 qatar-card-shadow"
+                style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
                 <Plus className="w-4 h-4"/>الذهاب للإعدادات
             </Link>
         </div>
@@ -143,17 +153,31 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
     const upsert = useMutation(api.grades.upsertGrade);
 
     const classes = meta.classes ?? [];
+    const subjectsFor = (className: string): string[] => {
+        const cls = classes.find((c: any) => c.className === className);
+        if (!cls) return [];
+        return meta.trackSubjects?.find((t: any) => t.trackKey === `${cls.grade}-${cls.track}`)?.subjects ?? [];
+    };
+
     const selectedClassMeta = classes.find((c: any) => c.className === selectedClass);
-    const trackKey = selectedClassMeta ? `${selectedClassMeta.grade}-${selectedClassMeta.track}` : "";
-    const subjectsForClass = trackKey ? (meta.trackSubjects?.find((t: any) => t.trackKey === trackKey)?.subjects ?? []) : [];
+    const subjectsForClass = subjectsFor(selectedClass);
+
+    // Moving between classes keeps the chosen subject — teachers grade the same
+    // subject across several sections — unless the new track does not offer it.
+    const handleClassChange = (className: string) => {
+        setSelectedClass(className);
+        if (selectedSubject && !subjectsFor(className).includes(selectedSubject)) {
+            setSelectedSubject("");
+        }
+    };
 
     return (
         <div className="space-y-4">
             {/* Filters */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                    <label className="block text-xs font-black text-slate-500 mb-1.5">الفصل</label>
-                    <select value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setSelectedSubject(""); }}
+                    <label htmlFor="grades-class" className="block text-xs font-semibold text-slate-600 mb-1.5">١. اختر الفصل</label>
+                    <select id="grades-class" value={selectedClass} onChange={e => handleClassChange(e.target.value)}
                         className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon">
                         <option value="">— اختر الفصل —</option>
                         {classes.map((c: any) => (
@@ -164,8 +188,8 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-black text-slate-500 mb-1.5">المادة</label>
-                    <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={!selectedClass}
+                    <label htmlFor="grades-subject" className="block text-xs font-semibold text-slate-600 mb-1.5">٢. اختر المادة</label>
+                    <select id="grades-subject" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} disabled={!selectedClass}
                         className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon disabled:opacity-50">
                         <option value="">— اختر المادة —</option>
                         {subjectsForClass.map((s: string) => <option key={s} value={s}>{s}</option>)}
@@ -173,8 +197,19 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
                 </div>
             </div>
 
-            {selectedClass && selectedSubject && (
+            {/* A track with no subjects assigned yet cannot be graded at all */}
+            {selectedClass && subjectsForClass.length === 0 && (
+                <EmptyState icon={<AlertCircle className="w-6 h-6"/>}
+                    title={`لا توجد مواد مُسندة لمسار «${selectedClassMeta?.track ?? ""}» بالصف ${selectedClassMeta?.grade ?? ""}`}
+                    description="حدِّد المواد لهذا المسار من الإعدادات › المواد والخطة الدراسية، ثم عد إلى هذه الصفحة."/>
+            )}
+
+            {(!selectedClass || (!selectedSubject && subjectsForClass.length > 0)) && <EmptyState icon={<BookOpen className="w-6 h-6"/>}
+                title={selectedClass ? "اختر المادة لعرض الدرجات" : "ابدأ باختيار الفصل والمادة"}
+                description="سيظهر كشف الطلاب هنا. أدخل الدرجة في خانتها، وسيتم حفظها عند الانتقال إلى الخانة التالية."/>}
+            {selectedClass && selectedSubject && (grades === undefined ? <GradesLoading/> :
                 <GradesGrid
+                    key={`${selectedClass}|${selectedSubject}`}
                     grades={grades ?? []}
                     settings={settings}
                     classMeta={selectedClassMeta}
@@ -282,9 +317,9 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             {/* Header bar */}
             <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap"
-                style={{ background: `linear-gradient(135deg,${TRACK_COLORS[classMeta.track] || "#5C1A1B"},${TRACK_COLORS[classMeta.track] || "#5C1A1B"}dd)` }}>
+                style={{ background: `linear-gradient(135deg,${TRACK_COLORS[classMeta.track] || "#5C1523"},${TRACK_COLORS[classMeta.track] || "#5C1523"}dd)` }}>
                 <div className="text-white">
-                    <p className="font-black text-base">{subjectName}</p>
+                    <p className="font-semibold text-base">{subjectName}</p>
                     <p className="text-xs font-bold text-white/80">{classMeta.className} · {classMeta.track}</p>
                 </div>
                 <div className="text-[10px] text-white/80 font-bold flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
@@ -294,33 +329,33 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
             </div>
 
             {/* Search */}
-            <div className="p-3 border-b border-slate-100">
-                <div className="relative">
+            <div className="grade-search p-3 border-b border-slate-100">
+                <div className="relative sm:max-w-sm">
                     <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث عن طالب..."
+                    <input value={search} onChange={e => setSearch(e.target.value)} aria-label="بحث باسم الطالب" placeholder="بحث باسم الطالب..."
                         className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                 </div>
             </div>
 
             {/* Grid */}
-            <div className="overflow-auto max-h-[70vh]">
-                <table className="w-full text-xs">
+            <div className="grade-table-scroll overflow-auto max-h-[70vh]" tabIndex={0} role="region" aria-label="كشف إدخال الدرجات">
+                <table className="grade-entry-table w-full text-xs">
                     <thead className="sticky top-0 bg-slate-50 z-10">
                         <tr>
-                            <th className="px-2 py-2 text-center font-black text-slate-500 border-l border-slate-200 w-12">#</th>
-                            <th className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-black text-slate-700 border-l border-slate-200 min-w-[200px]">الاسم</th>
+                            <th className="px-2 py-2 text-center font-semibold text-slate-500 border-l border-slate-200 w-12">#</th>
+                            <th className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-semibold text-slate-700 border-l border-slate-200 min-w-[200px]">الاسم</th>
                             {labels.map((label: string, i: number) => (
-                                <th key={i} className="px-1 py-2 text-center font-black text-slate-600 border-l border-slate-100 min-w-[55px]">
+                                <th key={i} className="px-1 py-2 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[55px]">
                                     {label}
                                 </th>
                             ))}
-                            <th className="px-2 py-2 text-center font-black text-qatar-maroon border-l border-slate-200">المجموع</th>
-                            <th className="px-2 py-2 text-center font-black text-qatar-maroon">من {finalOutOf}</th>
+                            <th className="px-2 py-2 text-center font-semibold text-qatar-maroon border-l border-slate-200">المجموع</th>
+                            <th className="px-2 py-2 text-center font-semibold text-qatar-maroon">من {finalOutOf}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {filtered.length === 0 && (
-                            <tr><td colSpan={9} className="text-center py-8 text-slate-400 font-bold text-sm">لا توجد بيانات لهذا الفصل في هذه المادة. ابدأ بالاستيراد من الإعدادات.</td></tr>
+                            <tr><td colSpan={labels.length + 4} className="text-center py-8 text-slate-500 text-sm">{search.trim() ? "لا يوجد طالب مطابق للبحث. جرّب اسماً آخر." : "لا توجد بيانات لهذا الفصل في هذه المادة. ابدأ بالاستيراد من الإعدادات."}</td></tr>
                         )}
                         {filtered.map((g: any, idx: number) => {
                             const summary = calcSummary({
@@ -332,10 +367,11 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
                             }, max, finalOutOf);
                             const isPass = summary.finalScore >= settings.passThreshold;
                             const isExcellent = summary.finalScore >= settings.excellenceThreshold;
+                            // placeholder rows have no _id yet; the name is unique per class+subject
                             return (
-                                <tr key={g._id} className="border-t border-slate-100 hover:bg-slate-50">
+                                <tr key={g._id ?? g.studentName} className="border-t border-slate-100 hover:bg-slate-50">
                                     <td className="px-2 py-1 text-center font-bold text-slate-400 border-l border-slate-100">{idx + 1}</td>
-                                    <td className="sticky right-0 bg-white px-3 py-1 text-right font-bold text-slate-700 border-l border-slate-200 truncate max-w-[200px]">
+                                    <td className="sticky right-0 bg-white px-3 py-1 text-right font-bold text-slate-700 border-l border-slate-200 max-w-[220px] whitespace-normal">
                                         {g.studentName}
                                     </td>
                                     {(["a1", "a2", "a3", "a4", "a5"] as const).map((field, fieldIdx) => {
@@ -349,6 +385,8 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
                                                 <div className="relative" title={errorMsg || ""}>
                                                     <input
                                                         data-grade-cell={`${idx}-${fieldIdx}`}
+                                                        aria-label={`${g.studentName}، ${labels[fieldIdx]}`}
+                                                        aria-invalid={!!errorMsg}
                                                         value={value}
                                                         onChange={e => setLocalValues(p => ({ ...p, [g.studentName]: { ...p[g.studentName], [field]: e.target.value } }))}
                                                         onBlur={e => {
@@ -358,7 +396,7 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
                                                             }
                                                         }}
                                                         onKeyDown={e => handleKeyDown(e, idx, fieldIdx)}
-                                                        className={`w-full px-1 py-1.5 text-center text-xs font-black bg-transparent focus:outline-none rounded transition-all ${
+                                                        className={`w-full px-1 py-1.5 text-center text-xs font-semibold bg-transparent focus:outline-none rounded transition-all ${
                                                             errorMsg ? "bg-rose-50 ring-2 ring-rose-400 text-rose-600" :
                                                             value === "غ" ? "text-rose-500" : value === "م" ? "text-amber-500" : "text-slate-700"
                                                         } ${!errorMsg ? "focus:bg-white focus:ring-2 focus:ring-qatar-maroon/30" : ""}`}
@@ -370,10 +408,10 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
                                             </td>
                                         );
                                     })}
-                                    <td className="px-2 py-1 text-center font-black text-slate-700 border-l border-slate-200 text-[11px]">
+                                    <td className="px-2 py-1 text-center font-semibold text-slate-700 border-l border-slate-200 text-[11px]">
                                         {summary.cnt > 0 ? summary.total : "—"}
                                     </td>
-                                    <td className="px-2 py-1 text-center font-black border-l border-slate-100 text-[11px]"
+                                    <td className="px-2 py-1 text-center font-semibold border-l border-slate-100 text-[11px]"
                                         style={{ color: summary.cnt === 0 ? "#94a3b8" : isExcellent ? "#10b981" : isPass ? "#3b82f6" : "#ef4444" }}>
                                         {summary.cnt > 0 ? summary.finalScore.toFixed(2) : "—"}
                                     </td>
@@ -407,7 +445,7 @@ function StudentView({ allGrades, settings }: any) {
                 <div className="p-4 border-b border-slate-100">
                     <div className="relative">
                         <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث عن طالب..."
+                        <input value={search} onChange={e => setSearch(e.target.value)} aria-label="بحث باسم الطالب" placeholder="بحث باسم الطالب..."
                             className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                     </div>
                 </div>
@@ -420,11 +458,11 @@ function StudentView({ allGrades, settings }: any) {
                         return (
                             <button key={s} onClick={() => setSelected(s)}
                                 className="w-full text-right px-4 py-3 hover:bg-slate-50 flex items-center justify-between gap-2">
-                                <span className="text-base font-black flex-shrink-0" style={{ color: avg >= settings.excellenceThreshold ? "#10b981" : avg >= settings.passThreshold ? "#3b82f6" : "#ef4444" }}>
+                                <span className="text-base font-semibold flex-shrink-0" style={{ color: avg >= settings.excellenceThreshold ? "#10b981" : avg >= settings.passThreshold ? "#3b82f6" : "#ef4444" }}>
                                     {avg.toFixed(2)}
                                 </span>
                                 <div className="text-right flex-1 min-w-0">
-                                    <p className="font-black text-slate-700 text-sm truncate">{s}</p>
+                                    <p className="font-semibold text-slate-700 text-sm truncate">{s}</p>
                                     <p className="text-[10px] text-slate-400 font-bold">{cls} · {subjects} مادة</p>
                                 </div>
                             </button>
@@ -465,22 +503,22 @@ function StudentView({ allGrades, settings }: any) {
     return (
         <div className="space-y-4">
             <div className="bg-qatar-maroon rounded-2xl px-5 py-3.5 flex items-center justify-between gap-2 flex-wrap">
-                <button onClick={() => setSelected("")} className="text-white/80 hover:text-white text-sm font-black flex items-center gap-1">
+                <button onClick={() => setSelected("")} className="text-white/80 hover:text-white text-sm font-semibold flex items-center gap-1">
                     <ChevronRight className="w-4 h-4"/>قائمة الطلاب
                 </button>
                 <div className="text-right flex-1">
-                    <p className="font-black text-white text-base">{selected}</p>
+                    <p className="font-semibold text-white text-base">{selected}</p>
                     <p className="text-white/70 text-xs font-bold">{cls} · {studentGrades.length} مادة</p>
                 </div>
                 <div className="flex gap-2">
                     {guardianPhone && (
                         <button onClick={buildWhatsApp}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-black hover:bg-emerald-600">
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600">
                             <MessageSquare className="w-3.5 h-3.5"/>WhatsApp
                         </button>
                     )}
                     <button onClick={() => window.open(`/grades/print/student/${encodeURIComponent(selected)}`, "_blank")}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-black hover:bg-white/25">
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/15 text-white text-xs font-semibold hover:bg-white/25">
                         <Printer className="w-3.5 h-3.5"/>طباعة
                     </button>
                 </div>
@@ -488,8 +526,8 @@ function StudentView({ allGrades, settings }: any) {
 
             {/* Overall card */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 text-center">
-                <p className="text-xs font-black text-slate-500 mb-1">المعدل العام</p>
-                <p className="text-5xl font-black" style={{ color: overallAvg >= settings.excellenceThreshold ? "#10b981" : overallAvg >= settings.passThreshold ? "#3b82f6" : "#ef4444" }}>
+                <p className="text-xs font-semibold text-slate-500 mb-1">المعدل العام</p>
+                <p className="text-3xl font-semibold" style={{ color: overallAvg >= settings.excellenceThreshold ? "#10b981" : overallAvg >= settings.passThreshold ? "#3b82f6" : "#ef4444" }}>
                     {overallAvg.toFixed(2)}
                 </p>
                 <p className="text-xs font-bold text-slate-400 mt-1">من {settings.finalScoreOutOf}</p>
@@ -498,18 +536,18 @@ function StudentView({ allGrades, settings }: any) {
             {/* Subjects table */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
-                    <span className="font-black text-slate-700 text-sm">الدرجات حسب المواد</span>
+                    <span className="font-semibold text-slate-700 text-sm">الدرجات حسب المواد</span>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                         <thead className="bg-slate-50">
                             <tr>
-                                <th className="px-3 py-2 text-right font-black text-slate-500">المادة</th>
+                                <th className="px-3 py-2 text-right font-semibold text-slate-500">المادة</th>
                                 {settings.assessmentLabels.map((l: string, i: number) => (
-                                    <th key={i} className="px-2 py-2 text-center font-black text-slate-500">{l}</th>
+                                    <th key={i} className="px-2 py-2 text-center font-semibold text-slate-500">{l}</th>
                                 ))}
-                                <th className="px-2 py-2 text-center font-black text-qatar-maroon">المجموع</th>
-                                <th className="px-2 py-2 text-center font-black text-qatar-maroon">من {settings.finalScoreOutOf}</th>
+                                <th className="px-2 py-2 text-center font-semibold text-qatar-maroon">المجموع</th>
+                                <th className="px-2 py-2 text-center font-semibold text-qatar-maroon">من {settings.finalScoreOutOf}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -519,14 +557,14 @@ function StudentView({ allGrades, settings }: any) {
                                 const isExcellent = s.finalScore >= settings.excellenceThreshold;
                                 return (
                                     <tr key={g._id} className="border-t border-slate-100">
-                                        <td className="px-3 py-2 text-right font-black text-slate-700">{g.subjectName}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-slate-700">{g.subjectName}</td>
                                         {(["a1", "a2", "a3", "a4", "a5"] as const).map(field => (
                                             <td key={field} className="px-2 py-2 text-center font-bold text-slate-600">
                                                 {formatGrade(g[field]) || "—"}
                                             </td>
                                         ))}
-                                        <td className="px-2 py-2 text-center font-black text-slate-700">{s.cnt > 0 ? s.total : "—"}</td>
-                                        <td className="px-2 py-2 text-center font-black"
+                                        <td className="px-2 py-2 text-center font-semibold text-slate-700">{s.cnt > 0 ? s.total : "—"}</td>
+                                        <td className="px-2 py-2 text-center font-semibold"
                                             style={{ color: s.cnt === 0 ? "#94a3b8" : isExcellent ? "#10b981" : isPass ? "#3b82f6" : "#ef4444" }}>
                                             {s.cnt > 0 ? s.finalScore.toFixed(2) : "—"}
                                         </td>
@@ -549,13 +587,13 @@ function ClassView({ allGrades, settings, meta }: any) {
     if (!selectedClass) {
         return (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                <p className="text-xs font-black text-slate-500 mb-3">اختر فصلاً</p>
+                <p className="text-xs font-semibold text-slate-500 mb-3">اختر فصلاً</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {classes.map((c: any) => (
                         <button key={c.className} onClick={() => setSelectedClass(c.className)}
                             className="p-3 rounded-xl border-2 transition-all hover:border-qatar-maroon hover:bg-rose-50 text-center"
                             style={{ borderColor: TRACK_COLORS[c.track] + "40" }}>
-                            <p className="font-black text-slate-700 text-sm">{c.className}</p>
+                            <p className="font-semibold text-slate-700 text-sm">{c.className}</p>
                             <p className="text-[10px] font-bold mt-0.5" style={{ color: TRACK_COLORS[c.track] }}>{c.track}</p>
                         </button>
                     ))}
@@ -571,23 +609,23 @@ function ClassView({ allGrades, settings, meta }: any) {
     return (
         <div className="space-y-4">
             <div className="bg-qatar-maroon rounded-2xl px-5 py-3.5 flex items-center justify-between">
-                <button onClick={() => setSelectedClass("")} className="text-white/80 hover:text-white text-sm font-black flex items-center gap-1">
+                <button onClick={() => setSelectedClass("")} className="text-white/80 hover:text-white text-sm font-semibold flex items-center gap-1">
                     <ChevronRight className="w-4 h-4"/>الفصول
                 </button>
-                <p className="font-black text-white text-base">فصل {selectedClass}</p>
+                <p className="font-semibold text-white text-base">فصل {selectedClass}</p>
             </div>
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="overflow-auto max-h-[70vh]">
                     <table className="w-full text-xs">
                         <thead className="sticky top-0 bg-slate-50 z-10">
                             <tr>
-                                <th className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-black text-slate-700 border-l border-slate-200 min-w-[180px]">الطالب</th>
+                                <th className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-semibold text-slate-700 border-l border-slate-200 min-w-[180px]">الطالب</th>
                                 {subjects.map(s => (
-                                    <th key={s as string} className="px-2 py-2 text-center font-black text-slate-600 border-l border-slate-100 min-w-[80px]">
-                                        <span className="truncate block max-w-[80px]" title={s as string}>{(s as string).slice(0, 10)}</span>
+                                    <th key={s as string} className="px-2 py-2 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[80px]">
+                                        <span className="block min-w-24 max-w-40 whitespace-normal" title={s as string}>{s as string}</span>
                                     </th>
                                 ))}
-                                <th className="px-2 py-2 text-center font-black text-qatar-maroon">المعدل</th>
+                                <th className="px-2 py-2 text-center font-semibold text-qatar-maroon">المعدل</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -604,14 +642,14 @@ function ClassView({ allGrades, settings, meta }: any) {
                                 const avg = cntF > 0 ? sumF / cntF : 0;
                                 return (
                                     <tr key={sName} className="border-t border-slate-100 hover:bg-slate-50">
-                                        <td className="sticky right-0 bg-white px-3 py-1.5 text-right font-bold text-slate-700 border-l border-slate-200 truncate max-w-[180px]">{sName}</td>
+                                        <td className="sticky right-0 bg-white px-3 py-1.5 text-right font-bold text-slate-700 border-l border-slate-200 max-w-[220px] whitespace-normal">{sName}</td>
                                         {cells.map((cell, i) => (
-                                            <td key={i} className="px-2 py-1.5 text-center font-black border-l border-slate-50"
+                                            <td key={i} className="px-2 py-1.5 text-center font-semibold border-l border-slate-50"
                                                 style={{ color: cell.f === null ? "#cbd5e1" : cell.f >= settings.excellenceThreshold ? "#10b981" : cell.f >= settings.passThreshold ? "#3b82f6" : "#ef4444" }}>
                                                 {cell.f === null ? "—" : cell.f.toFixed(2)}
                                             </td>
                                         ))}
-                                        <td className="px-2 py-1.5 text-center font-black border-l border-slate-100"
+                                        <td className="px-2 py-1.5 text-center font-semibold border-l border-slate-100"
                                             style={{ color: cntF === 0 ? "#94a3b8" : avg >= settings.excellenceThreshold ? "#10b981" : avg >= settings.passThreshold ? "#3b82f6" : "#ef4444" }}>
                                             {cntF > 0 ? avg.toFixed(2) : "—"}
                                         </td>
@@ -663,7 +701,7 @@ function GradesAnalyticsView({ allGrades, settings }: any) {
         <div>
             <div className="flex items-center justify-between mb-1 gap-2">
                 <span className="text-[11px] font-bold text-slate-700 truncate flex-1">{label}</span>
-                <span className="text-[11px] font-black flex-shrink-0" style={{ color }}>
+                <span className="text-[11px] font-semibold flex-shrink-0" style={{ color }}>
                     {value.toFixed(2)}{total && <span className="text-slate-400 mr-1 font-bold">{total}</span>}
                 </span>
             </div>
@@ -680,23 +718,23 @@ function GradesAnalyticsView({ allGrades, settings }: any) {
             {/* KPIs */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <p className="text-[10px] font-black text-slate-400">المعدل العام</p>
-                    <p className="text-2xl font-black" style={{ color: pctColor(overallAvg) }}>{overallAvg.toFixed(2)}</p>
+                    <p className="text-[10px] font-semibold text-slate-400">المعدل العام</p>
+                    <p className="text-2xl font-semibold" style={{ color: pctColor(overallAvg) }}>{overallAvg.toFixed(2)}</p>
                     <p className="text-[10px] font-bold text-slate-400">من {settings.finalScoreOutOf}</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <p className="text-[10px] font-black text-slate-400">متميزون</p>
-                    <p className="text-2xl font-black text-emerald-600">{excellent}</p>
+                    <p className="text-[10px] font-semibold text-slate-400">متميزون</p>
+                    <p className="text-2xl font-semibold text-emerald-600">{excellent}</p>
                     <p className="text-[10px] font-bold text-slate-400">{totalCnt > 0 ? Math.round(excellent / totalCnt * 100) : 0}%</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <p className="text-[10px] font-black text-slate-400">ناجحون</p>
-                    <p className="text-2xl font-black text-blue-600">{pass}</p>
+                    <p className="text-[10px] font-semibold text-slate-400">ناجحون</p>
+                    <p className="text-2xl font-semibold text-blue-600">{pass}</p>
                     <p className="text-[10px] font-bold text-slate-400">{totalCnt > 0 ? Math.round(pass / totalCnt * 100) : 0}%</p>
                 </div>
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-                    <p className="text-[10px] font-black text-slate-400">دون النجاح</p>
-                    <p className="text-2xl font-black text-rose-600">{fail}</p>
+                    <p className="text-[10px] font-semibold text-slate-400">دون النجاح</p>
+                    <p className="text-2xl font-semibold text-rose-600">{fail}</p>
                     <p className="text-[10px] font-bold text-slate-400">{totalCnt > 0 ? Math.round(fail / totalCnt * 100) : 0}%</p>
                 </div>
             </div>
@@ -704,8 +742,8 @@ function GradesAnalyticsView({ allGrades, settings }: any) {
             {/* Subjects ranking */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
-                    <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{subjectStats.length}</span>
-                    <span className="font-black text-white text-sm">ترتيب المواد حسب المعدل</span>
+                    <span className="bg-white/15 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">{subjectStats.length}</span>
+                    <span className="font-semibold text-white text-sm">ترتيب المواد حسب المعدل</span>
                 </div>
                 <div className="p-4 space-y-2.5 max-h-96 overflow-y-auto">
                     {subjectStats.map(s => <HBar key={s.name} label={s.name} value={s.avg} max={settings.finalScoreOutOf} color={pctColor(s.avg)} total={` · ${s.cnt} طالب`}/>)}
@@ -715,8 +753,8 @@ function GradesAnalyticsView({ allGrades, settings }: any) {
             {/* Classes ranking */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: "linear-gradient(135deg,#0f172a,#1e293b)" }}>
-                    <span className="bg-white/15 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{classStats.length}</span>
-                    <span className="font-black text-white text-sm">ترتيب الفصول</span>
+                    <span className="bg-white/15 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">{classStats.length}</span>
+                    <span className="font-semibold text-white text-sm">ترتيب الفصول</span>
                 </div>
                 <div className="p-4 space-y-2.5 max-h-96 overflow-y-auto">
                     {classStats.map(c => <HBar key={c.name} label={`فصل ${c.name}`} value={c.avg} max={settings.finalScoreOutOf} color={pctColor(c.avg)} total={` · ${c.cnt} مادة`}/>)}
@@ -726,15 +764,15 @@ function GradesAnalyticsView({ allGrades, settings }: any) {
             {/* Activity stats */}
             <div className="grid grid-cols-3 gap-3">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-black text-emerald-600">{gradedCount}</p>
+                    <p className="text-2xl font-semibold text-emerald-600">{gradedCount}</p>
                     <p className="text-[10px] font-bold text-emerald-700 mt-1">درجة مرصودة</p>
                 </div>
                 <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-black text-rose-600">{absentCount}</p>
+                    <p className="text-2xl font-semibold text-rose-600">{absentCount}</p>
                     <p className="text-[10px] font-bold text-rose-700 mt-1">غياب</p>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-black text-amber-600">{excusedCount}</p>
+                    <p className="text-2xl font-semibold text-amber-600">{excusedCount}</p>
                     <p className="text-[10px] font-bold text-amber-700 mt-1">معذور</p>
                 </div>
             </div>

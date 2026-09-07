@@ -11,6 +11,7 @@ const DEFAULT_SUBJECTS = [
     { subject: "الفيزياء", category: "عملي" },
     { subject: "الكيمياء", category: "عملي" },
     { subject: "الأحياء", category: "عملي" },
+    { subject: "الحاسوب", category: "عملي" },
     { subject: "المهارات الحياتية", category: "مهارات حياتية" },
     { subject: "اللغة العربية", category: "شفوي" },
     { subject: "اللغة الإنجليزية", category: "شفوي" },
@@ -45,6 +46,21 @@ export const updateSubjects = mutation({
     handler: async (ctx, args) => {
         const school = await getSchool(ctx);
         await ctx.db.patch(school._id, { practicalSubjects: args.subjects });
+    },
+});
+
+// Add a single subject if not already present
+export const addSubjectIfMissing = mutation({
+    args: { subject: v.string(), category: v.string() },
+    handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        const current = (school as any).practicalSubjects ?? DEFAULT_SUBJECTS;
+        const exists = current.some((s: any) => s.subject.trim() === args.subject.trim());
+        if (exists) return { added: false };
+        await ctx.db.patch(school._id, {
+            practicalSubjects: [...current, { subject: args.subject.trim(), category: args.category.trim() }],
+        });
+        return { added: true };
     },
 });
 

@@ -360,6 +360,7 @@ export const getDailySummary = query({
 
         const classes = await ctx.db.query("classes")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .filter(q => q.eq(q.field("isActive"), true))
             .collect();
 
         const students = await ctx.db.query("students")
@@ -896,6 +897,7 @@ export const getFrequentlyAbsentStudents = query({
         const classes = await ctx.db
             .query("classes")
             .withIndex("by_school", q => q.eq("schoolId", args.schoolId))
+            .filter(q => q.eq(q.field("isActive"), true))
             .collect();
 
         // For each class, get periods on this date, then count absences per student

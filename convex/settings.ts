@@ -85,11 +85,13 @@ export const updateClass = mutation({
         id: v.id("classes"),
         track: v.optional(v.string()),
         name: v.optional(v.string()),
+        isActive: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
         const patch: any = {};
         if (args.track !== undefined) patch.track = args.track.trim() || undefined;
         if (args.name !== undefined) patch.name = args.name.trim();
+        if (args.isActive !== undefined) patch.isActive = args.isActive;
         await ctx.db.patch(args.id, patch);
         return "تم التعديل.";
     }
@@ -170,6 +172,15 @@ export const deleteSubject = mutation({
 export const deleteClass = mutation({
     args: { id: v.id("classes") },
     handler: async (ctx, args) => {
+        // Deleting a class that still holds students would orphan them — the
+        // class would vanish from every screen while the students stayed in the
+        // table pointing at a missing id.
+        const students = await ctx.db.query("students")
+            .withIndex("by_class", q => q.eq("classId", args.id))
+            .take(1);
+        if (students.length > 0) {
+            throw new Error("لا يمكن حذف صف يحتوي على طلاب. انقل الطلاب أولاً أو ألغِ تفعيل الصف.");
+        }
         await ctx.db.delete(args.id);
     }
 });

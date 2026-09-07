@@ -67,7 +67,7 @@ export default function SupervisionTeachers() {
     return (
         <div dir="rtl" className="space-y-4">
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between">
+                <div className="px-5 py-3 flex items-center justify-between" style={{background:"linear-gradient(135deg,#5C1523,#7A1E30)"}}>
                     <div className="flex gap-2">
                         <button onClick={() => setTab("teachers")}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black ${tab === "teachers" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
@@ -203,7 +203,7 @@ function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any
     const [subjects, setSubjects] = useState<string[]>([]);
 
     const ROLE_LABELS = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
-    const ROLE_COLORS = { coordinator: "#5C1A1B", supervisor: "#1e40af", deputy: "#065f46" };
+    const ROLE_COLORS = { coordinator: "#5C1523", supervisor: "#1e40af", deputy: "#065f46" };
 
     const handleAdd = async () => {
         if (!name.trim() || subjects.length === 0) return;

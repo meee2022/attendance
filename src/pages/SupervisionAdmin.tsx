@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, BarChart3, KeyRound, Save, Users, Activity, History } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, BarChart3, KeyRound, Save, Users, Activity, History, BookOpen } from "lucide-react";
 import SupervisionAnalytics from "./SupervisionAnalytics";
 import SupervisionAdvancedAnalytics from "./SupervisionAdvancedAnalytics";
 import SupervisionTeachers from "./SupervisionTeachers";
@@ -16,9 +16,9 @@ const DOMAIN_COLORS: Record<Domain, string> = { planning: "#3b82f6", execution: 
 const DOMAIN_ORDER: Domain[] = ["planning", "execution", "evaluation", "management"];
 
 const ROLE_LABELS: Record<Role, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
-const ROLE_COLORS: Record<Role, string> = { coordinator: "#5C1A1B", supervisor: "#1e40af", deputy: "#065f46" };
+const ROLE_COLORS: Record<Role, string> = { coordinator: "#5C1523", supervisor: "#1e40af", deputy: "#065f46" };
 
-type AdminTab = "analytics" | "advanced" | "teachers" | "criteria" | "pins" | "audit";
+type AdminTab = "analytics" | "advanced" | "teachers" | "criteria" | "recs" | "pins" | "audit";
 
 export default function SupervisionAdmin() {
     const [tab, setTab] = useState<AdminTab>("analytics");
@@ -28,18 +28,20 @@ export default function SupervisionAdmin() {
         { key: "advanced",  label: "تحليل متقدم", icon: Activity },
         { key: "teachers",  label: "المعلمون والزائرون", icon: Users },
         { key: "criteria",  label: "المعايير", icon: ClipboardCheck },
+        { key: "recs",      label: "بنك التوصيات", icon: BookOpen },
         { key: "pins",      label: "كلمات المرور", icon: KeyRound },
         { key: "audit",     label: "سجل المراجعات", icon: History },
     ];
 
     return (
         <div dir="rtl" className="space-y-5">
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap"
+                    style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
                     <div className="flex gap-1.5 flex-wrap">
                         {TABS.map(({ key, label, icon: Icon }) => (
                             <button key={key} onClick={() => setTab(key)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${tab === key ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all ${tab === key ? "bg-white text-qatar-maroon shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
                                 <Icon className="w-3.5 h-3.5"/>{label}
                             </button>
                         ))}
@@ -53,6 +55,7 @@ export default function SupervisionAdmin() {
                     {tab === "advanced"  && <SupervisionAdvancedAnalytics/>}
                     {tab === "teachers"  && <SupervisionTeachers/>}
                     {tab === "criteria"  && <CriteriaManager/>}
+                    {tab === "recs"      && <RecommendationBankManager/>}
                     {tab === "pins"      && <PinsManager/>}
                     {tab === "audit"     && <SupervisionAuditLog/>}
                 </div>
@@ -230,6 +233,139 @@ function CriteriaManager() {
                     {resetting ? "جارٍ الإعادة..." : "إعادة ضبط للمعايير الافتراضية (24 معيار)"}
                 </button>
             )}
+        </div>
+    );
+}
+
+// ── Recommendation Bank Manager ───────────────────────────────────────────
+type RecDomain = "planning" | "execution" | "evaluation" | "management" | "general";
+
+const REC_DOMAIN_LABELS: Record<RecDomain, string> = {
+    planning: "التخطيط", execution: "تنفيذ الدرس",
+    evaluation: "التقويم", management: "الإدارة الصفية", general: "عامة",
+};
+const REC_DOMAIN_COLORS: Record<RecDomain, string> = {
+    planning: "#3b82f6", execution: "#10b981", evaluation: "#f59e0b", management: "#8b5cf6", general: "#64748b",
+};
+const REC_DOMAIN_ORDER: RecDomain[] = ["planning", "execution", "evaluation", "management", "general"];
+
+function RecommendationBankManager() {
+    const bank = useQuery(api.supervision.getRecommendationBank) as any[] | undefined;
+    const seedRecs = useMutation(api.supervision.seedDefaultRecommendations);
+    const addRec = useMutation(api.supervision.addRecommendation);
+    const updateRec = useMutation(api.supervision.updateRecommendation);
+    const deleteRec = useMutation(api.supervision.deleteRecommendation);
+
+    const [newDomain, setNewDomain] = useState<RecDomain>("general");
+    const [newText, setNewText] = useState("");
+    const [editId, setEditId] = useState<string | null>(null);
+    const [editText, setEditText] = useState("");
+    const [seeding, setSeeding] = useState(false);
+
+    if (!bank) return <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-qatar-maroon"/></div>;
+
+    const byDomain: Record<RecDomain, any[]> = { planning: [], execution: [], evaluation: [], management: [], general: [] };
+    for (const r of bank) {
+        if (byDomain[r.domain as RecDomain]) byDomain[r.domain as RecDomain].push(r);
+    }
+
+    const handleAdd = async () => {
+        if (!newText.trim()) return;
+        await addRec({ domain: newDomain, text: newText.trim() });
+        setNewText("");
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs font-bold text-blue-800">
+                <p className="font-black mb-1">بنك التوصيات</p>
+                <p>هذه التوصيات تظهر في استمارة الزيارة — يمكن للزائر اختيار توصية جاهزة بدل الكتابة من الصفر.</p>
+            </div>
+
+            {bank.length === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-amber-800">البنك فارغ — تحميل التوصيات الافتراضية (19 توصية)؟</p>
+                    <button onClick={async () => { setSeeding(true); try { await seedRecs({}); } finally { setSeeding(false); } }}
+                        disabled={seeding}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-black hover:bg-amber-600 disabled:opacity-50">
+                        <BookOpen className="w-3.5 h-3.5"/>{seeding ? "جارٍ التحميل..." : "تحميل الافتراضية"}
+                    </button>
+                </div>
+            )}
+
+            {/* Add new */}
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 space-y-2">
+                <p className="text-xs font-black text-slate-500">إضافة توصية جديدة</p>
+                <div className="flex gap-2 flex-wrap">
+                    {REC_DOMAIN_ORDER.map(d => (
+                        <button key={d} onClick={() => setNewDomain(d)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${newDomain === d ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-600"}`}
+                            style={newDomain === d ? { background: REC_DOMAIN_COLORS[d] } : {}}>
+                            {REC_DOMAIN_LABELS[d]}
+                        </button>
+                    ))}
+                </div>
+                <textarea value={newText} onChange={e => setNewText(e.target.value)} rows={2}
+                    placeholder="اكتب نص التوصية..."
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold bg-white resize-none focus:outline-none focus:border-qatar-maroon"/>
+                <button onClick={handleAdd} disabled={!newText.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-qatar-maroon text-white text-xs font-black hover:opacity-90 disabled:opacity-40">
+                    <Plus className="w-3.5 h-3.5"/>إضافة
+                </button>
+            </div>
+
+            {/* List by domain */}
+            {REC_DOMAIN_ORDER.map(domain => {
+                const items = byDomain[domain];
+                if (items.length === 0) return null;
+                const color = REC_DOMAIN_COLORS[domain];
+                return (
+                    <div key={domain} className="bg-white rounded-xl border-2 overflow-hidden" style={{ borderColor: color + "30" }}>
+                        <div className="px-4 py-2 flex items-center justify-between" style={{ background: color + "10" }}>
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded text-white" style={{ background: color }}>{items.length}</span>
+                            <span className="font-black text-sm" style={{ color }}>{REC_DOMAIN_LABELS[domain]}</span>
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                            {items.map((r: any) => (
+                                <div key={r._id} className={`flex items-start gap-2 p-3 ${!r.isActive ? "opacity-50" : ""}`}>
+                                    <div className="flex gap-1 mt-0.5">
+                                        <button onClick={() => updateRec({ id: r._id, isActive: !r.isActive })}
+                                            className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-black ${r.isActive ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
+                                            {r.isActive ? <Check className="w-3 h-3"/> : <X className="w-3 h-3"/>}
+                                        </button>
+                                        <button onClick={() => deleteRec({ id: r._id })}
+                                            className="w-5 h-5 rounded bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center">
+                                            <Trash2 className="w-3 h-3"/>
+                                        </button>
+                                    </div>
+                                    {editId === r._id ? (
+                                        <div className="flex-1 flex gap-2">
+                                            <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={2}
+                                                className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold resize-none focus:outline-none focus:border-qatar-maroon"/>
+                                            <div className="flex flex-col gap-1">
+                                                <button onClick={async () => { await updateRec({ id: r._id, text: editText }); setEditId(null); }}
+                                                    className="px-2 py-1 rounded bg-emerald-500 text-white text-[10px] font-black">
+                                                    <Check className="w-3 h-3"/>
+                                                </button>
+                                                <button onClick={() => setEditId(null)}
+                                                    className="px-2 py-1 rounded bg-slate-100 text-slate-500 text-[10px] font-black">
+                                                    <X className="w-3 h-3"/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex items-start gap-2">
+                                            <button onClick={() => { setEditId(r._id); setEditText(r.text); }}
+                                                className="mt-0.5 text-slate-300 hover:text-slate-600"><Pencil className="w-3 h-3"/></button>
+                                            <p className="flex-1 text-sm font-bold text-slate-700 leading-relaxed">{r.text}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })}
         </div>
     );
 }

@@ -8,7 +8,7 @@ const DEFAULT_CATEGORIES = ["عملي", "شفوي", "مهارات حياتية",
 
 function categoryStyle(cat: string) {
     const c = cat.trim();
-    if (c.includes("عمل")) return { icon: FlaskConical, color: "#5C1A1B" };
+    if (c.includes("عمل")) return { icon: FlaskConical, color: "#5C1523" };
     if (c.includes("شفو")) return { icon: Mic, color: "#1e40af" };
     if (c.includes("بدني")) return { icon: Activity, color: "#ea580c" };
     if (c.includes("استماع")) return { icon: Headphones, color: "#065f46" };
@@ -24,7 +24,7 @@ export default function PracticalExamsAdmin() {
     return (
         <div dir="rtl" className="space-y-4">
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="bg-slate-700 px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap" style={{background:"linear-gradient(135deg,#5C1523,#7A1E30)"}}>
                     <div className="flex gap-2">
                         <button onClick={() => setTab("subjects")}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black ${tab === "subjects" ? "bg-white text-slate-700 shadow" : "bg-white/10 text-white hover:bg-white/20"}`}>
@@ -140,13 +140,14 @@ function SubjectsEditor() {
                         { subject: "الفيزياء", category: "عملي" },
                         { subject: "الكيمياء", category: "عملي" },
                         { subject: "الأحياء", category: "عملي" },
+                        { subject: "الحاسوب", category: "عملي" },
                         { subject: "اللغة العربية", category: "شفوي" },
                         { subject: "اللغة الإنجليزية", category: "شفوي" },
                         { subject: "المهارات الحياتية", category: "مهارات حياتية" },
                         { subject: "التربية البدنية", category: "تربية بدنية" },
                     ])}
                         className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-black hover:bg-emerald-600">
-                        <Plus className="w-3.5 h-3.5"/>تحميل 7 مواد افتراضية
+                        <Plus className="w-3.5 h-3.5"/>تحميل 8 مواد افتراضية
                     </button>
                 </div>
             )}

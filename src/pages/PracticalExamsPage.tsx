@@ -1,3 +1,4 @@
+import { PageTabs } from "../components/ui";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
@@ -11,7 +12,7 @@ import {
 // Category style mapping (icon + color)
 function categoryStyle(cat: string): { icon: any; color: string; light: string } {
     const c = cat.trim();
-    if (c.includes("عمل") || c.toLowerCase().includes("practical")) return { icon: FlaskConical, color: "#5C1A1B", light: "#FBE9EC" };
+    if (c.includes("عمل") || c.toLowerCase().includes("practical")) return { icon: FlaskConical, color: "#5C1523", light: "#FBE9EC" };
     if (c.includes("شفو") || c.toLowerCase().includes("oral")) return { icon: Mic, color: "#1e40af", light: "#DBEAFE" };
     if (c.includes("بدني") || c.toLowerCase().includes("physical") || c.toLowerCase().includes("pe")) return { icon: Activity, color: "#ea580c", light: "#FED7AA" };
     if (c.includes("استماع") || c.toLowerCase().includes("listen")) return { icon: Headphones, color: "#065f46", light: "#D1FAE5" };
@@ -20,7 +21,7 @@ function categoryStyle(cat: string): { icon: any; color: string; light: string }
 }
 
 const TRACK_COLORS: Record<string, string> = {
-    "عام": "#5C1A1B",
+    "عام": "#5C1523",
     "علمي": "#1e40af",
     "أدبي": "#f59e0b",
     "تكنولوجي": "#7c3aed",
@@ -65,9 +66,9 @@ function printAbsences(rows: any[], filters: { category: string; subject: string
 @media print { .no-print { display: none !important; } }
 * { box-sizing: border-box; }
 body { font-family: 'Cairo', 'Tahoma', sans-serif; background: white; color: #1e293b; max-width: 210mm; margin: 0 auto; padding: 8mm; font-size: 11px; direction: rtl; }
-h1 { font-size: 20px; margin: 0; font-weight: 900; color: #5C1A1B; }
-h2 { font-size: 13px; margin: 12px 0 6px; font-weight: 900; padding: 6px 10px; border-radius: 6px; background: #5C1A1B; color: white; }
-.header { text-align: center; border-bottom: 2px solid #5C1A1B; padding-bottom: 8px; margin-bottom: 10px; }
+h1 { font-size: 20px; margin: 0; font-weight: 900; color: #5C1523; }
+h2 { font-size: 13px; margin: 12px 0 6px; font-weight: 900; padding: 6px 10px; border-radius: 6px; background: #5C1523; color: white; }
+.header { text-align: center; border-bottom: 2px solid #5C1523; padding-bottom: 8px; margin-bottom: 10px; }
 .sub { margin: 2px 0 0; font-size: 10px; color: #64748b; font-weight: 700; }
 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
 .kpi { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; }
@@ -78,13 +79,13 @@ h2 { font-size: 13px; margin: 12px 0 6px; font-weight: 900; padding: 6px 10px; b
 table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
 th, td { border: 1px solid #cbd5e1; padding: 5px 6px; text-align: right; }
 th { background: #f1f5f9; font-weight: 900; font-size: 10px; }
-.cls-header td { background: #5C1A1B; color: white; font-weight: 900; font-size: 11px; text-align: center; }
+.cls-header td { background: #5C1523; color: white; font-weight: 900; font-size: 11px; text-align: center; }
 .status-excused { color: #f59e0b; font-weight: 900; }
 .status-absent { color: #dc2626; font-weight: 900; }
-.cat-badge { display: inline-block; background: #5C1A1B; color: white; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 900; }
+.cat-badge { display: inline-block; background: #5C1523; color: white; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 900; }
 .footer { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .sig { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; min-height: 60px; }
-.print-btn { background: #5C1A1B; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 900; cursor: pointer; font-family: inherit; font-size: 12px; }
+.print-btn { background: #5C1523; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 900; cursor: pointer; font-family: inherit; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -95,7 +96,7 @@ th { background: #f1f5f9; font-weight: 900; font-size: 10px; }
 </div>
 
 <div class="kpis">
-    <div class="kpi"><b style="color:#5C1A1B">${total}</b><span>إجمالي الغياب</span></div>
+    <div class="kpi"><b style="color:#5C1523">${total}</b><span>إجمالي الغياب</span></div>
     <div class="kpi"><b style="color:#dc2626">${noExcuse}</b><span>بدون عذر</span></div>
     <div class="kpi"><b style="color:#f59e0b">${excused}</b><span>بعذر</span></div>
     <div class="kpi"><b style="color:#1e40af">${uniqueStudents}</b><span>عدد الطلاب</span></div>
@@ -220,8 +221,8 @@ export default function PracticalExamsPage() {
     return (
         <div dir="rtl" className="max-w-7xl mx-auto space-y-5 animate-in fade-in duration-500 pb-20">
             {/* Header */}
-            <div className="rounded-2xl overflow-hidden qatar-card-shadow"
-                style={{ background: "linear-gradient(135deg,#5C1A1B 0%,#7A2425 50%,#5C1A1B 100%)" }}>
+            <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
+                >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 sm:p-7">
                     <div>
                         <h1 className="text-2xl font-black text-white flex items-center gap-3">
@@ -240,22 +241,16 @@ export default function PracticalExamsPage() {
                             })}
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => { setView("classes"); setSelectedClass(null); }}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-sm transition-all border ${
-                                view === "classes" ? "bg-white text-qatar-maroon border-white shadow" : "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                            }`}>
-                            <Layers className="w-4 h-4"/>الفصول
-                        </button>
-                        <button onClick={() => { setView("report"); setSelectedClass(null); }}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-black text-sm transition-all border ${
-                                view === "report" ? "bg-white text-qatar-maroon border-white shadow" : "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                            }`}>
-                            <FileText className="w-4 h-4"/>قائمة الغائبين
-                        </button>
-                    </div>
+
                 </div>
             </div>
+
+            <PageTabs label="طرق عرض الاختبارات" active={view}
+                items={[
+                    { id: "classes" as const, label: "الفصول", icon: <Layers className="w-4 h-4"/> },
+                    { id: "report" as const, label: "قائمة الغائبين", icon: <FileText className="w-4 h-4"/> },
+                ]}
+                onChange={next => { setView(next); setSelectedClass(null); }}/>
 
             {selectedClass ? (
                 <RosterView className={selectedClass} subjects={subjects} byCategory={byCategory} onBack={() => setSelectedClass(null)}/>
@@ -317,7 +312,7 @@ function ClassesGrid({ classes, onSelect }: { classes: any[]; onSelect: (n: stri
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {filtered.map(c => {
-                    const trackColor = TRACK_COLORS[c.track || "عام"] || "#5C1A1B";
+                    const trackColor = TRACK_COLORS[c.track || "عام"] || "#5C1523";
                     return (
                         <button key={c._id} onClick={() => onSelect(c.name)}
                             className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md hover:border-qatar-maroon/40 transition-all text-right group">
@@ -402,7 +397,7 @@ function RosterView({ className, subjects, byCategory, onBack }: {
     const selStyle = selected ? categoryStyle(selected.category) : { icon: BookOpen, color: "#64748b", light: "#f1f5f9" };
     const SelIcon = selStyle.icon;
 
-    const trackColor = TRACK_COLORS[classMeta.track || "عام"] || "#5C1A1B";
+    const trackColor = TRACK_COLORS[classMeta.track || "عام"] || "#5C1523";
     const totalAbsences = absences.length;
 
     return (
@@ -556,7 +551,7 @@ function RosterView({ className, subjects, byCategory, onBack }: {
                     <div className="bg-white rounded-2xl border border-slate-100 shadow-md overflow-hidden">
                         {/* Branded header bar — matches other sections */}
                         <div dir="rtl" className="px-5 py-3 flex items-center justify-between gap-3"
-                            style={{ background: "linear-gradient(135deg,#5C1A1B,#7A2425)" }}>
+                            style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-white/20 text-white">
                                     {filteredStudents.length} / {students.length}
@@ -858,7 +853,7 @@ function AbsencesReport({ subjects, byCategory, template }: {
 
             {/* KPIs */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <KPI label="إجمالي الغياب" value={all.length} color="#5C1A1B"/>
+                <KPI label="إجمالي الغياب" value={all.length} color="#5C1523"/>
                 <KPI label="بدون عذر" value={all.filter(a => a.status === "absent").length} color="#ef4444"/>
                 <KPI label="بعذر" value={all.filter(a => a.status === "excused").length} color="#f59e0b"/>
                 <KPI label="عدد الطلاب" value={new Set(all.map(a => a.studentName)).size} color="#1e40af"/>

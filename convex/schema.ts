@@ -203,6 +203,8 @@ export default defineSchema({
         passThreshold: v.number(),          // حد النجاح من finalScoreOutOf (افتراضي 2.5)
         excellenceThreshold: v.number(),    // حد التميز (افتراضي 4.5)
         assessmentLabels: v.array(v.string()), // ["تقييم 1", ..., "تقييم 5"]
+        // الصفوف المشمولة بالتقييمات القصيرة (الصف 12 مثلاً ليس له تقييمات قصيرة)
+        includedGrades: v.optional(v.array(v.number())),
     }).index("by_school", ["schoolId"]),
 
     // قاعدة بيانات المعلمين الموحدة
@@ -286,6 +288,8 @@ export default defineSchema({
         executionRec: v.optional(v.string()),
         evalMgmtRec: v.optional(v.string()),
         notes: v.optional(v.string()),
+        // إطراء المعلم
+        praiseText: v.optional(v.string()),
         // الحالة والتوقيع
         status: v.union(v.literal("draft"), v.literal("submitted")),
         submittedAt: v.optional(v.number()),
@@ -297,4 +301,20 @@ export default defineSchema({
       .index("by_role", ["schoolId", "visitorRole"])
       .index("by_subject", ["schoolId", "subjectName"])
       .index("by_date", ["schoolId", "visitDate"]),
+
+    // بنك التوصيات للإشراف الصفي
+    supervisionRecommendationBank: defineTable({
+        schoolId: v.id("schools"),
+        domain: v.union(
+            v.literal("planning"),
+            v.literal("execution"),
+            v.literal("evaluation"),
+            v.literal("management"),
+            v.literal("general"),   // توصيات عامة
+        ),
+        text: v.string(),
+        order: v.number(),
+        isActive: v.boolean(),
+    }).index("by_school", ["schoolId"])
+      .index("by_school_domain", ["schoolId", "domain"]),
 });

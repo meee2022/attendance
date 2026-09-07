@@ -55,11 +55,8 @@ export default function StudentsPage() {
 
     const gradeClasses = initialData.classes
         ? initialData.classes.filter((c: any) => c.grade === selectedGrade && c.isActive)
-            .sort((a: any, b: any) => {
-                const na = parseInt(a.name.split("-")[1] || "0", 10);
-                const nb = parseInt(b.name.split("-")[1] || "0", 10);
-                return na - nb;
-            })
+            // numeric-aware: 10-2 < 10-10, and named sections (ESE, غير محدد) sort last
+            .sort((a: any, b: any) => a.name.localeCompare(b.name, "ar", { numeric: true }))
         : [];
 
     const trackGroups = gradeClasses.reduce((acc: any, cls: any) => {
@@ -115,10 +112,19 @@ export default function StudentsPage() {
         e.preventDefault();
         if (!transferStudentData || !targetClassId) return;
         try {
-            await updateStudentClass({
+            const res: any = await updateStudentClass({
                 studentId: transferStudentData._id,
                 newClassId: targetClassId as any
             });
+            // Grades / practical absences / assessments are re-stamped with the
+            // new class — tell the user what moved with the student.
+            const moved = [
+                res?.grades ? `${res.grades} سجل درجات` : "",
+                res?.practical ? `${res.practical} سجل غياب عملي` : "",
+                res?.attendance ? `${res.attendance} سجل حضور` : "",
+                res?.assessments ? `${res.assessments} تقييم` : "",
+            ].filter(Boolean);
+            if (moved.length > 0) alert(`تم النقل، وانتقل معه: ${moved.join("، ")}.`);
             setTransferStudentData(null);
             // Optionally clear selectedClassId if you want to force them to select again, but keeping it is fine.
         } catch (err) {
@@ -430,12 +436,15 @@ export default function StudentsPage() {
                                     className="w-full border border-slate-200 bg-white py-3 px-4 rounded-xl font-bold outline-none focus:border-blue-500 transition-colors"
                                 >
                                     <option value="" disabled>-- الرجاء اختيار الصف --</option>
-                                    {initialData.classes?.map((cls: any) => (
-                                        // Optional: filter out the current class id
-                                        cls._id !== transferStudentData.classId && cls.isActive && (
-                                            <option key={cls._id} value={cls._id}>{cls.name} (عاشر {cls.grade}) - {cls.track || "عام"}</option>
-                                        )
-                                    ))}
+                                    {(initialData.classes ?? [])
+                                        .filter((cls: any) => cls.isActive && cls._id !== transferStudentData.classId)
+                                        .sort((a: any, b: any) =>
+                                            (a.grade - b.grade) || a.name.localeCompare(b.name, "ar", { numeric: true }))
+                                        .map((cls: any) => (
+                                            <option key={cls._id} value={cls._id}>
+                                                {cls.name} — الصف ال{GRADE_SHORT[cls.grade] ?? cls.grade} · {cls.track || "عام"}
+                                            </option>
+                                        ))}
                                 </select>
                             </div>
                             

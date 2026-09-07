@@ -16,8 +16,19 @@ export const FEATURES: { key: string; label: string; description: string }[] = [
 ];
 
 export function useHiddenFeatures(): string[] {
+    return useHiddenFeaturesState().hidden;
+}
+
+// Same data, but tells you whether the answer has actually arrived — routing
+// decisions must not act on an empty list that only means "still loading".
+export function useHiddenFeaturesState(): { hidden: string[]; isLoading: boolean } {
     const list = useQuery(api.settings.getHiddenFeatures) as string[] | undefined;
-    return list ?? [];
+    return { hidden: list ?? [], isLoading: list === undefined };
+}
+
+// First page the user can actually open, in navbar order.
+export function firstVisibleFeature(navOrder: string[], hidden: string[]): string | undefined {
+    return navOrder.find(key => !hidden.includes(key));
 }
 
 export function isFeatureHidden(key: string, hidden: string[]): boolean {

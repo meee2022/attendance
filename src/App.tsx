@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 import { LayoutGrid, LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen, Lock, FlaskConical } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import TeacherUpload from "./pages/TeacherUpload";
@@ -20,7 +20,7 @@ import SupervisionPrint from "./pages/SupervisionPrint";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
 import PracticalExamsPage from "./pages/PracticalExamsPage";
-import { useHiddenFeatures } from "./lib/featureFlags";
+import { useHiddenFeatures, useHiddenFeaturesState, firstVisibleFeature } from "./lib/featureFlags";
 
 // Primary nav: most-used daily operations
 const PRIMARY_NAV = [
@@ -47,20 +47,55 @@ const ADMIN_NAV = [
 
 const ALL_NAV = [...PUBLIC_NAV, ...ADMIN_NAV];
 
-function FeatureRoute({ featureKey, children }: { featureKey: string; children: React.ReactNode }) {
-  const hidden = useHiddenFeatures();
-  if (hidden.includes(featureKey)) {
-    return (
-      <div dir="rtl" className="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center mt-10">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-          <Shield className="w-8 h-8 text-slate-400"/>
-        </div>
-        <p className="font-black text-slate-700 text-lg">هذه الصفحة معطّلة حالياً</p>
-        <p className="text-sm text-slate-400 font-bold mt-2">يمكن للمسؤول تفعيلها من الإعدادات</p>
+// Navbar order — also the order used to pick the landing page
+const NAV_ORDER = PUBLIC_NAV.map(n => n.to);
+
+function AllFeaturesDisabled() {
+  return (
+    <div dir="rtl" className="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center mt-10">
+      <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+        <Shield className="w-8 h-8 text-slate-400"/>
       </div>
-    );
-  }
-  return <>{children}</>;
+      <p className="font-black text-slate-700 text-lg">جميع الصفحات معطّلة حالياً</p>
+      <p className="text-sm text-slate-400 font-bold mt-2">يمكن للمسؤول تفعيلها من الإعدادات</p>
+    </div>
+  );
+}
+
+function RouteLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-[300px]" role="status" aria-label="جاري التحميل">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-qatar-maroon"/>
+    </div>
+  );
+}
+
+// A disabled page is not a dead end: send the user to the first page they can
+// actually open, so opening the app with الرئيسية turned off still lands
+// somewhere useful.
+function FeatureRoute({ featureKey, children }: { featureKey: string; children: React.ReactNode }) {
+  const { hidden, isLoading } = useHiddenFeaturesState();
+
+  if (isLoading) return <RouteLoading/>;
+  if (!hidden.includes(featureKey)) return <>{children}</>;
+
+  const fallback = firstVisibleFeature(NAV_ORDER, hidden);
+  if (fallback && fallback !== featureKey) return <Navigate to={fallback} replace/>;
+  return <AllFeaturesDisabled/>;
+}
+
+// Unknown paths land on the first available page too
+function NotFoundRedirect() {
+  const { hidden, isLoading } = useHiddenFeaturesState();
+  if (isLoading) return <RouteLoading/>;
+  const fallback = firstVisibleFeature(NAV_ORDER, hidden);
+  return fallback ? <Navigate to={fallback} replace/> : <AllFeaturesDisabled/>;
+}
+
+// The logo/brand link should follow the same rule
+function useHomePath(): string {
+  const { hidden } = useHiddenFeaturesState();
+  return firstVisibleFeature(NAV_ORDER, hidden) ?? "/";
 }
 
 function App() {
@@ -89,6 +124,7 @@ function App() {
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />
           <Route path="/message-templates"   element={<AdminGuard><MessageTemplatesPage /></AdminGuard>} />
           <Route path="/seed"                element={<AdminGuard><SeedPage /></AdminGuard>} />
+          <Route path="*"                    element={<NotFoundRedirect />} />
         </Routes>
       </main>
       <BottomNav />
@@ -103,6 +139,7 @@ function Navbar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   const hiddenFeatures = useHiddenFeatures();
+  const homePath = useHomePath();
   // Combine all nav items, filter hidden, then split: first 4 in primary bar, rest in "المزيد"
   const allVisible = [...PRIMARY_NAV, ...SECONDARY_NAV].filter(n => !hiddenFeatures.includes(n.to));
   const PRIMARY_LIMIT = 5;
@@ -119,7 +156,7 @@ function Navbar() {
 
   const handleLogout = () => {
     clearAdminSession();
-    window.location.href = "/";
+    window.location.href = homePath;
   };
 
   const moreActive = visibleSecondary.some(n => isActive(n.to));
@@ -130,7 +167,7 @@ function Navbar() {
         <div className="flex items-center justify-between h-16 gap-4">
 
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 flex-shrink-0 group">
+          <Link to={homePath} className="flex items-center gap-3 flex-shrink-0 group">
             <div className="relative">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white"
                    style={{ background: "linear-gradient(135deg, #5C1523, #7A1E30)" }}>

@@ -356,6 +356,15 @@ export const upsertGrade = mutation({
         if (args.a3 !== undefined) data.a3 = args.a3 ?? undefined;
         if (args.a4 !== undefined) data.a4 = args.a4 ?? undefined;
         if (args.a5 !== undefined) data.a5 = args.a5 ?? undefined;
+
+        // Clearing the last mark should remove the record, not leave a blank row
+        // behind — otherwise the class looks "graded" while every cell is empty.
+        const merged = existing ? { ...existing, ...data } : data;
+        if (isBlankGradeRow(merged)) {
+            if (existing) await ctx.db.delete(existing._id);
+            return null;
+        }
+
         if (existing) {
             await ctx.db.patch(existing._id, data);
             return existing._id;
@@ -364,6 +373,12 @@ export const upsertGrade = mutation({
         }
     },
 });
+
+function isBlankGradeRow(row: any): boolean {
+    const hasMark = (["a1", "a2", "a3", "a4", "a5"] as const)
+        .some(k => row[k] !== undefined && row[k] !== null && row[k] !== "");
+    return !hasMark && !row.notes?.trim();
+}
 
 export const updateAssessment = mutation({
     args: {
@@ -376,6 +391,12 @@ export const updateAssessment = mutation({
         await validateAssessment(ctx, args.value);
         const patch: any = { updatedAt: Date.now(), updatedBy: args.updatedBy };
         patch[args.which] = args.value ?? undefined;
+
+        const existing = await ctx.db.get(args.id);
+        if (existing && isBlankGradeRow({ ...existing, ...patch })) {
+            await ctx.db.delete(args.id);
+            return;
+        }
         await ctx.db.patch(args.id, patch);
     },
 });

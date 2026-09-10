@@ -422,6 +422,57 @@ export const clearClassScores = mutation({
     },
 });
 
+// Wipe the whole test in one action — clearing a column at a time only ever
+// touches the class on screen, which is how marks get left behind elsewhere.
+export const clearAllScores = mutation({
+    args: { testId: v.id("diagnosticTests") },
+    handler: async (ctx, args) => {
+        const rows = await ctx.db.query("diagnosticScores")
+            .withIndex("by_test", q => q.eq("testId", args.testId))
+            .collect();
+        for (const r of rows) await ctx.db.delete(r._id);
+        return { cleared: rows.length };
+    },
+});
+
+// Where the marks actually are, so no class is silently left half-entered.
+export const getClassProgress = query({
+    args: { testId: v.id("diagnosticTests") },
+    handler: async (ctx, args) => {
+        const test = await ctx.db.get(args.testId);
+        if (!test) return [];
+
+        const school = await ctx.db.query("schools").first();
+        if (!school) return [];
+
+        const classes = await ctx.db.query("classes")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+
+        const rows = await ctx.db.query("diagnosticScores")
+            .withIndex("by_test", q => q.eq("testId", args.testId))
+            .collect();
+
+        return await Promise.all(test.classNames.map(async className => {
+            const cls = classes.find(c => c.name.trim() === className.trim());
+            const students = cls
+                ? (await ctx.db.query("students")
+                    .withIndex("by_class", q => q.eq("classId", cls._id))
+                    .collect())
+                    .filter(s => s.isActive !== false)
+                : [];
+
+            const mine = rows.filter(r => r.className === className);
+            return {
+                className,
+                expected: students.length,
+                gradedCount: mine.filter(r => !r.isAbsent && Object.keys(parseScores(r.scores)).length > 0).length,
+                absentCount: mine.filter(r => r.isAbsent).length,
+            };
+        }));
+    },
+});
+
 // ── Analysis ──────────────────────────────────────────────────────────────
 type Bucket = { sum: number; max: number };
 

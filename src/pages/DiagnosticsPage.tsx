@@ -248,6 +248,10 @@ function TestBuilder({ testId }: { testId: string }) {
     const test = useQuery(api.diagnostics.getTest, { testId: testId as any }) as any;
     const data = useQuery(api.setup.getInitialData) as any;
     const updateTest = useMutation(api.diagnostics.updateTest);
+    // @ts-ignore
+    const clearAllScores = useMutation(api.diagnostics.clearAllScores);
+    // @ts-ignore
+    const progress = useQuery(api.diagnostics.getClassProgress, { testId: testId as any }) as any[] | undefined;
 
     const [skills, setSkills] = useState<{ id: string; label: string }[]>([]);
     const [questions, setQuestions] = useState<{ n: number; skillId?: string; maxMark: number }[]>([]);
@@ -272,6 +276,7 @@ function TestBuilder({ testId }: { testId: string }) {
     if (!test || !data) return <LoadingSpinner label="جاري التحميل"/>;
 
     const total = questions.reduce((s, q) => s + (q.maxMark || 0), 0);
+    const recorded = (progress ?? []).reduce((a, p) => a + p.gradedCount + p.absentCount, 0);
     const unmapped = questions.filter(q => !q.skillId).length;
     const noMark = questions.filter(q => !q.maxMark).length;
 
@@ -443,6 +448,34 @@ function TestBuilder({ testId }: { testId: string }) {
                     {saved ? "تم الحفظ ✓" : "حفظ إعداد الاختبار"}
                 </button>
             </div>
+
+            {/* Wiping the marks without deleting the test definition */}
+            {recorded > 0 && (
+                <div className="bg-white rounded-2xl border-2 border-red-200 shadow-sm p-5 space-y-3">
+                    <div>
+                        <h3 className="font-black text-red-800 text-sm">مسح جميع درجات هذا الاختبار</h3>
+                        <p className="text-xs font-bold text-slate-500 mt-1 leading-relaxed">
+                            حالياً {recorded} طالب مرصود في {(progress ?? []).filter(p => p.gradedCount + p.absentCount > 0).length} شعبة.
+                            يمسح الدرجات في كل الشعب دفعة واحدة ويُبقي الأسئلة والمهارات كما هي.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 text-[11px] font-black">
+                        {(progress ?? []).filter(p => p.gradedCount + p.absentCount > 0).map(p => (
+                            <span key={p.className} className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-100">
+                                {p.className} · {p.gradedCount}/{p.expected}
+                            </span>
+                        ))}
+                    </div>
+                    <button onClick={async () => {
+                            if (!window.confirm(`مسح درجات ${recorded} طالب في كل الشعب نهائياً؟ الأسئلة والمهارات ستبقى.`)) return;
+                            const res: any = await clearAllScores({ testId: testId as any });
+                            window.alert(`تم مسح درجات ${res.cleared} طالب.`);
+                        }}
+                        className="w-full py-3 rounded-xl bg-red-600 text-white font-black text-sm hover:bg-red-700">
+                        مسح كل الدرجات
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -463,6 +496,10 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
     const fillQuestion = useMutation(api.diagnostics.fillQuestion);
     // @ts-ignore
     const restoreQuestion = useMutation(api.diagnostics.restoreQuestion);
+    // @ts-ignore
+    const clearClassScores = useMutation(api.diagnostics.clearClassScores);
+    // @ts-ignore
+    const progress = useQuery(api.diagnostics.getClassProgress, { testId: testId as any }) as any[] | undefined;
 
     useEffect(() => {
         if (test && !className && test.classNames.length > 0) setClassName(test.classNames[0]);
@@ -573,6 +610,18 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
         finally { setUndoing(null); }
     };
 
+    const clearThisClass = async () => {
+        const here = progress?.find(p => p.className === className);
+        const n = (here?.gradedCount ?? 0) + (here?.absentCount ?? 0);
+        if (n === 0) { flash("لا توجد درجات مرصودة في هذه الشعبة."); return; }
+        if (!window.confirm(`مسح درجات ${n} طالب في الشعبة ${className} نهائياً؟`)) return;
+        try {
+            const res: any = await clearClassScores({ testId: testId as any, className });
+            setPendingFills([]);
+            flash(`تم مسح درجات ${res.cleared} طالب في ${className}.`);
+        } catch (e: any) { flash(e.message ?? "تعذّر المسح"); }
+    };
+
     const moveFocus = (e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
         const go = (r: number, c: number) => {
             const el = document.querySelector<HTMLInputElement>(`input[data-dcell="${r}-${c}"]`);
@@ -584,6 +633,8 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
         else if (e.key === "ArrowUp") go(row - 1, col);
     };
 
+    const totalGraded = (progress ?? []).reduce((a, p) => a + p.gradedCount, 0);
+
     return (
         <div className="space-y-4">
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-end gap-3 flex-wrap">
@@ -591,7 +642,14 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">الشعبة</label>
                     <select value={className} onChange={e => setClassName(e.target.value)}
                         className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon">
-                        {test.classNames.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                        {test.classNames.map((c: string) => {
+                            const p = progress?.find(x => x.className === c);
+                            return (
+                                <option key={c} value={c}>
+                                    {c}{p ? ` — ${p.gradedCount}/${p.expected} مرصود` : ""}
+                                </option>
+                            );
+                        })}
                     </select>
                 </div>
                 <div className="relative flex-1 min-w-[180px]">
@@ -600,10 +658,32 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
                         aria-label="بحث باسم الطالب"
                         className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                 </div>
+                <button type="button" onClick={clearThisClass}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-black text-rose-600 bg-white border border-rose-200 hover:bg-rose-50">
+                    <Eraser className="w-4 h-4"/>مسح درجات هذه الشعبة
+                </button>
                 <span className="text-[11px] font-black text-slate-400 pb-2">
                     الدرجة الكلية {test.totalMarks} · الخانة الفارغة تعني «لم يُرصد» وليست صفراً
                 </span>
             </div>
+
+            {/* Which classes actually hold marks — clearing a column only ever
+                touches the class on screen, so this is where leftovers show up */}
+            {progress && totalGraded > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-black">
+                    <span className="text-slate-400">الشعب التي بها درجات:</span>
+                    {progress.filter(p => p.gradedCount > 0 || p.absentCount > 0).map(p => (
+                        <button key={p.className} type="button" onClick={() => setClassName(p.className)}
+                            className={`px-2.5 py-1 rounded-lg border transition-colors ${
+                                p.className === className
+                                    ? "bg-qatar-maroon text-white border-transparent"
+                                    : "bg-white text-slate-600 border-slate-200 hover:border-qatar-maroon"}`}>
+                            {p.className} · {p.gradedCount}/{p.expected}
+                            {p.absentCount > 0 && ` · ${p.absentCount} غائب`}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {(msg || pendingFills.length > 0) && (
                 <div role="status" className="flex items-center gap-2 flex-wrap text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">

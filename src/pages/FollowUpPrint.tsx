@@ -8,7 +8,8 @@ import { printableSchoolName } from "../lib/brand";
 // Recreates the official "كشف تقييم يومي للطلاب" layout: one week across the
 // page, each day split into the criteria columns, signatures at the bottom.
 
-const MARK_SYMBOL: Record<string, string> = { partial: "±", no: "✗" };
+// old rows may still carry the retired middle state; both print as not met
+const MARK_SYMBOL: Record<string, string> = { no: "✗", partial: "✗" };
 
 function isoOf(d: Date) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -106,7 +107,7 @@ export default function FollowUpPrint() {
                                 اسم المعلم: {teacherName || "................................"}
                             </td>
                             <td style={{ border: "none" }} colSpan={2} className="text-left font-bold">
-                                الرموز: ✓ ملتزم · ± جزئي · ✗ غير ملتزم · غ غائب
+                                الرموز: ✓ ملتزم · ✗ غير ملتزم · غ غائب
                             </td>
                         </tr>
                     </tbody>

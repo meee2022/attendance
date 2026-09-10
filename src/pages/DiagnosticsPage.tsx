@@ -5,9 +5,10 @@ import { api } from "../../convex/_generated/api";
 import {
     Stethoscope, Plus, Trash2, Copy, Settings2, ClipboardList, BarChart3,
     Search, AlertCircle, CheckCircle2, UserX, ArrowDownToLine, Users,
-    MessageSquare, Printer, TrendingUp, ChevronRight, Target, X, Eraser, RotateCcw,
+    MessageSquare, Printer, TrendingUp, ChevronRight, Target, X, Eraser, RotateCcw, Download,
 } from "lucide-react";
 import { EmptyState, PageHeader, LoadingSpinner, KPICard } from "../components/ui";
+import DiagnosticsExport from "./DiagnosticsExport";
 
 const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
 
@@ -31,7 +32,7 @@ function bandColor(p: number, threshold: number) {
 
 export default function DiagnosticsPage() {
     const [testId, setTestId] = useState<string | null>(null);
-    const [view, setView] = useState<"build" | "entry" | "analysis" | "compare">("entry");
+    const [view, setView] = useState<"build" | "entry" | "analysis" | "compare" | "export">("entry");
 
     if (!testId) return <TestList onOpen={(id, v) => { setTestId(id); setView(v); }}/>;
 
@@ -43,6 +44,7 @@ export default function DiagnosticsPage() {
                     { key: "entry" as const, label: "رصد الدرجات", icon: <ClipboardList className="w-4 h-4"/> },
                     { key: "analysis" as const, label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
                     { key: "compare" as const, label: "المقارنة", icon: <TrendingUp className="w-4 h-4"/> },
+                    { key: "export" as const, label: "تصدير وحفظ", icon: <Download className="w-4 h-4"/> },
                     { key: "build" as const, label: "إعداد الاختبار", icon: <Settings2 className="w-4 h-4"/> },
                 ]).map(({ key, label, icon }) => (
                     <button key={key} onClick={() => setView(key)} aria-pressed={view === key}
@@ -55,6 +57,7 @@ export default function DiagnosticsPage() {
             {view === "entry" && <ScoreEntry testId={testId} onGoBuild={() => setView("build")}/>}
             {view === "analysis" && <AnalysisView testId={testId}/>}
             {view === "compare" && <CompareView testId={testId}/>}
+            {view === "export" && <DiagnosticsExport testId={testId}/>}
         </div>
     );
 }

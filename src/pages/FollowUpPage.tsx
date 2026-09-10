@@ -9,15 +9,12 @@ import {
 } from "lucide-react";
 import { EmptyState, PageHeader, LoadingSpinner, KPICard } from "../components/ui";
 
-type MarkValue = "partial" | "no" | null;
+type MarkValue = "no" | null;
 
-// Met → partly met → not met → met. One tap per state, no typing.
-const MARK_CYCLE: MarkValue[] = [null, "partial", "no"];
-
+// Two states only: met or not. One tap toggles.
 const MARK_STYLE: Record<string, { label: string; short: string; cls: string }> = {
-    ok:      { label: "ملتزم",       short: "✓", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
-    partial: { label: "جزئي",        short: "±", cls: "bg-amber-100 text-amber-800 border-amber-300 font-black" },
-    no:      { label: "غير ملتزم",   short: "✗", cls: "bg-rose-100 text-rose-800 border-rose-300 font-black" },
+    ok: { label: "ملتزم",     short: "✓", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+    no: { label: "غير ملتزم", short: "✗", cls: "bg-rose-100 text-rose-800 border-rose-300 font-black" },
 };
 
 const TRACK_COLORS: Record<string, string> = {
@@ -36,8 +33,9 @@ function daysAgoISO(n: number) {
 }
 
 function markOf(marks: Record<string, string>, criterionId: string): MarkValue {
+    // rows recorded under the old three-state scale read as "not met"
     const v = marks[criterionId];
-    return v === "partial" || v === "no" ? v : null;
+    return v === "no" || v === "partial" ? "no" : null;
 }
 
 export default function FollowUpPage() {
@@ -114,9 +112,9 @@ function EntryView() {
 
     const ctx = () => ({ classId: classId as any, subjectName: subject, date, teacherName: teacherName.trim() || undefined });
 
-    // Tap a cell: met → partly → not met → met
+    // Tap a cell to toggle between met and not met
     const cycleMark = async (studentId: string, criterionId: string, current: MarkValue) => {
-        const next = MARK_CYCLE[(MARK_CYCLE.indexOf(current) + 1) % MARK_CYCLE.length];
+        const next: MarkValue = current === null ? "no" : null;
         const key = `${studentId}|${criterionId}`;
         setBusy(key);
         try {
@@ -283,7 +281,7 @@ function EntryView() {
                         <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">
                             غائب: {absentCount}
                         </span>
-                        <span className="text-slate-400 font-bold">اضغط الخانة للتبديل: ✓ ← ± ← ✗</span>
+                        <span className="text-slate-400 font-bold">اضغط الخانة للتبديل بين ✓ و ✗</span>
                     </div>
 
                     {/* Grid */}
@@ -454,13 +452,11 @@ function AnalysisView() {
                                 <div key={c.id} className="space-y-1">
                                     <div className="flex items-center justify-between text-xs font-bold">
                                         <span className="text-slate-700">{c.label}</span>
-                                        <span className="text-slate-500">
-                                            {c.total} ملاحظة {c.partial > 0 && <span className="text-amber-600">({c.partial} جزئي)</span>}
-                                        </span>
+                                        <span className="text-slate-500">{c.total} ملاحظة</span>
                                     </div>
-                                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
-                                        <div className="h-full bg-rose-500" style={{ width: `${maxCriterion ? (c.no / maxCriterion) * 100 : 0}%` }}/>
-                                        <div className="h-full bg-amber-400" style={{ width: `${maxCriterion ? (c.partial / maxCriterion) * 100 : 0}%` }}/>
+                                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-rose-500 rounded-full"
+                                            style={{ width: `${maxCriterion ? (c.total / maxCriterion) * 100 : 0}%` }}/>
                                     </div>
                                 </div>
                             ))}

@@ -702,6 +702,98 @@ export const getAnalysis = query({
     },
 });
 
+// Everything needed to write the marks out to a file — the record the school
+// keeps on paper. Optionally narrowed to one class or one subject.
+export const getExportData = query({
+    args: {
+        testId: v.id("diagnosticTests"),
+        className: v.optional(v.string()),
+        subjectName: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        const test = await ctx.db.get(args.testId);
+        if (!test) return null;
+
+        const school = await ctx.db.query("schools").first();
+
+        const questions = test.questions
+            .filter(q => !args.subjectName || subjectOfQuestion(q, test) === args.subjectName)
+            .sort((a, b) => a.n - b.n)
+            .map(q => ({
+                n: q.n,
+                maxMark: q.maxMark,
+                subjectName: subjectOfQuestion(q, test),
+                skillLabel: test.skills.find(s => s.id === q.skillId)?.label ?? "",
+            }));
+
+        const total = questions.reduce((sum, q) => sum + q.maxMark, 0);
+        const classNames = args.className ? [args.className] : test.classNames;
+
+        const classes = school
+            ? await ctx.db.query("classes")
+                .withIndex("by_school", q => q.eq("schoolId", school._id))
+                .collect()
+            : [];
+
+        const rows = await ctx.db.query("diagnosticScores")
+            .withIndex("by_test", q => q.eq("testId", args.testId))
+            .collect();
+
+        const sheets = await Promise.all(classNames.map(async className => {
+            const cls = classes.find(c => c.name.trim() === className.trim());
+            const students = cls
+                ? (await ctx.db.query("students")
+                    .withIndex("by_class", q => q.eq("classId", cls._id))
+                    .collect())
+                    .filter(s => s.isActive !== false)
+                    .sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"))
+                : [];
+
+            return {
+                className,
+                track: cls?.track ?? "عام",
+                students: students.map(s => {
+                    const row = rows.find(r => r.studentId === s._id);
+                    const scores = parseScores(row?.scores);
+                    // Only the questions in scope count toward this total
+                    const scored = questions.reduce((sum, q) => sum + (scores[String(q.n)] ?? 0), 0);
+                    const answered = questions.filter(q => scores[String(q.n)] !== undefined).length;
+                    return {
+                        studentName: s.fullName,
+                        nationalId: s.nationalId ?? "",
+                        isAbsent: row?.isAbsent ?? false,
+                        marks: questions.map(q => scores[String(q.n)] ?? null),
+                        answered,
+                        total: answered > 0 ? scored : null,
+                        percent: answered > 0 && total > 0 ? scored / total : null,
+                        mastered: answered > 0 && total > 0 && scored / total >= test.masteryThreshold,
+                    };
+                }),
+            };
+        }));
+
+        return {
+            schoolName: school?.name ?? "",
+            test: {
+                title: test.title,
+                subjectName: test.subjectName,
+                subjectNames: subjectsOf(test),
+                grade: test.grade,
+                term: test.term ?? "",
+                testDate: test.testDate ?? "",
+                masteryThreshold: test.masteryThreshold,
+            },
+            scope: {
+                className: args.className ?? null,
+                subjectName: args.subjectName ?? null,
+            },
+            questions,
+            totalMarks: total,
+            sheets,
+        };
+    },
+});
+
 // Who needs remediation in one skill — the list the paper analysis never gave.
 export const getRemediationList = query({
     args: { testId: v.id("diagnosticTests"), skillId: v.string() },

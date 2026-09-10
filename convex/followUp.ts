@@ -15,8 +15,8 @@ export const DEFAULT_CRITERIA = [
     { id: "behaviour", label: "مواظبة وسلوك" },
 ];
 
-// A criterion is either met (no entry), partly met, or not met.
-type MarkValue = "partial" | "no";
+// A criterion is either met (no entry at all) or not met.
+type MarkValue = "no";
 
 async function getSchool(ctx: any) {
     const school = await ctx.db.query("schools").first();
@@ -28,7 +28,14 @@ function parseMarks(raw: string | undefined): Record<string, MarkValue> {
     if (!raw) return {};
     try {
         const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" ? parsed : {};
+        if (!parsed || typeof parsed !== "object") return {};
+        // Sheets recorded before the scale was reduced may hold "partial";
+        // read it as not met so nothing silently disappears from the totals.
+        const out: Record<string, MarkValue> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+            if (v === "no" || v === "partial") out[k] = "no";
+        }
+        return out;
     } catch {
         return {};
     }
@@ -229,7 +236,7 @@ export const setMark = mutation({
         studentId: v.id("students"),
         criterionId: v.string(),
         // null = met, so the entry is removed
-        value: v.union(v.literal("partial"), v.literal("no"), v.null()),
+        value: v.union(v.literal("no"), v.null()),
         teacherName: v.optional(v.string()),
         updatedBy: v.optional(v.string()),
     },
@@ -294,7 +301,7 @@ export const setMarkForStudents = mutation({
         date: v.string(),
         studentIds: v.array(v.id("students")),
         criterionId: v.string(),
-        value: v.union(v.literal("partial"), v.literal("no"), v.null()),
+        value: v.union(v.literal("no"), v.null()),
         teacherName: v.optional(v.string()),
         updatedBy: v.optional(v.string()),
     },
@@ -362,6 +369,30 @@ export const deleteSheet = mutation({
     },
 });
 
+// One-off: the scale used to have a middle state. Rewrite those marks as
+// "not met" so the stored rows match what the sheet now shows.
+export const convertPartialMarks = mutation({
+    args: {},
+    handler: async (ctx) => {
+        const school = await getSchool(ctx);
+        const records = await ctx.db.query("followUpRecords")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+
+        let converted = 0;
+        for (const r of records) {
+            let raw: Record<string, string>;
+            try { raw = JSON.parse(r.marks || "{}"); } catch { continue; }
+            const partials = Object.entries(raw).filter(([, v]) => v === "partial");
+            if (partials.length === 0) continue;
+            for (const [k] of partials) raw[k] = "no";
+            await ctx.db.patch(r._id, { marks: JSON.stringify(raw), updatedAt: Date.now() });
+            converted += partials.length;
+        }
+        return { converted };
+    },
+});
+
 // ── Analysis: what the paper sheet can never tell you ─────────────────────
 // Every flagged entry in a date range, per student and per criterion.
 export const getAnalysis = query({
@@ -392,8 +423,8 @@ export const getAnalysis = query({
         const criteria = school.followUpCriteria?.length ? school.followUpCriteria : DEFAULT_CRITERIA;
 
         // Per criterion: how often it was missed
-        const byCriterion: Record<string, { partial: number; no: number }> = {};
-        for (const c of criteria) byCriterion[c.id] = { partial: 0, no: 0 };
+        const byCriterion: Record<string, { no: number }> = {};
+        for (const c of criteria) byCriterion[c.id] = { no: 0 };
 
         // Per student: total flags and a per-criterion breakdown
         const byStudent = new Map<string, {
@@ -420,10 +451,8 @@ export const getAnalysis = query({
                 dates: new Set<string>(),
             };
 
-            for (const [criterionId, value] of Object.entries(marks)) {
-                if (byCriterion[criterionId]) {
-                    byCriterion[criterionId][value as MarkValue]++;
-                }
+            for (const [criterionId] of Object.entries(marks)) {
+                if (byCriterion[criterionId]) byCriterion[criterionId].no++;
                 entry.perCriterion[criterionId] = (entry.perCriterion[criterionId] ?? 0) + 1;
                 entry.flags++;
                 entry.subjects.add(r.subjectName);
@@ -450,9 +479,7 @@ export const getAnalysis = query({
             byCriterion: criteria.map(c => ({
                 id: c.id,
                 label: c.label,
-                partial: byCriterion[c.id]?.partial ?? 0,
-                no: byCriterion[c.id]?.no ?? 0,
-                total: (byCriterion[c.id]?.partial ?? 0) + (byCriterion[c.id]?.no ?? 0),
+                total: byCriterion[c.id]?.no ?? 0,
             })).sort((a, b) => b.total - a.total),
             students: [...byStudent.values()]
                 .map(e => ({

@@ -24,6 +24,7 @@ import FollowUpPage from "./pages/FollowUpPage";
 import FollowUpPrint from "./pages/FollowUpPrint";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import DiagnosticsPrint from "./pages/DiagnosticsPrint";
+import DiagnosticsSheetPrint from "./pages/DiagnosticsSheetPrint";
 import { useHiddenFeatures, useHiddenFeaturesState, firstVisibleFeature } from "./lib/featureFlags";
 
 // Primary nav: most-used daily operations
@@ -128,6 +129,7 @@ function App() {
           <Route path="/follow-up"           element={<FeatureRoute featureKey="/follow-up"><FollowUpPage /></FeatureRoute>} />
           <Route path="/follow-up/print/:classId/:subject/:date" element={<FollowUpPrint />} />
           <Route path="/diagnostics"         element={<FeatureRoute featureKey="/diagnostics"><DiagnosticsPage /></FeatureRoute>} />
+          <Route path="/diagnostics/print/sheet/:testId" element={<DiagnosticsSheetPrint />} />
           <Route path="/diagnostics/print/:testId/:studentId" element={<DiagnosticsPrint />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />

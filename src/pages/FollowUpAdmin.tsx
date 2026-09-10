@@ -117,7 +117,7 @@ export default function FollowUpAdmin() {
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-xs font-bold text-slate-600 leading-relaxed space-y-1.5">
                 <p className="font-black text-slate-700 mb-2">كيف يعمل الكشف</p>
                 <p>· كل طالب <span className="text-emerald-700">ملتزم افتراضياً</span> — المعلم يعلّم المخالفات فقط، فلا يلمس معظم الخانات.</p>
-                <p>· الضغط على الخانة يبدّل بين: ✓ ملتزم ← ± جزئي ← ✗ غير ملتزم.</p>
+                <p>· الضغط على الخانة يبدّل بين حالتين فقط: ✓ ملتزم و ✗ غير ملتزم.</p>
                 <p>· زر «اعتماد الكشف» يسجّل أن الحصة رُصدت حتى لو لم تكن هناك أي مخالفة.</p>
                 <p>· الطالب الغائب تُلغى معاييره تلقائياً حتى لا يُحتسب عليه غياب ومخالفات معاً.</p>
             </div>

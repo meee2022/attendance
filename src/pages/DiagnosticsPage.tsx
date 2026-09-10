@@ -64,7 +64,7 @@ function TestHeader({ testId, onBack }: { testId: string; onBack: () => void }) 
     return (
         <PageHeader icon={<Stethoscope className="w-5 h-5"/>}
             title={test?.title ?? "الاختبار التشخيصي"}
-            subtitle={test ? `${test.subjectName} · الصف ${GRADE_LABELS[test.grade] ?? test.grade} · ${test.questions.length} سؤال · الدرجة الكلية ${test.totalMarks}` : "…"}>
+            subtitle={test ? `${(test.subjectNames?.length ? test.subjectNames : [test.subjectName]).join(" + ")} · الصف ${GRADE_LABELS[test.grade] ?? test.grade} · ${test.questions.length} سؤال · الدرجة الكلية ${test.totalMarks}` : "…"}>
             <button onClick={onBack} className="grades-header-note hover:underline">
                 <ChevronRight className="w-3 h-3 inline"/> كل الاختبارات
             </button>
@@ -82,7 +82,7 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
 
     const [showForm, setShowForm] = useState(false);
     const [title, setTitle] = useState("");
-    const [subjectName, setSubjectName] = useState("");
+    const [chosenSubjects, setChosenSubjects] = useState<string[]>([]);
     const [grade, setGrade] = useState(10);
     const [classNames, setClassNames] = useState<string[]>([]);
     const [error, setError] = useState("");
@@ -104,7 +104,12 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
         setError("");
         try {
             const id = await createTest({
-                title, subjectName: subjectName || subjects[0] || "", grade, classNames,
+                title,
+                // The first subject labels the test; the full list drives the
+                // per-subject analysis of a combined test.
+                subjectName: chosenSubjects[0] ?? subjects[0] ?? "",
+                subjectNames: chosenSubjects.length > 1 ? chosenSubjects : undefined,
+                grade, classNames,
             });
             setShowForm(false);
             setTitle("");
@@ -136,19 +141,30 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
                                 className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon"/>
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-slate-600 mb-1.5">المادة</label>
-                            <select value={subjectName} onChange={e => setSubjectName(e.target.value)}
-                                className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon">
-                                <option value="">— اختر المادة —</option>
-                                {subjects.map((s: string) => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                        <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1.5">الصف</label>
                             <select value={grade} onChange={e => setGrade(Number(e.target.value))}
                                 className="w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon">
                                 {[10, 11, 12].map(g => <option key={g} value={g}>الصف {GRADE_LABELS[g]}</option>)}
                             </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                            المواد ({chosenSubjects.length}) — اختر أكثر من مادة لاختبار مجمّع كاختبار العلوم
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                            {subjects.map((sub: string) => {
+                                const on = chosenSubjects.includes(sub);
+                                return (
+                                    <button key={sub} type="button"
+                                        onClick={() => setChosenSubjects(p => on ? p.filter(x => x !== sub) : [...p, sub])}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black border transition-colors ${
+                                            on ? "bg-qatar-maroon text-white border-transparent"
+                                               : "bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-400"}`}>
+                                        {on && chosenSubjects.length > 1 ? `${chosenSubjects.indexOf(sub) + 1}. ` : ""}{sub}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                     <div>
@@ -171,7 +187,7 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
                         </div>
                     </div>
                     {error && <p className="text-xs font-black text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
-                    <button onClick={handleCreate} disabled={!title.trim() || classNames.length === 0}
+                    <button onClick={handleCreate} disabled={!title.trim() || classNames.length === 0 || chosenSubjects.length === 0}
                         className="w-full py-3 rounded-xl bg-qatar-maroon text-white font-black text-sm hover:opacity-90 disabled:opacity-40">
                         إنشاء ومتابعة إلى إعداد الأسئلة
                     </button>
@@ -189,7 +205,8 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
                                 <div>
                                     <p className="font-black text-slate-800">{t.title}</p>
                                     <p className="text-xs font-bold text-slate-500 mt-0.5">
-                                        {t.subjectName} · الصف {GRADE_LABELS[t.grade] ?? t.grade} · {t.classNames.length} شعبة
+                                        {(t.subjectNames?.length ? t.subjectNames : [t.subjectName]).join(" + ")}
+                                        {" · "}الصف {GRADE_LABELS[t.grade] ?? t.grade} · {t.classNames.length} شعبة
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -253,8 +270,8 @@ function TestBuilder({ testId }: { testId: string }) {
     // @ts-ignore
     const progress = useQuery(api.diagnostics.getClassProgress, { testId: testId as any }) as any[] | undefined;
 
-    const [skills, setSkills] = useState<{ id: string; label: string }[]>([]);
-    const [questions, setQuestions] = useState<{ n: number; skillId?: string; maxMark: number }[]>([]);
+    const [skills, setSkills] = useState<{ id: string; label: string; subjectName?: string }[]>([]);
+    const [questions, setQuestions] = useState<{ n: number; skillId?: string; subjectName?: string; maxMark: number }[]>([]);
     const [threshold, setThreshold] = useState(60);
     const [classNames, setClassNames] = useState<string[]>([]);
     const [saved, setSaved] = useState(false);
@@ -275,10 +292,13 @@ function TestBuilder({ testId }: { testId: string }) {
 
     if (!test || !data) return <LoadingSpinner label="جاري التحميل"/>;
 
+    const testSubjects: string[] = test.subjectNames?.length ? test.subjectNames : [test.subjectName];
+    const isCombined = testSubjects.length > 1;
     const total = questions.reduce((s, q) => s + (q.maxMark || 0), 0);
     const recorded = (progress ?? []).reduce((a, p) => a + p.gradedCount + p.absentCount, 0);
     const unmapped = questions.filter(q => !q.skillId).length;
     const noMark = questions.filter(q => !q.maxMark).length;
+    const noSubject = isCombined ? questions.filter(q => !q.subjectName).length : 0;
 
     const addSkill = () => {
         const id = `s${Date.now().toString(36)}${skills.length}`;
@@ -298,10 +318,12 @@ function TestBuilder({ testId }: { testId: string }) {
         try {
             await updateTest({
                 testId: testId as any,
-                skills: skills.filter(s => s.label.trim()).map(s => ({ id: s.id, label: s.label.trim() })),
+                skills: skills.filter(s => s.label.trim())
+                    .map(s => ({ id: s.id, label: s.label.trim(), subjectName: s.subjectName || undefined })),
                 questions: questions.map(q => ({
                     n: q.n,
                     skillId: q.skillId || undefined,
+                    subjectName: q.subjectName || undefined,
                     maxMark: Number(q.maxMark) || 0,
                 })),
                 masteryThreshold: Math.min(Math.max(threshold, 1), 100) / 100,
@@ -320,9 +342,32 @@ function TestBuilder({ testId }: { testId: string }) {
                 <KPICard label="عدد الأسئلة" value={questions.length} icon={<ClipboardList className="w-5 h-5"/>}/>
                 <KPICard label="أسئلة بلا مهارة" value={unmapped} icon={<AlertCircle className="w-5 h-5"/>}
                     color={unmapped > 0 ? "#ea580c" : "#059669"}/>
-                <KPICard label="أسئلة بلا درجة" value={noMark} icon={<AlertCircle className="w-5 h-5"/>}
-                    color={noMark > 0 ? "#e11d48" : "#059669"}/>
+                <KPICard label={isCombined ? "أسئلة بلا مادة" : "أسئلة بلا درجة"}
+                    value={isCombined ? noSubject : noMark} icon={<AlertCircle className="w-5 h-5"/>}
+                    color={(isCombined ? noSubject : noMark) > 0 ? "#e11d48" : "#059669"}/>
             </div>
+
+            {/* A combined test needs its marks spread across its subjects */}
+            {isCombined && (
+                <div className="flex items-center gap-2 flex-wrap text-[11px] font-black bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3">
+                    <span className="text-slate-500">توزيع الدرجات على المواد:</span>
+                    {testSubjects.map(sub => {
+                        const marks = questions.filter(q => q.subjectName === sub).reduce((a, q) => a + (q.maxMark || 0), 0);
+                        const count = questions.filter(q => q.subjectName === sub).length;
+                        return (
+                            <span key={sub} className={`px-2.5 py-1 rounded-lg border ${
+                                count ? "bg-rose-50 text-qatar-maroon border-rose-100" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                                {sub} · {count} سؤال · {marks} درجة
+                            </span>
+                        );
+                    })}
+                    {noSubject > 0 && (
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-300">
+                            {noSubject} سؤال بلا مادة
+                        </span>
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Skills */}
@@ -348,6 +393,15 @@ function TestBuilder({ testId }: { testId: string }) {
                                 <input value={s.label} placeholder="اسم المهارة"
                                     onChange={e => setSkills(p => p.map((x, idx) => idx === i ? { ...x, label: e.target.value } : x))}
                                     className="flex-1 border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon"/>
+                                {isCombined && (
+                                    <select value={s.subjectName ?? ""}
+                                        onChange={e => setSkills(p => p.map((x, idx) => idx === i ? { ...x, subjectName: e.target.value || undefined } : x))}
+                                        aria-label="مادة المهارة"
+                                        className="w-28 border-2 border-slate-100 rounded-xl px-2 py-2 text-xs font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon">
+                                        <option value="">كل المواد</option>
+                                        {testSubjects.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                                    </select>
+                                )}
                                 <button onClick={() => {
                                         setSkills(p => p.filter((_, idx) => idx !== i));
                                         setQuestions(p => p.map(q => q.skillId === s.id ? { ...q, skillId: undefined } : q));
@@ -377,6 +431,7 @@ function TestBuilder({ testId }: { testId: string }) {
                             <thead className="sticky top-0 bg-white">
                                 <tr>
                                     <th className="px-1 py-1 text-center font-semibold text-slate-500 w-10">س</th>
+                                    {isCombined && <th className="px-1 py-1 text-right font-semibold text-slate-500 w-28">المادة</th>}
                                     <th className="px-1 py-1 text-right font-semibold text-slate-500">المهارة</th>
                                     <th className="px-1 py-1 text-center font-semibold text-slate-500 w-20">الدرجة</th>
                                 </tr>
@@ -385,15 +440,31 @@ function TestBuilder({ testId }: { testId: string }) {
                                 {questions.map((q, i) => (
                                     <tr key={q.n}>
                                         <td className="px-1 py-1 text-center font-black text-slate-500">{q.n}</td>
+                                        {isCombined && (
+                                            <td className="px-1 py-1">
+                                                <select value={q.subjectName ?? ""}
+                                                    onChange={e => setQuestions(p => p.map((x, idx) => idx === i ? { ...x, subjectName: e.target.value || undefined } : x))}
+                                                    className={`w-full border-2 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-qatar-maroon ${
+                                                        q.subjectName ? "border-slate-100 bg-slate-50" : "border-amber-200 bg-amber-50"}`}>
+                                                    <option value="">— بلا مادة —</option>
+                                                    {testSubjects.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                                                </select>
+                                            </td>
+                                        )}
                                         <td className="px-1 py-1">
                                             <select value={q.skillId ?? ""}
                                                 onChange={e => setQuestions(p => p.map((x, idx) => idx === i ? { ...x, skillId: e.target.value || undefined } : x))}
                                                 className={`w-full border-2 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-qatar-maroon ${
                                                     q.skillId ? "border-slate-100 bg-slate-50" : "border-amber-200 bg-amber-50"}`}>
                                                 <option value="">— بلا مهارة —</option>
-                                                {skills.filter(s => s.label.trim()).map(s => (
-                                                    <option key={s.id} value={s.id}>{s.label}</option>
-                                                ))}
+                                                {skills.filter(s => s.label.trim())
+                                                    /* on a combined test show only the skills of this subject */
+                                                    .filter(s => !isCombined || !q.subjectName || !s.subjectName || s.subjectName === q.subjectName)
+                                                    .map(s => (
+                                                        <option key={s.id} value={s.id}>
+                                                            {s.subjectName && isCombined ? `${s.subjectName} — ` : ""}{s.label}
+                                                        </option>
+                                                    ))}
                                             </select>
                                         </td>
                                         <td className="px-1 py-1">
@@ -847,6 +918,49 @@ function AnalysisView({ testId }: { testId: string }) {
                     icon={<BarChart3 className="w-5 h-5"/>} color="#7c3aed"/>
             </div>
 
+            {/* A combined test is really several tests in one — report each */}
+            {a.bySubject && a.bySubject.length > 1 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-100">
+                        <h3 className="font-bold text-slate-700 text-sm">النتائج حسب المادة</h3>
+                    </div>
+                    <div className="overflow-auto">
+                        <table className="w-full text-xs">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="px-3 py-2 text-right font-semibold text-slate-600">المادة</th>
+                                    <th className="px-2 py-2 text-center font-semibold text-slate-600">أسئلة</th>
+                                    <th className="px-2 py-2 text-center font-semibold text-slate-600">من</th>
+                                    <th className="px-2 py-2 text-center font-semibold text-slate-600">المتوسط</th>
+                                    <th className="px-2 py-2 text-center font-semibold text-slate-600">النسبة</th>
+                                    <th className="px-2 py-2 text-center font-semibold text-slate-600">أتقنوها</th>
+                                    <th className="px-2 py-2 text-right font-semibold text-slate-600">المهارات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {a.bySubject.map((sb: any) => (
+                                    <tr key={sb.subject} className="border-t border-slate-100">
+                                        <td className="px-3 py-2 text-right font-black text-slate-700">{sb.subject}</td>
+                                        <td className="px-2 py-2 text-center text-slate-500 font-bold">{sb.questionCount}</td>
+                                        <td className="px-2 py-2 text-center text-slate-500">{sb.maxMark}</td>
+                                        <td className="px-2 py-2 text-center font-bold text-slate-600">{num(sb.averageMark)}</td>
+                                        <td className="px-2 py-2 text-center font-black" style={{ color: bandColor(sb.averagePercent, threshold) }}>
+                                            {pct(sb.averagePercent)}
+                                        </td>
+                                        <td className="px-2 py-2 text-center font-black" style={{ color: bandColor(sb.masteredPercent, threshold) }}>
+                                            {sb.masteredCount} ({pct(sb.masteredPercent)})
+                                        </td>
+                                        <td className="px-2 py-2 text-right text-slate-500 font-bold text-[11px]">
+                                            {sb.skills.join(" · ") || "—"}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {/* Skills — weakest first */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -865,7 +979,10 @@ function AnalysisView({ testId }: { testId: string }) {
                             <div className="flex items-center justify-between text-xs font-bold">
                                 <span className="text-slate-700">
                                     {s.label}
-                                    <span className="text-slate-400 font-normal"> · {s.questionCount} سؤال · من {s.maxMark}</span>
+                                    <span className="text-slate-400 font-normal">
+                                        {a.bySubject && a.bySubject.length > 1 && s.subjectName ? ` · ${s.subjectName}` : ""}
+                                        {` · ${s.questionCount} سؤال · من ${s.maxMark}`}
+                                    </span>
                                 </span>
                                 <span style={{ color: bandColor(s.averagePercent, threshold) }}>
                                     {pct(s.averagePercent)} · أتقنها {s.masteredCount}
@@ -927,6 +1044,9 @@ function AnalysisView({ testId }: { testId: string }) {
                         <thead className="sticky top-0 bg-slate-50">
                             <tr>
                                 <th className="px-2 py-2 text-center font-semibold text-slate-600">س</th>
+                                {a.bySubject && a.bySubject.length > 1 && (
+                                    <th className="px-3 py-2 text-right font-semibold text-slate-600">المادة</th>
+                                )}
                                 <th className="px-3 py-2 text-right font-semibold text-slate-600">المهارة</th>
                                 <th className="px-2 py-2 text-center font-semibold text-slate-600">من</th>
                                 <th className="px-2 py-2 text-center font-semibold text-slate-600">المتوسط</th>
@@ -939,6 +1059,9 @@ function AnalysisView({ testId }: { testId: string }) {
                             {a.byQuestion.map((q: any) => (
                                 <tr key={q.n} className="border-t border-slate-100">
                                     <td className="px-2 py-1.5 text-center font-black text-slate-500">{q.n}</td>
+                                    {a.bySubject && a.bySubject.length > 1 && (
+                                        <td className="px-3 py-1.5 text-right font-bold text-qatar-maroon">{q.subjectName}</td>
+                                    )}
                                     <td className="px-3 py-1.5 text-right font-bold text-slate-600">{q.skillLabel}</td>
                                     <td className="px-2 py-1.5 text-center text-slate-500">{q.maxMark}</td>
                                     <td className="px-2 py-1.5 text-center font-bold text-slate-600">{num(q.average)}</td>

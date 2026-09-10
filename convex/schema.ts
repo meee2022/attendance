@@ -310,16 +310,23 @@ export default defineSchema({
     diagnosticTests: defineTable({
         schoolId: v.id("schools"),
         title: v.string(),
-        subjectName: v.string(),
+        subjectName: v.string(),             // المادة الرئيسية (أو مسمّى الاختبار المجمّع)
+        // اختبار مجمّع كاختبار العلوم يغطي أكثر من مادة؛ إن غابت فالمادة واحدة
+        subjectNames: v.optional(v.array(v.string())),
         grade: v.number(),
         term: v.optional(v.string()),
         testDate: v.optional(v.string()),
         masteryThreshold: v.number(),        // 0..1 — افتراضي 0.6
         classNames: v.array(v.string()),     // الشعب التي تؤدي الاختبار
-        skills: v.array(v.object({ id: v.string(), label: v.string() })),
+        skills: v.array(v.object({
+            id: v.string(),
+            label: v.string(),
+            subjectName: v.optional(v.string()),
+        })),
         questions: v.array(v.object({
             n: v.number(),
             skillId: v.optional(v.string()),
+            subjectName: v.optional(v.string()),
             maxMark: v.number(),
         })),
         isActive: v.boolean(),

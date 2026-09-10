@@ -6,6 +6,7 @@ import {
     GraduationCap, BookOpen, Layers, Save, Upload, Download, Printer,
     BarChart3, FileText, Search, ChevronLeft, ChevronRight, AlertCircle,
     CheckCircle2, Filter, Users, X, MessageSquare, RotateCcw, Plus, ArrowDownToLine,
+    ClipboardCheck, CircleSlash,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyState, PageHeader } from "../components/ui";
@@ -60,7 +61,7 @@ export default function GradesPage() {
     const settings = useQuery(api.grades.getSettings) as any;
     const meta = useQuery(api.grades.getClassesAndSubjects) as any;
     const allGrades = useQuery(api.grades.getAllGrades) as any[] | undefined;
-    const [view, setView] = useState<"entry" | "student" | "class" | "analytics">("entry");
+    const [view, setView] = useState<"entry" | "coverage" | "student" | "class" | "analytics">("entry");
 
     if (!settings || !meta || allGrades === undefined) return <GradesLoading/>;
 
@@ -81,6 +82,7 @@ export default function GradesPage() {
             <div className="grades-tabs" role="group" aria-label="طرق عرض الدرجات">
                 {([
                     { key: "entry" as const, label: "إدخال الدرجات", icon: <BookOpen className="w-4 h-4"/> },
+                    { key: "coverage" as const, label: "متابعة الرصد", icon: <ClipboardCheck className="w-4 h-4"/> },
                     { key: "student" as const, label: "بطاقة الطالب", icon: <Users className="w-4 h-4"/> },
                     { key: "class" as const, label: "ملف الفصل", icon: <Layers className="w-4 h-4"/> },
                     { key: "analytics" as const, label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
@@ -97,7 +99,8 @@ export default function GradesPage() {
             ) : (
                 <>
                     {view === "entry" && <EntryView meta={meta} settings={settings}/>}
-                    {view !== "entry" && resultViewsEmpty ? (
+                    {view === "coverage" && <CoverageView/>}
+                    {view !== "entry" && view !== "coverage" && resultViewsEmpty ? (
                         <EmptyState icon={<BarChart3 className="w-6 h-6"/>}
                             title="لا توجد درجات مرصودة بعد"
                             description="ابدأ من تبويب «إدخال الدرجات» — ستظهر النتائج والتحليلات هنا فور رصد أول درجة."/>
@@ -139,6 +142,117 @@ function ImportPrompt() {
                 style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
                 <Plus className="w-4 h-4"/>الذهاب للإعدادات
             </Link>
+        </div>
+    );
+}
+
+// ── Coverage — which class+subject sheets have no marks yet ───────────────
+function CoverageView() {
+    // @ts-ignore
+    const data = useQuery(api.grades.getCoverage) as any;
+    const [mode, setMode] = useState<"subject" | "class">("subject");
+
+    if (!data) return <GradesLoading/>;
+
+    if (data.totalExpected === 0) {
+        return <EmptyState icon={<CircleSlash className="w-6 h-6"/>} title="لا توجد خطة دراسية بعد"
+            description="حدّد مواد كل مسار من الإعدادات › المواد والخطة الدراسية، وسيظهر هنا ما رُصد وما لم يُرصد."/>;
+    }
+
+    const pct = Math.round((data.recordedCount / data.totalExpected) * 100);
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <p className="font-black text-slate-800">
+                            {data.recordedCount} من {data.totalExpected} كشف مرصود
+                        </p>
+                        <p className="text-xs font-bold text-slate-500 mt-0.5">
+                            الكشف = مادة واحدة في شعبة واحدة، حسب الخطة الدراسية المعتمدة.
+                        </p>
+                    </div>
+                    <span className="text-3xl font-black" style={{ color: pct >= 80 ? "#059669" : pct >= 40 ? "#f59e0b" : "#e11d48" }}>
+                        {pct}%
+                    </span>
+                </div>
+                <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, background: pct >= 80 ? "#059669" : pct >= 40 ? "#f59e0b" : "#e11d48" }}/>
+                </div>
+                <div className="flex gap-2">
+                    {([
+                        { key: "subject" as const, label: "حسب المادة" },
+                        { key: "class" as const, label: "حسب الشعبة" },
+                    ]).map(t => (
+                        <button key={t.key} onClick={() => setMode(t.key)} aria-pressed={mode === t.key}
+                            className={`px-4 py-2 rounded-xl text-xs font-black border transition-colors ${
+                                mode === t.key ? "bg-qatar-maroon text-white border-transparent"
+                                               : "bg-white text-slate-500 border-slate-200 hover:border-qatar-maroon"}`}>
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-700 text-sm">
+                        {mode === "subject" ? "المواد — الأقل رصداً أولاً" : "الشعب — الأقل رصداً أولاً"}
+                    </h3>
+                </div>
+                <div className="overflow-auto max-h-[65vh]">
+                    <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-slate-50">
+                            <tr>
+                                <th className="px-3 py-2 text-right font-semibold text-slate-600">
+                                    {mode === "subject" ? "المادة" : "الشعبة"}
+                                </th>
+                                <th className="px-2 py-2 text-center font-semibold text-slate-600">مرصود</th>
+                                <th className="px-3 py-2 text-right font-semibold text-slate-600">
+                                    {mode === "subject" ? "الشعب التي لم تُرصد" : "المواد التي لم تُرصد"}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(mode === "subject" ? data.bySubject : data.byClass).map((row: any) => {
+                                const missing = mode === "subject" ? row.missingClasses : row.missingSubjects;
+                                const done = row.recorded === row.expected;
+                                return (
+                                    <tr key={mode === "subject" ? row.subjectName : row.className}
+                                        className="border-t border-slate-100 hover:bg-slate-50 align-top">
+                                        <td className="px-3 py-2 text-right font-black text-slate-700">
+                                            {mode === "subject" ? row.subjectName : row.className}
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                            <span className={`px-2 py-0.5 rounded-lg font-black ${
+                                                done ? "bg-emerald-50 text-emerald-700"
+                                                     : row.recorded === 0 ? "bg-rose-100 text-rose-800"
+                                                     : "bg-amber-100 text-amber-800"}`}>
+                                                {row.recorded}/{row.expected}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                            {done ? (
+                                                <span className="text-emerald-700 font-black">مكتمل ✓</span>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {missing.map((m: string) => (
+                                                        <span key={m} className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[10px]">
+                                                            {m}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     );
 }

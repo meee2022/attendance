@@ -182,6 +182,107 @@ export const getAllGrades = query({
     },
 });
 
+// Which (class, subject) pairs the plan expects and which have no marks yet —
+// the gap a spreadsheet per subject can never show, because nothing knows the
+// full set of sheets that ought to exist.
+export const getCoverage = query({
+    args: {},
+    handler: async (ctx) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return null;
+
+        const included = await includedGrades(ctx, school._id);
+        const classes = (await activeClasses(ctx, school._id))
+            .filter((c: any) => included.includes(c.grade));
+
+        const subjects = await ctx.db.query("subjects")
+            .filter(q => q.eq(q.field("schoolId"), school._id))
+            .collect();
+
+        const rows = await ctx.db.query("studentGrades")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect();
+
+        // How many marks exist per class+subject, and in which assessment slots
+        const seen = new Map<string, { entries: number; slots: Set<string> }>();
+        for (const r of rows) {
+            const key = `${r.className}|${r.subjectName}`;
+            const acc = seen.get(key) ?? { entries: 0, slots: new Set<string>() };
+            for (const slot of ["a1", "a2", "a3", "a4", "a5"] as const) {
+                const v = (r as any)[slot];
+                if (v !== undefined && v !== null && v !== "") {
+                    acc.entries++;
+                    acc.slots.add(slot);
+                }
+            }
+            seen.set(key, acc);
+        }
+
+        const cells: {
+            className: string; grade: number; track: string; subjectName: string;
+            studentCount: number; entries: number; slots: string[]; recorded: boolean;
+        }[] = [];
+
+        for (const cls of classes) {
+            const track = cls.track ?? "عام";
+            const trackKey = `${cls.grade}-${track}`;
+            const planned = subjects
+                .filter(s => (s.targetClasses ?? []).some(t => t.trim() === trackKey))
+                .map(s => s.name);
+            if (planned.length === 0) continue;
+
+            const students = (await ctx.db.query("students")
+                .withIndex("by_class", q => q.eq("classId", cls._id))
+                .collect())
+                .filter(s => s.isActive !== false);
+
+            for (const subjectName of planned) {
+                const acc = seen.get(`${cls.name}|${subjectName}`);
+                cells.push({
+                    className: cls.name,
+                    grade: cls.grade,
+                    track,
+                    subjectName,
+                    studentCount: students.length,
+                    entries: acc?.entries ?? 0,
+                    slots: acc ? [...acc.slots].sort() : [],
+                    recorded: (acc?.entries ?? 0) > 0,
+                });
+            }
+        }
+
+        const missing = cells.filter(c => !c.recorded);
+
+        return {
+            cells,
+            totalExpected: cells.length,
+            recordedCount: cells.length - missing.length,
+            missing,
+            // Subjects with nothing recorded anywhere — the ones to chase first
+            bySubject: [...new Set(cells.map(c => c.subjectName))].map(subjectName => {
+                const mine = cells.filter(c => c.subjectName === subjectName);
+                return {
+                    subjectName,
+                    expected: mine.length,
+                    recorded: mine.filter(c => c.recorded).length,
+                    missingClasses: mine.filter(c => !c.recorded).map(c => c.className),
+                };
+            }).sort((a, b) => (a.recorded / a.expected) - (b.recorded / b.expected)),
+            byClass: [...new Set(cells.map(c => c.className))].map(className => {
+                const mine = cells.filter(c => c.className === className);
+                return {
+                    className,
+                    grade: mine[0].grade,
+                    expected: mine.length,
+                    recorded: mine.filter(c => c.recorded).length,
+                    missingSubjects: mine.filter(c => !c.recorded).map(c => c.subjectName),
+                };
+            }).sort((a, b) => (a.grade - b.grade)
+                || a.className.localeCompare(b.className, "ar", { numeric: true })),
+        };
+    },
+});
+
 export const getClassRoster = query({
     args: { className: v.string() },
     handler: async (ctx, args) => {

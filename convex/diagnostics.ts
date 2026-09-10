@@ -26,10 +26,32 @@ function parseScores(raw: string | undefined): Record<string, number> {
 const questionValidator = v.object({
     n: v.number(),
     skillId: v.optional(v.string()),
+    subjectName: v.optional(v.string()),
     maxMark: v.number(),
 });
 
-const skillValidator = v.object({ id: v.string(), label: v.string() });
+const skillValidator = v.object({
+    id: v.string(),
+    label: v.string(),
+    subjectName: v.optional(v.string()),
+});
+
+// A combined test (science = chemistry + biology + physics) lists its subjects;
+// a single-subject test just has the one.
+function subjectsOf(test: { subjectName: string; subjectNames?: string[] }): string[] {
+    return test.subjectNames?.length ? test.subjectNames : [test.subjectName];
+}
+
+// A question with no subject belongs to the test's only subject; on a combined
+// test it stays unassigned rather than being guessed.
+function subjectOfQuestion(
+    q: { subjectName?: string },
+    test: { subjectName: string; subjectNames?: string[] },
+): string {
+    if (q.subjectName) return q.subjectName;
+    const subjects = subjectsOf(test);
+    return subjects.length === 1 ? subjects[0] : "غير محدد";
+}
 
 function totalMarks(questions: { maxMark: number }[]) {
     return questions.reduce((sum, q) => sum + (q.maxMark || 0), 0);
@@ -78,6 +100,7 @@ export const createTest = mutation({
     args: {
         title: v.string(),
         subjectName: v.string(),
+        subjectNames: v.optional(v.array(v.string())),
         grade: v.number(),
         term: v.optional(v.string()),
         testDate: v.optional(v.string()),
@@ -94,6 +117,7 @@ export const createTest = mutation({
             schoolId: school._id,
             title: args.title.trim(),
             subjectName: args.subjectName.trim(),
+            subjectNames: args.subjectNames?.length ? args.subjectNames : undefined,
             grade: args.grade,
             term: args.term?.trim() || undefined,
             testDate: args.testDate,
@@ -112,6 +136,7 @@ export const updateTest = mutation({
         testId: v.id("diagnosticTests"),
         title: v.optional(v.string()),
         subjectName: v.optional(v.string()),
+        subjectNames: v.optional(v.array(v.string())),
         grade: v.optional(v.number()),
         term: v.optional(v.string()),
         testDate: v.optional(v.string()),
@@ -148,6 +173,7 @@ export const duplicateTest = mutation({
             schoolId: test.schoolId,
             title: args.title.trim() || `${test.title} (نسخة)`,
             subjectName: test.subjectName,
+            subjectNames: test.subjectNames,
             grade: test.grade,
             term: test.term,
             testDate: undefined,
@@ -559,9 +585,11 @@ export const getAnalysis = query({
             const values = students.map(s => s.perSkill[skill.id] ?? 0);
             const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
             const masteredCount = values.filter(v => v >= test.masteryThreshold).length;
+            const firstQ = test.questions.find(q => q.skillId === skill.id);
             return {
                 id: skill.id,
                 label: skill.label,
+                subjectName: firstQ ? subjectOfQuestion(firstQ, test) : skill.subjectName,
                 questionCount: test.questions.filter(q => q.skillId === skill.id).length,
                 maxMark: max,
                 averagePercent: avg,
@@ -580,6 +608,7 @@ export const getAnalysis = query({
             return {
                 n: q.n,
                 skillId: q.skillId,
+                subjectName: subjectOfQuestion(q, test),
                 skillLabel: test.skills.find(s => s.id === q.skillId)?.label ?? "—",
                 maxMark: q.maxMark,
                 average: avg,
@@ -590,6 +619,35 @@ export const getAnalysis = query({
                 answeredCount: marks.length,
             };
         });
+
+        // Per subject — a combined test (العلوم = كيمياء + أحياء + فيزياء) needs
+        // to say how the cohort did in each of its subjects, not just overall.
+        const subjects = subjectsOf(test);
+        const bySubject = subjects.map(subject => {
+            const qs = test.questions.filter(q => subjectOfQuestion(q, test) === subject);
+            const max = qs.reduce((sum, q) => sum + q.maxMark, 0);
+            const values = students.map(st => {
+                const row = graded.find(r => r.studentId === st.studentId);
+                const scores = parseScores(row?.scores);
+                const got = qs.reduce((sum, q) => sum + (scores[String(q.n)] ?? 0), 0);
+                return max > 0 ? got / max : 0;
+            });
+            const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+            const masteredCount = values.filter(v => v >= test.masteryThreshold).length;
+            return {
+                subject,
+                questionCount: qs.length,
+                maxMark: max,
+                averagePercent: avg,
+                averageMark: avg * max,
+                masteredCount,
+                masteredPercent: values.length ? masteredCount / values.length : 0,
+                skills: test.skills
+                    .filter(sk => test.questions.some(q =>
+                        q.skillId === sk.id && subjectOfQuestion(q, test) === subject))
+                    .map(sk => sk.label),
+            };
+        }).sort((a, b) => a.averagePercent - b.averagePercent);
 
         // Per class
         const byClass = test.classNames.map(className => {
@@ -633,6 +691,8 @@ export const getAnalysis = query({
             masteredCount: students.filter(s => s.mastered).length,
             masteredPercent: students.length ? students.filter(s => s.mastered).length / students.length : 0,
             stdDev: Math.sqrt(variance),
+            subjects,
+            bySubject,
             bySkill,
             byQuestion,
             byClass,
@@ -800,20 +860,39 @@ export const getStudentReport = query({
             };
         }).sort((a, b) => a.percent - b.percent);
 
+        const reportSubjects = subjectsOf(test).map(subject => {
+            const qs = test.questions.filter(q => subjectOfQuestion(q, test) === subject);
+            const max = qs.reduce((sum, q) => sum + q.maxMark, 0);
+            const got = qs.reduce((sum, q) => sum + (scores[String(q.n)] ?? 0), 0);
+            return {
+                subject,
+                questionCount: qs.length,
+                score: got,
+                maxMark: max,
+                percent: max > 0 ? got / max : 0,
+                mastered: max > 0 && got / max >= test.masteryThreshold,
+            };
+        });
+
         return {
             schoolName: school?.name ?? "",
             test: { ...test, totalMarks: total, masteryMark: total * test.masteryThreshold },
+            subjects: reportSubjects,
             studentName: row.studentName,
             className: row.className,
             isAbsent: row.isAbsent ?? false,
             total: scored,
             percent: total > 0 ? scored / total : 0,
             mastered: scored >= total * test.masteryThreshold,
-            skills,
+            skills: skills.map(sk => {
+                const firstQ = test.questions.find(q => test.skills.find(x => x.label === sk.label)?.id === q.skillId);
+                return { ...sk, subjectName: firstQ ? subjectOfQuestion(firstQ, test) : undefined };
+            }),
             questions: test.questions.map(q => ({
                 n: q.n,
                 maxMark: q.maxMark,
                 score: scores[String(q.n)],
+                subjectName: subjectOfQuestion(q, test),
                 skillLabel: test.skills.find(s => s.id === q.skillId)?.label ?? "—",
             })),
         };

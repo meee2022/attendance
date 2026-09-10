@@ -84,8 +84,8 @@ export default function DiagnosticsPrint() {
                             <td>{report.className}</td>
                         </tr>
                         <tr>
-                            <th>المادة</th>
-                            <td>{report.test.subjectName}</td>
+                            <th>{report.subjects?.length > 1 ? "المواد" : "المادة"}</th>
+                            <td>{(report.test.subjectNames?.length ? report.test.subjectNames : [report.test.subjectName]).join(" + ")}</td>
                             <th>الصف</th>
                             <td>{GRADE_LABELS[report.test.grade] ?? report.test.grade}</td>
                         </tr>
@@ -106,12 +106,53 @@ export default function DiagnosticsPrint() {
                     </tbody>
                 </table>
 
+                {/* A combined test (science) is reported subject by subject first */}
+                {report.subjects && report.subjects.length > 1 && (
+                    <div>
+                        <p className="font-black text-sm mb-2">النتيجة حسب المادة</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style={{ width: "30%" }}>المادة</th>
+                                    <th style={{ width: "12%" }}>الأسئلة</th>
+                                    <th style={{ width: "16%" }}>الدرجة</th>
+                                    <th style={{ width: "12%" }}>النسبة</th>
+                                    <th>المؤشر</th>
+                                    <th style={{ width: "14%" }}>الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {report.subjects.map((sb: any) => (
+                                    <tr key={sb.subject}>
+                                        <td className="font-black">{sb.subject}</td>
+                                        <td className="text-center">{sb.questionCount}</td>
+                                        <td className="text-center">{sb.score} / {sb.maxMark}</td>
+                                        <td className="text-center font-black">{pct(sb.percent)}</td>
+                                        <td>
+                                            <div className="bar-track">
+                                                <div className="bar-fill" style={{
+                                                    width: `${sb.percent * 100}%`,
+                                                    background: barColor(sb.percent, threshold),
+                                                }}/>
+                                            </div>
+                                        </td>
+                                        <td className="text-center font-black"
+                                            style={{ color: sb.mastered ? "#059669" : "#e11d48" }}>
+                                            {sb.mastered ? "متقن" : "يحتاج دعم"}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
                 <div>
                     <p className="font-black text-sm mb-2">التحليل حسب المهارات</p>
                     <table>
                         <thead>
                             <tr>
-                                <th style={{ width: "34%" }}>المهارة</th>
+                                <th style={{ width: "30%" }}>المهارة</th>
                                 <th style={{ width: "10%" }}>الأسئلة</th>
                                 <th style={{ width: "14%" }}>الدرجة</th>
                                 <th style={{ width: "12%" }}>النسبة</th>
@@ -122,7 +163,12 @@ export default function DiagnosticsPrint() {
                         <tbody>
                             {report.skills.map((s: any) => (
                                 <tr key={s.label}>
-                                    <td className="font-bold">{s.label}</td>
+                                    <td className="font-bold">
+                                        {s.label}
+                                        {report.subjects?.length > 1 && s.subjectName && (
+                                            <span style={{ color: "#64748b", fontWeight: 400 }}> · {s.subjectName}</span>
+                                        )}
+                                    </td>
                                     <td className="text-center">{s.questionCount}</td>
                                     <td className="text-center">{s.score} / {s.maxMark}</td>
                                     <td className="text-center font-black">{pct(s.percent)}</td>

@@ -7,6 +7,7 @@ export const FEATURES: { key: string; label: string; description: string }[] = [
     { key: "/",            label: "الرئيسية",          description: "لوحة المتابعة اليومية للحضور والغياب" },
     { key: "/upload",      label: "رصد الغياب",         description: "رفع ملفات Teams/Excel للحضور" },
     { key: "/grades",      label: "التقييمات القصيرة",        description: "إدخال درجات التقييمات" },
+    { key: "/follow-up",   label: "المتابعة اليومية",   description: "كشف تقييم يومي للطلاب حسب معايير الحصة" },
     { key: "/reports",     label: "التقارير",          description: "التقارير الإحصائية" },
     { key: "/assessments", label: "التطبيقات",         description: "متابعة التطبيقات/التقييمات" },
     { key: "/supervision", label: "الإشراف الصفي",      description: "استمارات الإشراف على المعلمين" },

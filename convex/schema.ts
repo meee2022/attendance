@@ -26,6 +26,12 @@ export default defineSchema({
         }))),
         // Practical exam WhatsApp template
         practicalAbsenceTemplate: v.optional(v.string()),
+        // معايير كشف المتابعة اليومية (قابلة للتعديل من الإعدادات)
+        followUpCriteria: v.optional(v.array(v.object({
+            id: v.string(),
+            label: v.string(),
+        }))),
+        followUpTemplate: v.optional(v.string()),
     }),
     classes: defineTable({
         schoolId: v.id("schools"),
@@ -261,6 +267,42 @@ export default defineSchema({
     }).index("by_school", ["schoolId"])
       .index("by_class", ["schoolId", "className"])
       .index("by_student", ["schoolId", "studentName"]),
+
+    // ── المتابعة اليومية (كشف تقييم يومي للطلاب) ──────────────────────────
+    // A sheet is one (class, subject, date). Recording it creates a session.
+    followUpSessions: defineTable({
+        schoolId: v.id("schools"),
+        classId: v.id("classes"),
+        className: v.string(),
+        subjectName: v.string(),
+        date: v.string(),                 // YYYY-MM-DD
+        teacherName: v.optional(v.string()),
+        createdAt: v.number(),
+    }).index("by_school", ["schoolId"])
+      .index("by_school_date", ["schoolId", "date"])
+      .index("by_class_subject_date", ["classId", "subjectName", "date"]),
+
+    // Exceptions only — a student who met every criterion has no row at all.
+    // That is what makes "الكل ملتزم" the free default instead of 125 cells.
+    followUpRecords: defineTable({
+        schoolId: v.id("schools"),
+        sessionId: v.id("followUpSessions"),
+        classId: v.id("classes"),
+        studentId: v.id("students"),
+        studentName: v.string(),
+        className: v.string(),
+        subjectName: v.string(),
+        date: v.string(),
+        isAbsent: v.optional(v.boolean()),
+        // JSON { [criterionId]: "partial" | "no" } — met criteria are omitted
+        marks: v.string(),
+        notes: v.optional(v.string()),
+        updatedAt: v.number(),
+        updatedBy: v.optional(v.string()),
+    }).index("by_session", ["sessionId"])
+      .index("by_student", ["studentId"])
+      .index("by_school", ["schoolId"])
+      .index("by_school_date", ["schoolId", "date"]),
 
     supervisionVisits: defineTable({
         schoolId: v.id("schools"),

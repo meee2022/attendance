@@ -13,6 +13,7 @@ import type { Survey } from "./SurveysPage";
 import SupervisionAdmin from "./SupervisionAdmin";
 import GradesAdmin from "./GradesAdmin";
 import PracticalExamsAdmin from "./PracticalExamsAdmin";
+import FollowUpAdmin from "./FollowUpAdmin";
 import FeatureToggleSection from "./FeatureToggleSection";
 
 const TRACKS = ["عام", "علمي", "أدبي", "تكنولوجي"];
@@ -24,7 +25,7 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "student-management" | "security" | "classes" | "subjects" | "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
+type MainTab = "follow-up" | "student-management" | "security" | "classes" | "subjects" | "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
 
 export default function SettingsPage() {
     const [mainTab, setMainTab] = useState<MainTab>("settings");
@@ -40,6 +41,7 @@ export default function SettingsPage() {
         { id: "supervision", label: "الإشراف الصفي",   icon: <ClipboardCheck className="w-4 h-4" />, group: "التقييم والمتابعة", description: "إعداد معايير الإشراف الصفي وإدارة المعلمين.", },
         { id: "grades",    label: "إدارة التقييمات القصيرة",     icon: <GraduationCap className="w-4 h-4" />, group: "التقييم والمتابعة", description: "استيراد الدرجات وضبط التقييمات وحدود النجاح.", },
         { id: "practical", label: "الاختبارات العملية", icon: <FlaskConical className="w-4 h-4" />, group: "التقييم والمتابعة", description: "إعداد المواد والاختبارات العملية والشفوية.", },
+        { id: "follow-up", label: "المتابعة اليومية", icon: <ClipboardCheck className="w-4 h-4" />, group: "التقييم والمتابعة", description: "معايير كشف التقييم اليومي للطلاب.", },
         { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" />, group: "إدارة النظام", description: "أدوات تهيئة البيانات وإعادة تنظيم هيكل المدرسة.", },
         { id: "classes", label: "الصفوف الدراسية", icon: <Layers className="w-4 h-4"/>, group: "المدرسة", description: "تنظيم الصفوف والمسارات وإدارة الفصول." },
         { id: "subjects", label: "المواد والخطة الدراسية", icon: <BookOpen className="w-4 h-4"/>, group: "المدرسة", description: "إدارة المواد وتوزيعها على الصفوف والمسارات." },
@@ -88,6 +90,7 @@ export default function SettingsPage() {
                     {mainTab === "supervision" && <SupervisionAdmin/>}
                     {mainTab === "grades" && <GradesAdmin/>}
                     {mainTab === "practical" && <PracticalExamsAdmin/>}
+                    {mainTab === "follow-up" && <FollowUpAdmin/>}
                     {mainTab === "seed" && <SeedPage/>}
                 </section>
             </div>

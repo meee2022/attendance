@@ -11,6 +11,7 @@
 import type * as assessments from "../assessments.js";
 import type * as attendance from "../attendance.js";
 import type * as classHelpers from "../classHelpers.js";
+import type * as followUp from "../followUp.js";
 import type * as grades from "../grades.js";
 import type * as messages from "../messages.js";
 import type * as practicalExams from "../practicalExams.js";
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   assessments: typeof assessments;
   attendance: typeof attendance;
   classHelpers: typeof classHelpers;
+  followUp: typeof followUp;
   grades: typeof grades;
   messages: typeof messages;
   practicalExams: typeof practicalExams;

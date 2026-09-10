@@ -20,6 +20,8 @@ import SupervisionPrint from "./pages/SupervisionPrint";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
 import PracticalExamsPage from "./pages/PracticalExamsPage";
+import FollowUpPage from "./pages/FollowUpPage";
+import FollowUpPrint from "./pages/FollowUpPrint";
 import { useHiddenFeatures, useHiddenFeaturesState, firstVisibleFeature } from "./lib/featureFlags";
 
 // Primary nav: most-used daily operations
@@ -27,6 +29,7 @@ const PRIMARY_NAV = [
     { to: "/",          icon: <LayoutDashboard className="w-5 h-5" />, label: "الرئيسية" },
     { to: "/upload",    icon: <Upload className="w-5 h-5" />,          label: "رصد الغياب" },
     { to: "/grades",    icon: <GraduationCap className="w-5 h-5" />,   label: "التقييمات القصيرة" },
+    { to: "/follow-up", icon: <ClipboardCheck className="w-5 h-5" />,  label: "المتابعة اليومية" },
     { to: "/reports",   icon: <BarChart3 className="w-5 h-5" />,       label: "التقارير" },
 ];
 
@@ -119,6 +122,8 @@ function App() {
           <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
           <Route path="/grades/print/student/:studentName" element={<GradesPrint />} />
           <Route path="/practical-exams"     element={<FeatureRoute featureKey="/practical-exams"><PracticalExamsPage /></FeatureRoute>} />
+          <Route path="/follow-up"           element={<FeatureRoute featureKey="/follow-up"><FollowUpPage /></FeatureRoute>} />
+          <Route path="/follow-up/print/:classId/:subject/:date" element={<FollowUpPrint />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />

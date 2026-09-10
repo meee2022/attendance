@@ -78,6 +78,14 @@ export function parseGradeInput(s: string, max?: number): GradeValue | { error: 
     return n;
 }
 
+// ── School identity (used on printed sheets) ──────────────────────────────
+export const SCHOOL_NAME_AR = "ابن تيمية الثانوية للبنين";
+
+// The stored school name is the English record name; printed sheets are Arabic.
+export function printableSchoolName(stored?: string): string {
+    return stored && /[؀-ۿ]/.test(stored) ? stored : SCHOOL_NAME_AR;
+}
+
 // ── Arabic-aware sort helper ──────────────────────────────────────────────
 export function arSort(a: string, b: string): number {
     return a.localeCompare(b, "ar", { numeric: true });

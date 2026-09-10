@@ -13,7 +13,7 @@ import MessageTemplatesPage from "./pages/MessageTemplatesPage";
 import AdminGuard, { clearAdminSession } from "./components/AdminGuard";
 import AssessmentsPage from "./pages/AssessmentsPage";
 import StudentsPage from "./pages/StudentsPage";
-import { FileCheck, ClipboardList } from "lucide-react";
+import { FileCheck, ClipboardList, Stethoscope } from "lucide-react";
 import SurveysPage from "./pages/SurveysPage";
 import SupervisionPage from "./pages/SupervisionPage";
 import SupervisionPrint from "./pages/SupervisionPrint";
@@ -22,6 +22,8 @@ import GradesPrint from "./pages/GradesPrint";
 import PracticalExamsPage from "./pages/PracticalExamsPage";
 import FollowUpPage from "./pages/FollowUpPage";
 import FollowUpPrint from "./pages/FollowUpPrint";
+import DiagnosticsPage from "./pages/DiagnosticsPage";
+import DiagnosticsPrint from "./pages/DiagnosticsPrint";
 import { useHiddenFeatures, useHiddenFeaturesState, firstVisibleFeature } from "./lib/featureFlags";
 
 // Primary nav: most-used daily operations
@@ -37,6 +39,7 @@ const PRIMARY_NAV = [
 const SECONDARY_NAV = [
     { to: "/assessments",icon: <FileCheck className="w-4 h-4" />,       label: "التطبيقات" },
     { to: "/practical-exams", icon: <FlaskConical className="w-4 h-4" />, label: "الاختبارات العملية" },
+    { to: "/diagnostics", icon: <Stethoscope className="w-4 h-4" />,    label: "الاختبارات التشخيصية" },
     { to: "/supervision",icon: <ClipboardCheck className="w-4 h-4" />,  label: "الإشراف الصفي" },
     { to: "/surveys",   icon: <ClipboardList className="w-4 h-4" />,   label: "الاستبانات" },
     { to: "/messages",  icon: <MessageSquare className="w-4 h-4" />,   label: "الرسائل" },
@@ -124,6 +127,8 @@ function App() {
           <Route path="/practical-exams"     element={<FeatureRoute featureKey="/practical-exams"><PracticalExamsPage /></FeatureRoute>} />
           <Route path="/follow-up"           element={<FeatureRoute featureKey="/follow-up"><FollowUpPage /></FeatureRoute>} />
           <Route path="/follow-up/print/:classId/:subject/:date" element={<FollowUpPrint />} />
+          <Route path="/diagnostics"         element={<FeatureRoute featureKey="/diagnostics"><DiagnosticsPage /></FeatureRoute>} />
+          <Route path="/diagnostics/print/:testId/:studentId" element={<DiagnosticsPrint />} />
           <Route path="/import-students"     element={<AdminGuard><ImportStudents /></AdminGuard>} />
           <Route path="/students"            element={<AdminGuard><StudentsPage /></AdminGuard>} />
           <Route path="/settings"            element={<AdminGuard><SettingsPage /></AdminGuard>} />

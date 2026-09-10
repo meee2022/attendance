@@ -304,6 +304,43 @@ export default defineSchema({
       .index("by_school", ["schoolId"])
       .index("by_school_date", ["schoolId", "date"]),
 
+    // ── الاختبارات التشخيصية وتحليل المهارات ──────────────────────────────
+    // A test defines its questions, each carrying a max mark and the skill it
+    // measures. Analysis is derived from those two facts, never stored.
+    diagnosticTests: defineTable({
+        schoolId: v.id("schools"),
+        title: v.string(),
+        subjectName: v.string(),
+        grade: v.number(),
+        term: v.optional(v.string()),
+        testDate: v.optional(v.string()),
+        masteryThreshold: v.number(),        // 0..1 — افتراضي 0.6
+        classNames: v.array(v.string()),     // الشعب التي تؤدي الاختبار
+        skills: v.array(v.object({ id: v.string(), label: v.string() })),
+        questions: v.array(v.object({
+            n: v.number(),
+            skillId: v.optional(v.string()),
+            maxMark: v.number(),
+        })),
+        isActive: v.boolean(),
+        createdAt: v.number(),
+    }).index("by_school", ["schoolId"]),
+
+    diagnosticScores: defineTable({
+        schoolId: v.id("schools"),
+        testId: v.id("diagnosticTests"),
+        studentId: v.id("students"),
+        studentName: v.string(),
+        className: v.string(),
+        // JSON { "<questionNumber>": mark } — unanswered questions are omitted
+        scores: v.string(),
+        isAbsent: v.optional(v.boolean()),
+        updatedAt: v.number(),
+    }).index("by_test", ["testId"])
+      .index("by_test_class", ["testId", "className"])
+      .index("by_student", ["studentId"])
+      .index("by_school", ["schoolId"]),
+
     supervisionVisits: defineTable({
         schoolId: v.id("schools"),
         // الزائر

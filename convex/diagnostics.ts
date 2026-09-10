@@ -371,6 +371,45 @@ export const fillQuestion = mutation({
     },
 });
 
+// Undo for fillQuestion: puts each cell back to what it held before the fill
+// (null = it was blank, so the cell — and an emptied row — goes away).
+export const restoreQuestion = mutation({
+    args: {
+        testId: v.id("diagnosticTests"),
+        questionNumber: v.number(),
+        entries: v.array(v.object({
+            studentId: v.id("students"),
+            value: v.union(v.number(), v.null()),
+        })),
+    },
+    handler: async (ctx, args) => {
+        const test = await ctx.db.get(args.testId);
+        if (!test) throw new Error("الاختبار غير موجود.");
+        const question = test.questions.find(q => q.n === args.questionNumber);
+        if (!question) throw new Error(`السؤال ${args.questionNumber} غير معرّف.`);
+
+        const key = String(args.questionNumber);
+        let restored = 0;
+
+        for (const entry of args.entries) {
+            if (entry.value !== null && (entry.value < 0 || entry.value > question.maxMark)) continue;
+            await writeScoreRecord(ctx, {
+                testId: args.testId,
+                studentId: entry.studentId,
+                mutate: current => {
+                    if (current.isAbsent) return current;
+                    const scores = { ...current.scores };
+                    if (entry.value === null) delete scores[key];
+                    else scores[key] = entry.value;
+                    return { ...current, scores };
+                },
+            });
+            restored++;
+        }
+        return { restored };
+    },
+});
+
 export const clearClassScores = mutation({
     args: { testId: v.id("diagnosticTests"), className: v.string() },
     handler: async (ctx, args) => {

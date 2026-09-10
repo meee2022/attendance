@@ -5,7 +5,7 @@ import { api } from "../../convex/_generated/api";
 import {
     Stethoscope, Plus, Trash2, Copy, Settings2, ClipboardList, BarChart3,
     Search, AlertCircle, CheckCircle2, UserX, ArrowDownToLine, Users,
-    MessageSquare, Printer, TrendingUp, ChevronRight, Target, X,
+    MessageSquare, Printer, TrendingUp, ChevronRight, Target, X, Eraser, RotateCcw,
 } from "lucide-react";
 import { EmptyState, PageHeader, LoadingSpinner, KPICard } from "../components/ui";
 
@@ -453,6 +453,7 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
     const [className, setClassName] = useState("");
     const [search, setSearch] = useState("");
     const [msg, setMsg] = useState("");
+    const [busy, setBusy] = useState<number | null>(null);
 
     const sheet = useQuery(api.diagnostics.getEntrySheet,
         className ? { testId: testId as any, className } : "skip" as any) as any;
@@ -460,16 +461,52 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
     const setScore = useMutation(api.diagnostics.setScore);
     const setAbsent = useMutation(api.diagnostics.setAbsent);
     const fillQuestion = useMutation(api.diagnostics.fillQuestion);
+    // @ts-ignore
+    const restoreQuestion = useMutation(api.diagnostics.restoreQuestion);
 
     useEffect(() => {
         if (test && !className && test.classNames.length > 0) setClassName(test.classNames[0]);
     }, [test]);
+
+    // Cells are controlled off a local buffer that re-syncs whenever the server
+    // data changes, so a fill (or an undo) always shows up in the grid.
+    const [localValues, setLocalValues] = useState<Record<string, string>>({});
+    useEffect(() => {
+        if (!sheet || !test) return;
+        const init: Record<string, string> = {};
+        for (const s of sheet.students) {
+            for (const q of test.questions) {
+                const v = s.scores[String(q.n)];
+                init[`${s.studentId}|${q.n}`] = v === undefined ? "" : String(v);
+            }
+        }
+        setLocalValues(init);
+    }, [sheet, test]);
+
+    // One snapshot per question, so pressing ملء twice cannot overwrite the
+    // original state and each filled column keeps its own undo.
+    type Snapshot = { n: number; entries: { studentId: string; value: number | null }[] };
+    const [pendingFills, setPendingFills] = useState<Snapshot[]>([]);
+    const [undoing, setUndoing] = useState<number | null>(null);
 
     const filtered = useMemo(() => {
         const list = sheet?.students ?? [];
         if (!search.trim()) return list;
         return list.filter((s: any) => s.fullName.includes(search.trim()));
     }, [sheet, search]);
+
+    // Consecutive questions measuring the same skill share one header band
+    const skillBands = useMemo(() => {
+        if (!test) return [];
+        const bands: { label: string; span: number; skillId?: string }[] = [];
+        for (const q of test.questions) {
+            const label = test.skills.find((s: any) => s.id === q.skillId)?.label ?? "بلا مهارة";
+            const last = bands[bands.length - 1];
+            if (last && last.skillId === q.skillId) last.span++;
+            else bands.push({ label, span: 1, skillId: q.skillId });
+        }
+        return bands;
+    }, [test]);
 
     if (!test) return <LoadingSpinner label="جاري التحميل"/>;
 
@@ -479,27 +516,61 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
             action={<button onClick={onGoBuild} className="px-5 py-2.5 rounded-xl bg-qatar-maroon text-white font-black text-sm">الذهاب للإعداد</button>}/>;
     }
 
-    const flash = (t: string) => { setMsg(t); setTimeout(() => setMsg(""), 3000); };
+    const flash = (t: string) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
 
     const saveCell = async (studentId: string, n: number, raw: string) => {
         const trimmed = raw.trim();
         const value = trimmed === "" ? null : Number(trimmed);
         if (value !== null && isNaN(value)) { flash("قيمة غير صالحة"); return; }
+        // A manual edit makes that column's snapshot stale
+        setPendingFills(p => p.filter(f => f.n !== n));
         try {
             await setScore({ testId: testId as any, studentId: studentId as any, questionNumber: n, value });
-        } catch (e: any) { flash(e.message ?? "تعذّر الحفظ"); }
+        } catch (e: any) {
+            flash(e.message ?? "تعذّر الحفظ");
+            // Put the cell back to what the server still holds
+            const current = sheet?.students.find((s: any) => s.studentId === studentId)?.scores[String(n)];
+            setLocalValues(p => ({ ...p, [`${studentId}|${n}`]: current === undefined ? "" : String(current) }));
+        }
     };
 
-    const handleFill = async (n: number, maxMark: number) => {
+    const snapshotOf = (n: number): Snapshot => ({
+        n,
+        entries: filtered.filter((s: any) => !s.isAbsent).map((s: any) => ({
+            studentId: s.studentId,
+            value: s.scores[String(n)] ?? null,
+        })),
+    });
+
+    const runColumn = async (n: number, value: number | null, label: string, overwrite: boolean) => {
         const ids = filtered.filter((s: any) => !s.isAbsent).map((s: any) => s.studentId);
         if (ids.length === 0) return;
+        if (overwrite && !window.confirm(
+            value === null
+                ? `مسح درجات السؤال ${n} لـ ${ids.length} طالب؟`
+                : `إعطاء ${value} للسؤال ${n} لـ ${ids.length} طالب واستبدال المرصود؟`
+        )) return;
+
+        const before = snapshotOf(n);
+        setBusy(n);
         try {
             const res: any = await fillQuestion({
-                testId: testId as any, studentIds: ids, questionNumber: n, value: maxMark,
+                testId: testId as any, studentIds: ids, questionNumber: n, value, overwrite,
             });
-            flash(`تم إعطاء الدرجة الكاملة للسؤال ${n} لـ ${res.filled} طالب` +
-                (res.skipped ? ` — وتُركت ${res.skipped} خانة مرصودة` : ""));
+            flash(`${label} — ${res.filled} خانة` + (res.skipped ? ` (تُركت ${res.skipped} خانة مرصودة)` : ""));
+            setPendingFills(p => p.some(f => f.n === n) ? p : [...p, before]);
         } catch (e: any) { flash(e.message ?? "تعذّر التنفيذ"); }
+        finally { setBusy(null); }
+    };
+
+    const undoColumn = async (snap: Snapshot) => {
+        setUndoing(snap.n);
+        try {
+            await restoreQuestion({ testId: testId as any, questionNumber: snap.n, entries: snap.entries as any });
+            flash(`تم التراجع عن السؤال ${snap.n} وإرجاع الدرجات كما كانت.`);
+            setPendingFills(p => p.filter(f => f.n !== snap.n));
+        } catch (e: any) { flash(e.message ?? "تعذّر التراجع"); }
+        finally { setUndoing(null); }
     };
 
     const moveFocus = (e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
@@ -515,7 +586,7 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
 
     return (
         <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center gap-3 flex-wrap">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-end gap-3 flex-wrap">
                 <div className="min-w-[160px]">
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">الشعبة</label>
                     <select value={className} onChange={e => setClassName(e.target.value)}
@@ -523,21 +594,40 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
                         {test.classNames.map((c: string) => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
-                <div className="relative flex-1 min-w-[180px] mt-5">
+                <div className="relative flex-1 min-w-[180px]">
                     <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث باسم الطالب..."
                         aria-label="بحث باسم الطالب"
                         className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                 </div>
-                <span className="text-[11px] font-black text-slate-400 mt-5">
-                    الدرجة الكلية {test.totalMarks} · اترك الخانة فارغة إذا لم يُرصد
+                <span className="text-[11px] font-black text-slate-400 pb-2">
+                    الدرجة الكلية {test.totalMarks} · الخانة الفارغة تعني «لم يُرصد» وليست صفراً
                 </span>
             </div>
 
-            {msg && (
-                <div role="status" className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                    <CheckCircle2 className="w-4 h-4"/>{msg}
+            {(msg || pendingFills.length > 0) && (
+                <div role="status" className="flex items-center gap-2 flex-wrap text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                    {msg && <span className="ml-1">{msg}</span>}
+                    {pendingFills.map(snap => (
+                        <button key={snap.n} type="button" onClick={() => undoColumn(snap)} disabled={undoing !== null}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">
+                            {undoing === snap.n
+                                ? <span className="w-3 h-3 border-2 border-emerald-200 border-t-emerald-700 rounded-full animate-spin"/>
+                                : <RotateCcw className="w-3 h-3"/>}
+                            تراجع عن السؤال {snap.n}
+                        </button>
+                    ))}
+                    <button type="button" onClick={() => { setMsg(""); setPendingFills([]); }}
+                        aria-label="إخفاء الرسالة" className="mr-auto text-emerald-600 hover:text-emerald-900">
+                        <X className="w-3.5 h-3.5"/>
+                    </button>
                 </div>
+            )}
+
+            {search.trim() && (
+                <p className="text-[11px] font-bold text-amber-700">
+                    البحث مُفعَّل — أزرار العمود تطبّق على الـ {filtered.length} طالب الظاهرين فقط.
+                </p>
             )}
 
             {sheet === undefined ? <LoadingSpinner label="جاري تحميل الكشف"/> : !sheet ? null : (
@@ -545,24 +635,43 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
                     <div className="grade-table-scroll overflow-auto max-h-[70vh]" tabIndex={0} role="region" aria-label="رصد درجات الاختبار التشخيصي">
                         <table className="grade-entry-table w-full text-xs">
                             <thead className="sticky top-0 bg-slate-50 z-10">
+                                {/* Which skill each question measures — the teacher needs this while entering */}
                                 <tr>
-                                    <th className="px-2 py-2 text-center font-semibold text-slate-500 border-l border-slate-200 w-10">#</th>
-                                    <th className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-semibold text-slate-700 border-l border-slate-200 min-w-[180px]">الاسم</th>
+                                    <th rowSpan={2} className="px-2 py-2 text-center font-semibold text-slate-500 border-l border-slate-200 w-10">#</th>
+                                    <th rowSpan={2} className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-semibold text-slate-700 border-l border-slate-200 min-w-[180px]">الاسم</th>
+                                    {skillBands.map((b, i) => (
+                                        <th key={i} colSpan={b.span}
+                                            className={`px-2 py-1.5 text-center text-[11px] font-black border-l-2 border-slate-300 ${
+                                                b.skillId ? "text-qatar-maroon bg-rose-50/60" : "text-amber-700 bg-amber-50"}`}>
+                                            {b.label}
+                                        </th>
+                                    ))}
+                                    <th rowSpan={2} className="px-2 py-2 text-center font-semibold text-qatar-maroon border-l border-slate-200">المجموع</th>
+                                    <th rowSpan={2} className="px-2 py-2 text-center font-semibold text-slate-500 w-14">غياب</th>
+                                </tr>
+                                <tr>
                                     {test.questions.map((q: any) => (
-                                        <th key={q.n} className="px-1 py-2 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[52px]">
+                                        <th key={q.n} className="px-1 py-1.5 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[56px]">
                                             <div className="flex flex-col items-center gap-0.5">
                                                 <span>{q.n}</span>
                                                 <span className="text-[9px] text-slate-400 font-bold">من {q.maxMark}</span>
-                                                <button type="button" onClick={() => handleFill(q.n, q.maxMark)}
-                                                    title={`إعطاء الدرجة الكاملة (${q.maxMark}) للجميع`}
-                                                    className="px-1 py-0.5 rounded text-[9px] font-black bg-white border border-slate-200 text-slate-500 hover:text-qatar-maroon hover:border-qatar-maroon/40">
-                                                    <ArrowDownToLine className="w-3 h-3"/>
-                                                </button>
+                                                <div className="flex items-center gap-0.5">
+                                                    <button type="button" disabled={busy !== null}
+                                                        onClick={() => runColumn(q.n, q.maxMark, `الدرجة الكاملة للسؤال ${q.n}`, false)}
+                                                        title={`إعطاء الدرجة الكاملة (${q.maxMark}) لمن لم يُرصد بعد`}
+                                                        className="px-1 py-0.5 rounded text-[9px] font-black bg-white border border-slate-200 text-slate-500 hover:text-qatar-maroon hover:border-qatar-maroon/40 disabled:opacity-40">
+                                                        <ArrowDownToLine className="w-3 h-3"/>
+                                                    </button>
+                                                    <button type="button" disabled={busy !== null}
+                                                        onClick={() => runColumn(q.n, null, `مسح السؤال ${q.n}`, true)}
+                                                        title={`مسح درجات السؤال ${q.n} للجميع`}
+                                                        className="px-1 py-0.5 rounded text-[9px] font-black bg-white border border-rose-200 text-rose-500 hover:bg-rose-50 disabled:opacity-40">
+                                                        <Eraser className="w-3 h-3"/>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </th>
                                     ))}
-                                    <th className="px-2 py-2 text-center font-semibold text-qatar-maroon border-l border-slate-200">المجموع</th>
-                                    <th className="px-2 py-2 text-center font-semibold text-slate-500 w-14">غياب</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -571,44 +680,59 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
                                         لا يوجد طلاب مطابقون.
                                     </td></tr>
                                 )}
-                                {filtered.map((s: any, row: number) => (
-                                    <tr key={s.studentId} className={`border-t border-slate-100 ${s.isAbsent ? "bg-slate-50 opacity-60" : "hover:bg-slate-50"}`}>
-                                        <td className="px-2 py-1 text-center font-bold text-slate-400 border-l border-slate-100">{row + 1}</td>
-                                        <td className="sticky right-0 bg-white px-3 py-1 text-right font-bold text-slate-700 border-l border-slate-200 max-w-[210px] whitespace-normal">
-                                            {s.fullName}
-                                        </td>
-                                        {test.questions.map((q: any, col: number) => (
-                                            <td key={q.n} className="px-0.5 py-0.5 border-l border-slate-100">
-                                                <input
-                                                    data-dcell={`${row}-${col}`}
-                                                    defaultValue={s.scores[String(q.n)] ?? ""}
-                                                    disabled={s.isAbsent}
-                                                    onKeyDown={e => moveFocus(e, row, col)}
-                                                    onBlur={e => {
-                                                        const before = s.scores[String(q.n)];
-                                                        const nowRaw = e.target.value.trim();
-                                                        const changed = nowRaw === "" ? before !== undefined : Number(nowRaw) !== before;
-                                                        if (changed) saveCell(s.studentId, q.n, e.target.value);
-                                                    }}
-                                                    aria-label={`السؤال ${q.n} لـ ${s.fullName}`}
-                                                    className="w-full text-center py-1.5 rounded-md border border-transparent hover:border-slate-200 focus:border-qatar-maroon focus:bg-white outline-none disabled:bg-transparent"/>
+                                {filtered.map((s: any, row: number) => {
+                                    const rowTotal = test.questions.reduce((sum: number, q: any) => {
+                                        const raw = localValues[`${s.studentId}|${q.n}`];
+                                        const n = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
+                                        return sum + (isNaN(n) ? 0 : n);
+                                    }, 0);
+                                    const anyAnswered = test.questions.some((q: any) => {
+                                        const raw = localValues[`${s.studentId}|${q.n}`];
+                                        return raw !== undefined && raw.trim() !== "";
+                                    });
+                                    return (
+                                        <tr key={s.studentId} className={`border-t border-slate-100 ${s.isAbsent ? "bg-slate-50 opacity-60" : "hover:bg-slate-50"}`}>
+                                            <td className="px-2 py-1 text-center font-bold text-slate-400 border-l border-slate-100">{row + 1}</td>
+                                            <td className="sticky right-0 bg-white px-3 py-1 text-right font-bold text-slate-700 border-l border-slate-200 max-w-[210px] whitespace-normal">
+                                                {s.fullName}
                                             </td>
-                                        ))}
-                                        <td className="px-2 py-1 text-center font-black text-qatar-maroon border-l border-slate-200">
-                                            {s.answered > 0 ? num(s.total) : "—"}
-                                        </td>
-                                        <td className="px-2 py-1 text-center">
-                                            <button type="button"
-                                                onClick={() => setAbsent({ testId: testId as any, studentId: s.studentId as any, isAbsent: !s.isAbsent })}
-                                                title={s.isAbsent ? "إلغاء الغياب" : "تعليم غائب"}
-                                                className={`p-1.5 rounded-lg border transition-colors ${
-                                                    s.isAbsent ? "bg-slate-700 text-white border-slate-700"
-                                                               : "bg-white text-slate-300 border-slate-200 hover:text-slate-600"}`}>
-                                                <UserX className="w-4 h-4"/>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            {test.questions.map((q: any, col: number) => {
+                                                const key = `${s.studentId}|${q.n}`;
+                                                return (
+                                                    <td key={q.n} className="px-0.5 py-0.5 border-l border-slate-100">
+                                                        <input
+                                                            data-dcell={`${row}-${col}`}
+                                                            value={localValues[key] ?? ""}
+                                                            disabled={s.isAbsent}
+                                                            onChange={e => setLocalValues(p => ({ ...p, [key]: e.target.value }))}
+                                                            onKeyDown={e => moveFocus(e, row, col)}
+                                                            onBlur={e => {
+                                                                const before = s.scores[String(q.n)];
+                                                                const now = e.target.value.trim();
+                                                                const changed = now === "" ? before !== undefined : Number(now) !== before;
+                                                                if (changed) saveCell(s.studentId, q.n, e.target.value);
+                                                            }}
+                                                            aria-label={`السؤال ${q.n} لـ ${s.fullName}`}
+                                                            className="w-full text-center py-1.5 rounded-md border border-transparent hover:border-slate-200 focus:border-qatar-maroon focus:bg-white outline-none disabled:bg-transparent"/>
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="px-2 py-1 text-center font-black text-qatar-maroon border-l border-slate-200">
+                                                {anyAnswered ? num(rowTotal) : "—"}
+                                            </td>
+                                            <td className="px-2 py-1 text-center">
+                                                <button type="button"
+                                                    onClick={() => setAbsent({ testId: testId as any, studentId: s.studentId as any, isAbsent: !s.isAbsent })}
+                                                    title={s.isAbsent ? "إلغاء الغياب" : "تعليم غائب"}
+                                                    className={`p-1.5 rounded-lg border transition-colors ${
+                                                        s.isAbsent ? "bg-slate-700 text-white border-slate-700"
+                                                                   : "bg-white text-slate-300 border-slate-200 hover:text-slate-600"}`}>
+                                                    <UserX className="w-4 h-4"/>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

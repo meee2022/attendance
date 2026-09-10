@@ -5,7 +5,7 @@ import { api } from "../../convex/_generated/api";
 import {
     GraduationCap, BookOpen, Layers, Save, Upload, Download, Printer,
     BarChart3, FileText, Search, ChevronLeft, ChevronRight, AlertCircle,
-    CheckCircle2, Filter, Users, X, MessageSquare, RotateCcw, Plus,
+    CheckCircle2, Filter, Users, X, MessageSquare, RotateCcw, Plus, ArrowDownToLine,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyState, PageHeader } from "../components/ui";
@@ -151,6 +151,10 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
         selectedClass && selectedSubject ? { className: selectedClass, subjectName: selectedSubject } : "skip" as any
     ) as any[] | undefined;
     const upsert = useMutation(api.grades.upsertGrade);
+    // @ts-ignore
+    const fillColumn = useMutation(api.grades.fillAssessment);
+    // @ts-ignore
+    const restoreColumn = useMutation(api.grades.restoreAssessment);
 
     const classes = meta.classes ?? [];
     const subjectsFor = (className: string): string[] => {
@@ -224,13 +228,31 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
                             ...data.values,
                         });
                     }}
+                    onFill={async (which: "a1" | "a2" | "a3" | "a4" | "a5", value: number, studentNames: string[], overwrite: boolean) =>
+                        await fillColumn({
+                            className: selectedClass,
+                            subjectName: selectedSubject,
+                            grade: selectedClassMeta.grade,
+                            track: selectedClassMeta.track,
+                            which, value, studentNames, overwrite,
+                        })
+                    }
+                    onUndoFill={async (which: "a1" | "a2" | "a3" | "a4" | "a5", entries: any[]) =>
+                        await restoreColumn({
+                            className: selectedClass,
+                            subjectName: selectedSubject,
+                            grade: selectedClassMeta.grade,
+                            track: selectedClassMeta.track,
+                            which, entries,
+                        })
+                    }
                 />
             )}
         </div>
     );
 }
 
-function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any) {
+function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill, onUndoFill }: any) {
     const [search, setSearch] = useState("");
     const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
     const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
@@ -261,6 +283,73 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
         return grades.filter((g: any) => g.studentName.includes(search.trim()));
     }, [grades, search]);
 
+    // ── Fill a whole column with the full mark ────────────────────────────
+    const [filling, setFilling] = useState<string | null>(null);
+    const [fillMsg, setFillMsg] = useState("");
+    // Snapshot of each column as it was before it was filled, so a fill can be
+    // undone. Keyed by column: pressing ملء twice must not overwrite the
+    // original snapshot with the already-filled state.
+    type FillSnapshot = { which: string; label: string; entries: { studentName: string; value: any }[] };
+    const [pendingFills, setPendingFills] = useState<FillSnapshot[]>([]);
+    const [undoing, setUndoing] = useState<string | null>(null);
+
+    const handleFill = async (which: string, label: string) => {
+        const names = filtered.map((g: any) => g.studentName);
+        if (names.length === 0) return;
+
+        const emptyCount = filtered.filter((g: any) => {
+            const v = localValues[g.studentName]?.[which];
+            return v === undefined || v.trim() === "";
+        }).length;
+
+        // Nothing left to fill — offer to reset the column instead of doing nothing
+        let overwrite = false;
+        if (emptyCount === 0) {
+            if (!window.confirm(
+                `كل خانات «${label}» مرصودة بالفعل (${names.length}). هل تريد استبدالها جميعاً بالدرجة الكاملة (${max})؟`
+            )) return;
+            overwrite = true;
+        }
+
+        // Capture the saved values before touching anything
+        const before = filtered.map((g: any) => ({
+            studentName: g.studentName,
+            value: g[which] ?? null,
+        }));
+
+        setFilling(which);
+        try {
+            const res = await onFill(which, max, names, overwrite);
+            const skipped = res?.skipped ?? 0;
+            setFillMsg(
+                `تم ملء ${res?.filled ?? 0} خانة في «${label}» بالدرجة ${max}` +
+                (skipped > 0 ? ` — وتُركت ${skipped} خانة مرصودة كما هي` : "")
+            );
+            // Keep the first snapshot for this column — it is the real "before"
+            setPendingFills(prev => prev.some(f => f.which === which)
+                ? prev
+                : [...prev, { which, label, entries: before }]);
+        } catch (e: any) {
+            setFillMsg(e.message ?? "تعذّر ملء العمود");
+            setTimeout(() => setFillMsg(""), 4000);
+        } finally {
+            setFilling(null);
+        }
+    };
+
+    const handleUndoFill = async (snapshot: FillSnapshot) => {
+        setUndoing(snapshot.which);
+        try {
+            await onUndoFill(snapshot.which, snapshot.entries);
+            setFillMsg(`تم التراجع عن ملء «${snapshot.label}» وإرجاع الدرجات كما كانت.`);
+            setPendingFills(prev => prev.filter(f => f.which !== snapshot.which));
+        } catch (e: any) {
+            setFillMsg(e.message ?? "تعذّر التراجع");
+        } finally {
+            setUndoing(null);
+        }
+    };
+
     const saveCell = async (studentName: string, which: string, val: string) => {
         const key = `${studentName}|${which}`;
         // Validate locally first
@@ -271,6 +360,9 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
             return;
         }
         setErrorMap(p => { const n = { ...p }; delete n[key]; return n; });
+        // A manual edit in a filled column makes its snapshot stale — undoing
+        // then would wipe what was just typed, so drop that column's undo offer.
+        setPendingFills(prev => prev.filter(f => f.which !== which));
         setSavingMap(p => ({ ...p, [key]: true }));
         try {
             await onUpdate({
@@ -335,6 +427,31 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
                     <input value={search} onChange={e => setSearch(e.target.value)} aria-label="بحث باسم الطالب" placeholder="بحث باسم الطالب..."
                         className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                 </div>
+                {(fillMsg || pendingFills.length > 0) && (
+                    <div role="status" className="mt-2 flex items-center gap-2 flex-wrap text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 animate-in fade-in">
+                        {fillMsg && <span className="ml-1">{fillMsg}</span>}
+                        {pendingFills.map(snapshot => (
+                            <button key={snapshot.which} type="button" onClick={() => handleUndoFill(snapshot)}
+                                disabled={undoing !== null}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition-colors">
+                                {undoing === snapshot.which
+                                    ? <span className="w-3 h-3 border-2 border-emerald-200 border-t-emerald-700 rounded-full animate-spin"/>
+                                    : <RotateCcw className="w-3 h-3"/>}
+                                تراجع عن ملء «{snapshot.label}»
+                            </button>
+                        ))}
+                        <button type="button" onClick={() => { setFillMsg(""); setPendingFills([]); }}
+                            aria-label="إخفاء الرسالة"
+                            className="mr-auto text-emerald-600 hover:text-emerald-900">
+                            <X className="w-3.5 h-3.5"/>
+                        </button>
+                    </div>
+                )}
+                {search.trim() && (
+                    <p className="mt-2 text-[11px] font-bold text-amber-700">
+                        البحث مُفعَّل — زر «ملء» سيطبّق على الـ {filtered.length} طالب الظاهرين فقط.
+                    </p>
+                )}
             </div>
 
             {/* Grid */}
@@ -344,11 +461,25 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate }: any)
                         <tr>
                             <th className="px-2 py-2 text-center font-semibold text-slate-500 border-l border-slate-200 w-12">#</th>
                             <th className="sticky right-0 bg-slate-50 px-3 py-2 text-right font-semibold text-slate-700 border-l border-slate-200 min-w-[200px]">الاسم</th>
-                            {labels.map((label: string, i: number) => (
-                                <th key={i} className="px-1 py-2 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[55px]">
-                                    {label}
-                                </th>
-                            ))}
+                            {labels.map((label: string, i: number) => {
+                                const field = `a${i + 1}`;
+                                return (
+                                    <th key={i} className="px-1 py-2 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[68px]">
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span>{label}</span>
+                                            <button type="button" onClick={() => handleFill(field, label)}
+                                                disabled={filling !== null || filtered.length === 0}
+                                                title={`ملء العمود بالدرجة الكاملة (${max})`}
+                                                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-slate-500 bg-white border border-slate-200 hover:text-qatar-maroon hover:border-qatar-maroon/40 disabled:opacity-40 disabled:pointer-events-none transition-colors">
+                                                {filling === field
+                                                    ? <span className="w-3 h-3 border-2 border-slate-300 border-t-qatar-maroon rounded-full animate-spin"/>
+                                                    : <ArrowDownToLine className="w-3 h-3"/>}
+                                                ملء
+                                            </button>
+                                        </div>
+                                    </th>
+                                );
+                            })}
                             <th className="px-2 py-2 text-center font-semibold text-qatar-maroon border-l border-slate-200">المجموع</th>
                             <th className="px-2 py-2 text-center font-semibold text-qatar-maroon">من {finalOutOf}</th>
                         </tr>

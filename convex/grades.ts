@@ -380,6 +380,138 @@ function isBlankGradeRow(row: any): boolean {
     return !hasMark && !row.notes?.trim();
 }
 
+// Fill one assessment column in a single transaction — the usual start of
+// grading is "everyone gets full marks, then I lower the ones who didn't".
+export const fillAssessment = mutation({
+    args: {
+        className: v.string(),
+        subjectName: v.string(),
+        grade: v.number(),
+        track: v.string(),
+        which: v.union(v.literal("a1"), v.literal("a2"), v.literal("a3"), v.literal("a4"), v.literal("a5")),
+        value: v.union(v.number(), v.string()),
+        studentNames: v.array(v.string()),
+        // Off by default: already-entered marks are left alone.
+        overwrite: v.optional(v.boolean()),
+        updatedBy: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        await validateAssessment(ctx, args.value);
+        const school = await getSchool(ctx);
+
+        const existing = await ctx.db.query("studentGrades")
+            .withIndex("by_class_subject", q =>
+                q.eq("schoolId", school._id)
+                 .eq("className", args.className)
+                 .eq("subjectName", args.subjectName))
+            .collect();
+
+        const byName = new Map(existing.map(g => [g.studentName.trim(), g]));
+
+        let filled = 0;
+        let skipped = 0;
+
+        for (const raw of args.studentNames) {
+            const name = raw.trim();
+            if (!name) continue;
+
+            const row = byName.get(name);
+            const current = row ? (row as any)[args.which] : undefined;
+            const isEmpty = current === undefined || current === null || current === "";
+            if (!isEmpty && !args.overwrite) { skipped++; continue; }
+
+            if (row) {
+                await ctx.db.patch(row._id, {
+                    [args.which]: args.value,
+                    updatedAt: Date.now(),
+                    updatedBy: args.updatedBy,
+                } as any);
+            } else {
+                await ctx.db.insert("studentGrades", {
+                    schoolId: school._id,
+                    studentName: name,
+                    className: args.className,
+                    grade: args.grade,
+                    track: args.track,
+                    subjectName: args.subjectName,
+                    [args.which]: args.value,
+                    updatedAt: Date.now(),
+                    updatedBy: args.updatedBy,
+                } as any);
+            }
+            filled++;
+        }
+
+        return { filled, skipped };
+    },
+});
+
+// Undo for fillAssessment: puts each cell back to the value it held before the
+// fill (null = it was empty, so the cell — and an emptied row — goes away).
+export const restoreAssessment = mutation({
+    args: {
+        className: v.string(),
+        subjectName: v.string(),
+        grade: v.number(),
+        track: v.string(),
+        which: v.union(v.literal("a1"), v.literal("a2"), v.literal("a3"), v.literal("a4"), v.literal("a5")),
+        entries: v.array(v.object({
+            studentName: v.string(),
+            value: v.union(v.number(), v.string(), v.null()),
+        })),
+        updatedBy: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        await Promise.all(args.entries.map(e => validateAssessment(ctx, e.value)));
+        const school = await getSchool(ctx);
+
+        const existing = await ctx.db.query("studentGrades")
+            .withIndex("by_class_subject", q =>
+                q.eq("schoolId", school._id)
+                 .eq("className", args.className)
+                 .eq("subjectName", args.subjectName))
+            .collect();
+
+        const byName = new Map(existing.map(g => [g.studentName.trim(), g]));
+        let restored = 0;
+
+        for (const entry of args.entries) {
+            const name = entry.studentName.trim();
+            if (!name) continue;
+
+            const row = byName.get(name);
+            const value = entry.value ?? undefined;
+
+            if (!row) {
+                if (value === undefined) continue; // was empty, still empty
+                await ctx.db.insert("studentGrades", {
+                    schoolId: school._id,
+                    studentName: name,
+                    className: args.className,
+                    grade: args.grade,
+                    track: args.track,
+                    subjectName: args.subjectName,
+                    [args.which]: value,
+                    updatedAt: Date.now(),
+                    updatedBy: args.updatedBy,
+                } as any);
+                restored++;
+                continue;
+            }
+
+            const patch = { [args.which]: value, updatedAt: Date.now(), updatedBy: args.updatedBy };
+            if (isBlankGradeRow({ ...row, ...patch })) {
+                await ctx.db.delete(row._id);
+            } else {
+                await ctx.db.patch(row._id, patch as any);
+            }
+            restored++;
+        }
+
+        return { restored };
+    },
+});
+
 export const updateAssessment = mutation({
     args: {
         id: v.id("studentGrades"),

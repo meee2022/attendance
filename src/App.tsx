@@ -19,6 +19,7 @@ import SupervisionPage from "./pages/SupervisionPage";
 import SupervisionPrint from "./pages/SupervisionPrint";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
+import GradesSheetPrint from "./pages/GradesSheetPrint";
 import PracticalExamsPage from "./pages/PracticalExamsPage";
 import FollowUpPage from "./pages/FollowUpPage";
 import FollowUpPrint from "./pages/FollowUpPrint";
@@ -124,6 +125,7 @@ function App() {
           <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><SupervisionPage /></FeatureRoute>} />
           <Route path="/supervision/print/:id" element={<SupervisionPrint />} />
           <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
+          <Route path="/grades/print/class" element={<GradesSheetPrint />} />
           <Route path="/grades/print/student/:studentName" element={<GradesPrint />} />
           <Route path="/practical-exams"     element={<FeatureRoute featureKey="/practical-exams"><PracticalExamsPage /></FeatureRoute>} />
           <Route path="/follow-up"           element={<FeatureRoute featureKey="/follow-up"><FollowUpPage /></FeatureRoute>} />

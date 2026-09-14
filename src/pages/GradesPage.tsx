@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyState, PageHeader } from "../components/ui";
+import { GradesExportButtons } from "../components/ExportButtons";
 
 type GradeValue = number | "absent" | "excused" | null;
 
@@ -325,6 +326,10 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
             {(!selectedClass || (!selectedSubject && subjectsForClass.length > 0)) && <EmptyState icon={<BookOpen className="w-6 h-6"/>}
                 title={selectedClass ? "اختر المادة لعرض الدرجات" : "ابدأ باختيار الفصل والمادة"}
                 description="سيظهر كشف الطلاب هنا. أدخل الدرجة في خانتها، وسيتم حفظها عند الانتقال إلى الخانة التالية."/>}
+            {/* Keep a copy right after recording — Excel or a signed PDF sheet */}
+            {selectedClass && selectedSubject && (
+                <GradesExportButtons className={selectedClass} subjectName={selectedSubject}/>
+            )}
             {selectedClass && selectedSubject && (grades === undefined ? <GradesLoading/> :
                 <GradesGrid
                     key={`${selectedClass}|${selectedSubject}`}

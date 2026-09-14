@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "convex/react";
 // @ts-ignore
@@ -22,8 +22,17 @@ export default function DiagnosticsSheetPrint() {
         ...(subjectName ? { subjectName } : {}),
     }) as any;
 
+    // Opened from an export button: go straight to the print dialog, where
+    // «حفظ بصيغة PDF» saves the file under this title.
+    const printed = useRef(false);
     useEffect(() => {
-        if (data) document.title = `كشف رصد - ${data.test.title}`;
+        if (!data) return;
+        document.title = [`كشف رصد - ${data.test.title}`, className || "كل الشعب", subjectName]
+            .filter(Boolean).join(" - ");
+        if (params.get("autoprint") === "1" && !printed.current) {
+            printed.current = true;
+            setTimeout(() => window.print(), 600);
+        }
     }, [data]);
 
     if (data === undefined) {
@@ -45,9 +54,11 @@ export default function DiagnosticsSheetPrint() {
                     .class-block { break-after: page; }
                     .class-block:last-child { break-after: auto; }
                 }
+                .sheet-print { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 .sheet-print table { border-collapse: collapse; width: 100%; }
-                .sheet-print th, .sheet-print td { border: 1px solid #64748b; padding: 2px 4px; }
-                .sheet-print th { background: #f1f5f9; font-weight: 700; }
+                .sheet-print th, .sheet-print td { border: 1px solid #cbd5e1; padding: 3px 4px; }
+                .sheet-print th { background: #5C1523; color: #fff; font-weight: 700; border-color: #7a1e30; }
+                .sheet-print tbody tr:nth-child(even) td { background: #f8fafc; }
                 .sheet-print .c { text-align: center; }
             `}</style>
 

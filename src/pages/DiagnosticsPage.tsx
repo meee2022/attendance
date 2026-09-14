@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { EmptyState, PageHeader, LoadingSpinner, KPICard } from "../components/ui";
 import DiagnosticsExport from "./DiagnosticsExport";
+import { DiagnosticsExportButtons } from "../components/ExportButtons";
 
 const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
 
@@ -732,6 +733,7 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
                         aria-label="بحث باسم الطالب"
                         className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2.5 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                 </div>
+                <DiagnosticsExportButtons testId={testId} className={className}/>
                 <button type="button" onClick={clearThisClass}
                     className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-black text-rose-600 bg-white border border-rose-200 hover:bg-rose-50">
                     <Eraser className="w-4 h-4"/>مسح درجات هذه الشعبة

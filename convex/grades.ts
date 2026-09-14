@@ -30,6 +30,7 @@ type RosterEntry = {
     className: string;
     grade: number;
     track: string;
+    nationalId?: string;
 };
 
 const byArabicName = (a: { studentName: string }, b: { studentName: string }) =>
@@ -59,9 +60,87 @@ async function rosterForClass(ctx: any, schoolId: any, className: string): Promi
             className: cls.name,
             grade: cls.grade,
             track: cls.track ?? "عام",
+            nationalId: s.nationalId,
         }))
         .sort(byArabicName);
 }
+
+// Everything needed to keep a copy of a class's short assessments: one subject,
+// or every subject the class takes (its study plan plus anything already marked).
+export const getClassExport = query({
+    args: { className: v.string(), subjectName: v.optional(v.string()) },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return null;
+
+        const cls = (await activeClasses(ctx, school._id))
+            .find((c: any) => c.name.trim() === args.className.trim());
+        if (!cls) return null;
+
+        const stored = await ctx.db.query("gradeSettings")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .first();
+        const settings = {
+            maxPerAssessment: stored?.maxPerAssessment ?? 20,
+            finalScoreOutOf: stored?.finalScoreOutOf ?? 5,
+            passThreshold: stored?.passThreshold ?? 2.5,
+            excellenceThreshold: stored?.excellenceThreshold ?? 4.5,
+            assessmentLabels: stored?.assessmentLabels ?? DEFAULT_LABELS,
+        };
+
+        const track = cls.track ?? "عام";
+        const saved = (await ctx.db.query("studentGrades")
+            .withIndex("by_school", q => q.eq("schoolId", school._id))
+            .collect())
+            .filter(g => g.className === cls.name);
+
+        let subjectNames: string[];
+        if (args.subjectName) {
+            subjectNames = [args.subjectName];
+        } else {
+            const planned = (await ctx.db.query("subjects")
+                .filter(q => q.eq(q.field("schoolId"), school._id))
+                .collect())
+                .filter(s => (s.targetClasses ?? []).some(t => t.trim() === `${cls.grade}-${track}`))
+                .map(s => s.name);
+            subjectNames = [...new Set([...planned, ...saved.map(g => g.subjectName)])]
+                .sort((a, b) => a.localeCompare(b, "ar"));
+        }
+
+        const roster = await rosterForClass(ctx, school._id, cls.name);
+
+        const sheets = subjectNames.map(subjectName => {
+            const byName = new Map(saved
+                .filter(g => g.subjectName === subjectName)
+                .map(g => [g.studentName.trim(), g] as const));
+            const marksOf = (g: any) => ({
+                a1: g?.a1 ?? null, a2: g?.a2 ?? null, a3: g?.a3 ?? null,
+                a4: g?.a4 ?? null, a5: g?.a5 ?? null,
+            });
+
+            const students = roster.map(entry => {
+                const key = entry.studentName.trim();
+                const g = byName.get(key);
+                byName.delete(key);
+                return { studentName: entry.studentName, nationalId: entry.nationalId ?? "", ...marksOf(g) };
+            });
+            // Marks under a name no longer on the roster still belong in the record
+            for (const g of [...byName.values()].sort(byArabicName)) {
+                students.push({ studentName: g.studentName, nationalId: "", ...marksOf(g) });
+            }
+            return { subjectName, students };
+        });
+
+        return {
+            schoolName: school.name,
+            className: cls.name,
+            grade: cls.grade,
+            track,
+            settings,
+            sheets,
+        };
+    },
+});
 
 // ── Settings ──────────────────────────────────────────────────────────────
 export const getSettings = query({

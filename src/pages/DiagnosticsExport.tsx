@@ -1,23 +1,18 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
-import * as XLSX from "xlsx";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Download, FileSpreadsheet, Printer, AlertCircle } from "lucide-react";
 import { LoadingSpinner, EmptyState } from "../components/ui";
-import { printableSchoolName } from "../lib/brand";
+import { downloadWorkbook, safeFileName } from "../lib/excelExport";
+import { buildDiagnosticsSheets } from "../lib/diagnosticsExportBuild";
 
 // Writing the marks out to a file is how the school keeps its record: an .xlsx
 // to archive and re-open, and a print sheet the teacher signs.
 
-const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
 
 const ALL = "__all__";
 
-function safeName(s: string) {
-    // Excel forbids : \ / ? * [ ] in sheet names and caps them at 31 chars
-    return s.replace(/[:\\/?*\[\]]/g, "-").slice(0, 31);
-}
 
 export default function DiagnosticsExport({ testId }: { testId: string }) {
     const [className, setClassName] = useState(ALL);
@@ -49,71 +44,10 @@ export default function DiagnosticsExport({ testId }: { testId: string }) {
     ].filter(Boolean).join(" - ");
 
     // ── Excel ─────────────────────────────────────────────────────────────
-    const exportExcel = () => {
-        const wb = XLSX.utils.book_new();
-
-        // Cover sheet: what this file is, so an archived copy explains itself
-        const cover: any[][] = [
-            ["مدرسة", printableSchoolName(data.schoolName)],
-            ["الاختبار", data.test.title],
-            [isCombined ? "المواد" : "المادة", (data.test.subjectNames ?? []).join(" + ")],
-            ["الصف", GRADE_LABELS[data.test.grade] ?? data.test.grade],
-            ["الفصل الدراسي", data.test.term],
-            ["تاريخ الاختبار", data.test.testDate],
-            ["الدرجة الكلية", data.totalMarks],
-            ["حد الإتقان", `${Math.round(data.test.masteryThreshold * 100)}%`],
-            ["نطاق التصدير", [
-                className === ALL ? "كل الشعب" : `الشعبة ${className}`,
-                subjectName === ALL ? "كل المواد" : `مادة ${subjectName}`,
-            ].join(" · ")],
-            ["تاريخ التصدير", new Date().toLocaleString("ar-EG")],
-            [],
-            ["السؤال", "المادة", "المهارة", "الدرجة الكلية"],
-            ...data.questions.map((q: any) => [q.n, q.subjectName, q.skillLabel, q.maxMark]),
-        ];
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cover), "بيانات الاختبار");
-
-        // One sheet per class: students down, questions across
-        for (const sheet of data.sheets) {
-            const header = [
-                "م", "الرقم", "اسم الطالب",
-                ...data.questions.map((q: any) => `س${q.n} (${q.maxMark})`),
-                "المجموع", "النسبة", "الإتقان", "الحالة",
-            ];
-            const skillRow = [
-                "", "", "المهارة",
-                ...data.questions.map((q: any) => q.skillLabel),
-                "", "", "", "",
-            ];
-            const subjectRow = isCombined
-                ? ["", "", "المادة", ...data.questions.map((q: any) => q.subjectName), "", "", "", ""]
-                : null;
-
-            const body = sheet.students.map((s: any, i: number) => [
-                i + 1,
-                s.nationalId,
-                s.studentName,
-                ...s.marks.map((m: number | null) => (m === null ? "" : m)),
-                s.total ?? "",
-                s.percent === null ? "" : Number((s.percent * 100).toFixed(1)),
-                s.mastered ? "متقن" : s.total === null ? "" : "غير متقن",
-                s.isAbsent ? "غائب" : s.answered === 0 ? "لم يُرصد" : "مرصود",
-            ]);
-
-            const aoa = subjectRow
-                ? [header, subjectRow, skillRow, ...body]
-                : [header, skillRow, ...body];
-
-            const ws = XLSX.utils.aoa_to_sheet(aoa);
-            ws["!cols"] = [
-                { wch: 4 }, { wch: 13 }, { wch: 30 },
-                ...data.questions.map(() => ({ wch: 8 })),
-                { wch: 8 }, { wch: 8 }, { wch: 9 }, { wch: 10 },
-            ];
-            XLSX.utils.book_append_sheet(wb, ws, safeName(sheet.className));
-        }
-
-        XLSX.writeFile(wb, `${fileStem}.xlsx`);
+    // Styled workbook: a summary across classes, a sheet per class and the
+    // question map — the same layout as the quick button on the entry grid.
+    const exportExcel = async () => {
+        await downloadWorkbook(safeFileName(fileStem), buildDiagnosticsSheets(data));
     };
 
     // ── CSV (one flat file, easiest to re-import anywhere) ────────────────
@@ -151,7 +85,7 @@ export default function DiagnosticsExport({ testId }: { testId: string }) {
 
     const printUrl = `/diagnostics/print/sheet/${testId}` +
         `?class=${encodeURIComponent(className === ALL ? "" : className)}` +
-        `&subject=${encodeURIComponent(subjectName === ALL ? "" : subjectName)}`;
+        `&subject=${encodeURIComponent(subjectName === ALL ? "" : subjectName)}&autoprint=1`;
 
     return (
         <div className="space-y-4">
@@ -197,7 +131,7 @@ export default function DiagnosticsExport({ testId }: { testId: string }) {
                         <FileSpreadsheet className="w-7 h-7 text-emerald-600"/>
                         <span className="font-black text-sm text-slate-700">تنزيل Excel</span>
                         <span className="text-[11px] font-bold text-slate-400 text-center">
-                            ورقة لكل شعبة + ورقة بيانات الاختبار
+                            منسّق: ملخص الشعب + ورقة لكل شعبة + الأسئلة
                         </span>
                     </button>
 

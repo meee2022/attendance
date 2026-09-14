@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery } from "convex/react";
+import { computeFinalScore } from "../lib/gradeMath";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 
@@ -11,14 +12,10 @@ function formatGrade(v: any): string {
     return String(v);
 }
 
+// The final score is taken over the assessments actually recorded — see lib/gradeMath.
 function calcSummary(g: any, max = 20, finalOutOf = 5) {
-    let sum = 0, cnt = 0;
-    for (const k of ["a1", "a2", "a3", "a4", "a5"] as const) {
-        const v = g[k];
-        if (typeof v === "number") { sum += v; cnt++; }
-    }
-    const totalMax = 5 * max;
-    return { sum, cnt, total: sum, finalScore: totalMax > 0 ? (sum / totalMax) * finalOutOf : 0 };
+    const f = computeFinalScore(g, max, finalOutOf);
+    return { sum: f.sum, cnt: f.counted, total: f.sum, finalScore: f.finalScore, percent: f.percent };
 }
 
 export default function GradesPrint() {

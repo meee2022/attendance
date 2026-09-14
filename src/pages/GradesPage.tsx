@@ -11,6 +11,7 @@ import {
 import { Link } from "react-router-dom";
 import { EmptyState, PageHeader } from "../components/ui";
 import { GradesExportButtons } from "../components/ExportButtons";
+import { computeFinalScore } from "../lib/gradeMath";
 
 type GradeValue = number | "absent" | "excused" | null;
 
@@ -47,15 +48,10 @@ function cleanParse(s: string, max?: number): GradeValue {
     return r as GradeValue;
 }
 
+// The final score is taken over the assessments actually recorded — see lib/gradeMath.
 function calcSummary(g: any, max = 20, finalOutOf = 5) {
-    const vals = ["a1", "a2", "a3", "a4", "a5"].map(k => g[k]);
-    let sum = 0, cnt = 0;
-    for (const v of vals) {
-        if (typeof v === "number") { sum += v; cnt++; }
-    }
-    const totalMax = vals.length * max;
-    const finalScore = totalMax > 0 ? (sum / totalMax) * finalOutOf : 0;
-    return { sum, cnt, total: sum, finalScore, percent: totalMax > 0 ? sum / totalMax : 0 };
+    const f = computeFinalScore(g, max, finalOutOf);
+    return { sum: f.sum, cnt: f.counted, total: f.sum, finalScore: f.finalScore, percent: f.percent };
 }
 
 export default function GradesPage() {
@@ -535,7 +531,7 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
                 </div>
                 <div className="text-[10px] text-white/80 font-bold flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
                     <AlertCircle className="w-3 h-3"/>
-                    من 0 إلى {max} · "غ" غياب · "م" معذور · Enter للانتقال
+                    من 0 إلى {max} · "غ" غياب (صفر) · "م" معذور (لا يُحتسب) · النهائية من المرصود · Enter للانتقال
                 </div>
             </div>
 

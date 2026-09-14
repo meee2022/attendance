@@ -1,6 +1,7 @@
 import type { ExcelCell, ExcelSheetSpec, ExcelTone } from "./excelExport";
 import { SIGNATURE_LINES } from "./excelExport";
 import { printableSchoolName } from "./brand";
+import { computeFinalScore } from "./gradeMath";
 
 // Turns grades.getClassExport into sheets. The arithmetic mirrors the entry
 // grid exactly, so the archived file says what the teacher saw on screen.
@@ -28,19 +29,22 @@ export function formatMark(v: unknown): ExcelCell {
 }
 
 export function summaryOf(row: Record<string, unknown>, settings: GradeSettings) {
-    const values = SLOTS.map(k => row[k]);
-    let sum = 0;
-    for (const v of values) if (typeof v === "number") sum += v;
-    const hasAny = values.some(v => v !== null && v !== undefined && v !== "");
-    const totalMax = SLOTS.length * settings.maxPerAssessment;
-    const finalScore = totalMax > 0 ? (sum / totalMax) * settings.finalScoreOutOf : 0;
-    return { sum, hasAny, finalScore: Math.round(finalScore * 100) / 100 };
+    const f = computeFinalScore(row, settings.maxPerAssessment, settings.finalScoreOutOf);
+    return {
+        sum: f.sum,
+        counted: f.counted,
+        maxPossible: f.maxPossible,
+        hasAny: f.hasFinal,
+        excusedOnly: f.recorded > 0 && !f.hasFinal,
+        finalScore: Math.round(f.finalScore * 100) / 100,
+    };
 }
 
 export function statusOf(
-    summary: { hasAny: boolean; finalScore: number },
+    summary: { hasAny: boolean; finalScore: number; excusedOnly?: boolean },
     settings: GradeSettings,
 ): { label: string; tone?: ExcelTone } {
+    if (summary.excusedOnly) return { label: "معذور", tone: "muted" };
     if (!summary.hasAny) return { label: "لم يُرصد", tone: "muted" };
     if (summary.finalScore >= settings.excellenceThreshold) return { label: "متميز", tone: "good" };
     if (summary.finalScore >= settings.passThreshold) return { label: "ناجح" };
@@ -90,7 +94,6 @@ export function buildGradesSheets(data: any): ExcelSheetSpec[] {
     const grade = GRADE_LABELS[data.grade] ?? String(data.grade);
     const exportedAt = new Date().toLocaleString("ar-EG");
     const classLine = `${school} · الصف ${grade} · الشعبة ${data.className} (${data.track})`;
-    const totalMax = SLOTS.length * settings.maxPerAssessment;
 
     const firstMark = 3;
     const lastMark = firstMark + SLOTS.length - 1;
@@ -110,7 +113,7 @@ export function buildGradesSheets(data: any): ExcelSheetSpec[] {
             { header: "الرقم", width: 14, align: "center" },
             { header: "اسم الطالب", width: 32, bold: true },
             ...labels.map(l => ({ header: `${l}\n(من ${settings.maxPerAssessment})`, width: 11, align: "center" as const })),
-            { header: `المجموع\n(من ${totalMax})`, width: 11, align: "center", bold: true },
+            { header: `المجموع\n(من المرصود)`, width: 11, align: "center", bold: true },
             { header: `الدرجة النهائية\n(من ${settings.finalScoreOutOf})`, width: 13, align: "center", bold: true, numFmt: "0.00" },
             { header: "الحالة", width: 14, align: "center" },
         ],
@@ -135,13 +138,13 @@ export function buildGradesSheets(data: any): ExcelSheetSpec[] {
                 return v < settings.passThreshold ? "bad" : v >= settings.excellenceThreshold ? "good" : undefined;
             }
             if (col === statusCol) {
-                return v === "متميز" ? "good" : v === "دون حد النجاح" ? "bad" : v === "لم يُرصد" ? "muted" : undefined;
+                return v === "متميز" ? "good" : v === "دون حد النجاح" ? "bad" : v === "لم يُرصد" || v === "معذور" ? "muted" : undefined;
             }
             return undefined;
         },
         notes: [
             "غ = غائب · م = معذور · الخانة الفارغة = لم يُرصد بعد",
-            `الدرجة النهائية = مجموع الدرجات ÷ ${totalMax} × ${settings.finalScoreOutOf}`,
+            `الدرجة النهائية = مجموع درجات التقييمات المرصودة ÷ (عددها × ${settings.maxPerAssessment}) × ${settings.finalScoreOutOf} · الغائب يُحتسب صفراً والمعذور لا يدخل في الحساب`,
         ],
         signatures: SIGNATURE_LINES,
     }));

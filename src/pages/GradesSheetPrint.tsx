@@ -193,7 +193,7 @@ export default function GradesSheetPrint() {
                         </tbody>
                     </table>
                     <p className="text-[10px] font-bold text-slate-500 mt-2">
-                        غ = غائب · م = معذور · الخانة الفارغة = لم يُرصد بعد ·
+                        الدرجة النهائية من التقييمات المرصودة · غ = غائب (يُحتسب صفراً) · م = معذور (لا يدخل في الحساب) · الخانة الفارغة = لم يُرصد بعد ·
                         حد النجاح {settings.passThreshold} · حد التميز {settings.excellenceThreshold}
                     </p>
                     {signatures}

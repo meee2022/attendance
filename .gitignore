@@ -70,3 +70,6 @@ node_modules
 
 # ملفات فحص مؤقتة
 _*.tmp.mjs
+
+# Public build-time values for hosts without .env.local (the Convex URLs ship in the bundle anyway)
+!.env.production

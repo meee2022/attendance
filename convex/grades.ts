@@ -18,6 +18,9 @@ async function includedGrades(ctx: any, schoolId: any): Promise<number[]> {
     return s?.includedGrades ?? DEFAULT_INCLUDED_GRADES;
 }
 
+// Support (ESE) sections sit outside the short-assessment scheme altogether.
+const isSupportClass = (name: string | undefined) => /ESE/i.test(name ?? "");
+
 // ── Roster helpers ────────────────────────────────────────────────────────
 // Grades are stored denormalised by student name, so a brand-new school year
 // starts with an empty studentGrades table. The roster therefore comes from the
@@ -257,7 +260,7 @@ export const getAllGrades = query({
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
         // Keep the result views in step with the class list
-        return all.filter(g => included.includes(g.grade));
+        return all.filter(g => included.includes(g.grade) && !isSupportClass(g.className));
     },
 });
 
@@ -272,7 +275,7 @@ export const getCoverage = query({
 
         const included = await includedGrades(ctx, school._id);
         const classes = (await activeClasses(ctx, school._id))
-            .filter((c: any) => included.includes(c.grade));
+            .filter((c: any) => included.includes(c.grade) && !isSupportClass(c.name));
 
         const subjects = await ctx.db.query("subjects")
             .filter(q => q.eq(q.field("schoolId"), school._id))
@@ -429,7 +432,7 @@ export const getClassesAndSubjects = query({
         const included = await includedGrades(ctx, school._id);
 
         for (const cls of await activeClasses(ctx, school._id)) {
-            if (!included.includes(cls.grade)) continue;
+            if (!included.includes(cls.grade) || isSupportClass(cls.name)) continue;
             addClass(cls.name, cls.grade, cls.track ?? "عام");
             bucketFor(cls.grade, cls.track ?? "عام");
         }
@@ -455,7 +458,7 @@ export const getClassesAndSubjects = query({
 
         for (const g of all) {
             if (!g.className) continue;
-            if (!included.includes(g.grade ?? 0)) continue;
+            if (!included.includes(g.grade ?? 0) || isSupportClass(g.className)) continue;
             addClass(g.className, g.grade ?? 0, g.track ?? "عام");
             if (!g.subjectName) continue;
             const bucket = bucketFor(g.grade ?? 0, g.track ?? "عام");

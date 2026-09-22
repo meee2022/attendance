@@ -8,6 +8,7 @@ async function getSchool(ctx: any) {
 }
 
 const DEFAULT_LABELS = ["تقييم 1", "تقييم 2", "تقييم 3", "تقييم 4", "تقييم 5"];
+const SLOTS = ["a1", "a2", "a3", "a4", "a5"] as const;
 const DEFAULT_INCLUDED_GRADES = [10, 11, 12];
 
 // Which grades take short assessments at all — the الثاني عشر does not.
@@ -285,12 +286,17 @@ export const getCoverage = query({
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
 
+        const settings = await ctx.db.query("gradeSettings")
+            .withIndex("by_school", (q: any) => q.eq("schoolId", school._id))
+            .first();
+        const labels = SLOTS.map((_, i) => settings?.assessmentLabels?.[i]?.trim() || DEFAULT_LABELS[i]);
+
         // How many marks exist per class+subject, and in which assessment slots
         const seen = new Map<string, { entries: number; slots: Set<string> }>();
         for (const r of rows) {
             const key = `${r.className}|${r.subjectName}`;
             const acc = seen.get(key) ?? { entries: 0, slots: new Set<string>() };
-            for (const slot of ["a1", "a2", "a3", "a4", "a5"] as const) {
+            for (const slot of SLOTS) {
                 const v = (r as any)[slot];
                 if (v !== undefined && v !== null && v !== "") {
                     acc.entries++;
@@ -335,7 +341,18 @@ export const getCoverage = query({
 
         const missing = cells.filter(c => !c.recorded);
 
+        // Which of the five assessments each subject (or class) has actually
+        // recorded, and in how many of its sheets — «رصدنا تقييمين من خمسة».
+        const slotTally = (mine: typeof cells) => SLOTS.map((slot, i) => ({
+            slot,
+            label: labels[i],
+            sheets: mine.filter(c => c.slots.includes(slot)).length,
+        }));
+        const slotsDone = (tally: { sheets: number }[], expected: number) =>
+            tally.filter(t => t.sheets === expected).length;
+
         return {
+            labels,
             cells,
             totalExpected: cells.length,
             recordedCount: cells.length - missing.length,
@@ -343,21 +360,29 @@ export const getCoverage = query({
             // Subjects with nothing recorded anywhere — the ones to chase first
             bySubject: [...new Set(cells.map(c => c.subjectName))].map(subjectName => {
                 const mine = cells.filter(c => c.subjectName === subjectName);
+                const assessments = slotTally(mine);
                 return {
                     subjectName,
                     expected: mine.length,
                     recorded: mine.filter(c => c.recorded).length,
                     missingClasses: mine.filter(c => !c.recorded).map(c => c.className),
+                    assessments,
+                    assessmentsDone: slotsDone(assessments, mine.length),
+                    assessmentsStarted: assessments.filter(a => a.sheets > 0).length,
                 };
             }).sort((a, b) => (a.recorded / a.expected) - (b.recorded / b.expected)),
             byClass: [...new Set(cells.map(c => c.className))].map(className => {
                 const mine = cells.filter(c => c.className === className);
+                const assessments = slotTally(mine);
                 return {
                     className,
                     grade: mine[0].grade,
                     expected: mine.length,
                     recorded: mine.filter(c => c.recorded).length,
                     missingSubjects: mine.filter(c => !c.recorded).map(c => c.subjectName),
+                    assessments,
+                    assessmentsDone: slotsDone(assessments, mine.length),
+                    assessmentsStarted: assessments.filter(a => a.sheets > 0).length,
                 };
             }).sort((a, b) => (a.grade - b.grade)
                 || a.className.localeCompare(b.className, "ar", { numeric: true })),

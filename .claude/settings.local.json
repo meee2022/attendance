@@ -23,7 +23,8 @@
       "Bash(cp /tmp/supervision.xlsm \"/c/Users/M/AppData/Local/Temp/supervision.xlsm\")",
       "Bash(node _analyze.mjs)",
       "Bash(sed -n '1,80p' /tmp/an2.txt)",
-      "Bash(sed -n '80,180p' /tmp/an2.txt)"
+      "Bash(sed -n '80,180p' /tmp/an2.txt)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/tmp_cov.json','utf8'\\);console.log\\('ESE mentions:',\\(d.match\\(/ESE/g\\)||[]\\).length\\);\")"
     ]
   }
 }

@@ -207,6 +207,7 @@ function CoverageView() {
                                     {mode === "subject" ? "المادة" : "الشعبة"}
                                 </th>
                                 <th className="px-2 py-2 text-center font-semibold text-slate-600">مرصود</th>
+                                <th className="px-3 py-2 text-right font-semibold text-slate-600">التقييمات</th>
                                 <th className="px-3 py-2 text-right font-semibold text-slate-600">
                                     {mode === "subject" ? "الشعب التي لم تُرصد" : "المواد التي لم تُرصد"}
                                 </th>
@@ -229,6 +230,28 @@ function CoverageView() {
                                                      : "bg-amber-100 text-amber-800"}`}>
                                                 {row.recorded}/{row.expected}
                                             </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                            <div className="flex flex-wrap gap-1 justify-end">
+                                                {(row.assessments ?? []).map((a: any, i: number) => {
+                                                    const full = a.sheets === row.expected;
+                                                    return (
+                                                        <span key={a.slot} title={`${a.label} — مرصود في ${a.sheets} من ${row.expected}`}
+                                                            className={`px-1.5 py-0.5 rounded-md font-black text-[10px] ${
+                                                                full ? "bg-emerald-50 text-emerald-700"
+                                                                     : a.sheets === 0 ? "bg-slate-100 text-slate-400"
+                                                                     : "bg-amber-100 text-amber-800"}`}>
+                                                            {i + 1}
+                                                            <span className="font-bold opacity-70"> {a.sheets}/{row.expected}</span>
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p className="text-[10px] font-bold text-slate-400 mt-1">
+                                                {row.assessmentsDone} من 5 تقييمات مكتملة
+                                                {row.assessmentsStarted > row.assessmentsDone
+                                                    ? ` · ${row.assessmentsStarted - row.assessmentsDone} قيد الرصد` : ""}
+                                            </p>
                                         </td>
                                         <td className="px-3 py-2 text-right">
                                             {done ? (

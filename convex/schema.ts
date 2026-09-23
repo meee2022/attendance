@@ -213,6 +213,27 @@ export default defineSchema({
         includedGrades: v.optional(v.array(v.number())),
     }).index("by_school", ["schoolId"]),
 
+    // أسابيع الفصل الدراسي كما في جدول المدرسة المعتمد
+    assessmentWeeks: defineTable({
+        schoolId: v.id("schools"),
+        week: v.number(),                   // 1..14
+        label: v.string(),                  // "30/8-3/9"
+        startDate: v.string(),              // "2026-08-30"
+        endDate: v.string(),                // "2026-09-03"
+        note: v.optional(v.string()),       // اختبارات منتصف · إجازة · مراجعة
+    }).index("by_school", ["schoolId"])
+      .index("by_week", ["schoolId", "week"]),
+
+    // خطة التقييمات القصيرة: في أي أسبوع تُجرى كل مادة
+    // grade غير محدد = الخطة تسري على كل الصفوف، وأي صف له أسابيعه الخاصة يتقدّم عليها
+    assessmentPlan: defineTable({
+        schoolId: v.id("schools"),
+        subjectName: v.string(),
+        grade: v.optional(v.number()),
+        week: v.number(),
+    }).index("by_school", ["schoolId"])
+      .index("by_subject", ["schoolId", "subjectName"]),
+
     // قاعدة بيانات المعلمين الموحدة
     schoolTeachers: defineTable({
         schoolId: v.id("schools"),

@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { dueByNow, planContext } from "./assessmentPlan";
 
 async function getSchool(ctx: any) {
     const sch = await ctx.db.query("schools").first();
@@ -278,6 +279,9 @@ export const getCoverage = query({
         const classes = (await activeClasses(ctx, school._id))
             .filter((c: any) => included.includes(c.grade) && !isSupportClass(c.name));
 
+        // The published week grid — what should have been recorded by today
+        const { weeks, entries: planEntries } = await planContext(ctx, school._id);
+
         const subjects = await ctx.db.query("subjects")
             .filter(q => q.eq(q.field("schoolId"), school._id))
             .collect();
@@ -309,6 +313,7 @@ export const getCoverage = query({
         const cells: {
             className: string; grade: number; track: string; subjectName: string;
             studentCount: number; entries: number; slots: string[]; recorded: boolean;
+            due: number; late: number;
         }[] = [];
 
         for (const cls of classes) {
@@ -326,7 +331,10 @@ export const getCoverage = query({
 
             for (const subjectName of planned) {
                 const acc = seen.get(`${cls.name}|${subjectName}`);
+                const due = dueByNow(weeks, planEntries, subjectName, cls.grade, SLOTS.length);
                 cells.push({
+                    due,
+                    late: Math.max(0, due - (acc ? acc.slots.size : 0)),
                     className: cls.name,
                     grade: cls.grade,
                     track,
@@ -353,6 +361,8 @@ export const getCoverage = query({
 
         return {
             labels,
+            hasPlan: weeks.length > 0,
+            lateSheets: cells.filter(c => c.late > 0).length,
             cells,
             totalExpected: cells.length,
             recordedCount: cells.length - missing.length,
@@ -363,6 +373,8 @@ export const getCoverage = query({
                 const assessments = slotTally(mine);
                 return {
                     subjectName,
+                    due: Math.max(...mine.map(c => c.due)),
+                    lateSheets: mine.filter(c => c.late > 0).length,
                     expected: mine.length,
                     recorded: mine.filter(c => c.recorded).length,
                     missingClasses: mine.filter(c => !c.recorded).map(c => c.className),
@@ -376,6 +388,8 @@ export const getCoverage = query({
                 const assessments = slotTally(mine);
                 return {
                     className,
+                    due: Math.max(...mine.map(c => c.due)),
+                    lateSheets: mine.filter(c => c.late > 0).length,
                     grade: mine[0].grade,
                     expected: mine.length,
                     recorded: mine.filter(c => c.recorded).length,

@@ -6,11 +6,13 @@ import {
     GraduationCap, BookOpen, Layers, Save, Upload, Download, Printer,
     BarChart3, FileText, Search, ChevronLeft, ChevronRight, AlertCircle,
     CheckCircle2, Filter, Users, X, MessageSquare, RotateCcw, Plus, ArrowDownToLine,
-    ClipboardCheck, CircleSlash,
+    ClipboardCheck, CircleSlash, CalendarDays,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { EmptyState, PageHeader } from "../components/ui";
 import { GradesExportButtons } from "../components/ExportButtons";
+import { assessmentIndexOf, dueByNow, weeksFor } from "../lib/planMath";
+import AssessmentPlanGrid from "../components/AssessmentPlanGrid";
 import { computeFinalScore } from "../lib/gradeMath";
 
 type GradeValue = number | "absent" | "excused" | null;
@@ -58,7 +60,7 @@ export default function GradesPage() {
     const settings = useQuery(api.grades.getSettings) as any;
     const meta = useQuery(api.grades.getClassesAndSubjects) as any;
     const allGrades = useQuery(api.grades.getAllGrades) as any[] | undefined;
-    const [view, setView] = useState<"entry" | "coverage" | "student" | "class" | "analytics">("entry");
+    const [view, setView] = useState<"entry" | "coverage" | "plan" | "student" | "class" | "analytics">("entry");
 
     if (!settings || !meta || allGrades === undefined) return <GradesLoading/>;
 
@@ -80,6 +82,7 @@ export default function GradesPage() {
                 {([
                     { key: "entry" as const, label: "إدخال الدرجات", icon: <BookOpen className="w-4 h-4"/> },
                     { key: "coverage" as const, label: "متابعة الرصد", icon: <ClipboardCheck className="w-4 h-4"/> },
+                    { key: "plan" as const, label: "جدول التقييمات", icon: <CalendarDays className="w-4 h-4"/> },
                     { key: "student" as const, label: "بطاقة الطالب", icon: <Users className="w-4 h-4"/> },
                     { key: "class" as const, label: "ملف الفصل", icon: <Layers className="w-4 h-4"/> },
                     { key: "analytics" as const, label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
@@ -97,7 +100,8 @@ export default function GradesPage() {
                 <>
                     {view === "entry" && <EntryView meta={meta} settings={settings}/>}
                     {view === "coverage" && <CoverageView/>}
-                    {view !== "entry" && view !== "coverage" && resultViewsEmpty ? (
+                    {view === "plan" && <AssessmentPlanGrid grades={settings.includedGrades ?? [10, 11]}/>}
+                    {view !== "entry" && view !== "coverage" && view !== "plan" && resultViewsEmpty ? (
                         <EmptyState icon={<BarChart3 className="w-6 h-6"/>}
                             title="لا توجد درجات مرصودة بعد"
                             description="ابدأ من تبويب «إدخال الدرجات» — ستظهر النتائج والتحليلات هنا فور رصد أول درجة."/>
@@ -169,6 +173,13 @@ function CoverageView() {
                         <p className="text-xs font-bold text-slate-500 mt-0.5">
                             الكشف = مادة واحدة في شعبة واحدة، حسب الخطة الدراسية المعتمدة.
                         </p>
+                        {data.hasPlan && (
+                            <p className={`text-xs font-black mt-1 ${data.lateSheets ? "text-rose-700" : "text-emerald-700"}`}>
+                                {data.lateSheets
+                                    ? `${data.lateSheets} كشف متأخر عن جدول الأسابيع المعتمد`
+                                    : "كل الكشوف في موعدها حسب جدول الأسابيع"}
+                            </p>
+                        )}
                     </div>
                     <span className="text-3xl font-black" style={{ color: pct >= 80 ? "#059669" : pct >= 40 ? "#f59e0b" : "#e11d48" }}>
                         {pct}%
@@ -251,7 +262,13 @@ function CoverageView() {
                                                 {row.assessmentsDone} من 5 تقييمات مكتملة
                                                 {row.assessmentsStarted > row.assessmentsDone
                                                     ? ` · ${row.assessmentsStarted - row.assessmentsDone} قيد الرصد` : ""}
+                                                {data.hasPlan ? ` · المستحق حتى اليوم ${row.due}` : ""}
                                             </p>
+                                            {row.lateSheets > 0 && (
+                                                <p className="text-[10px] font-black text-rose-700 mt-0.5">
+                                                    متأخر في {row.lateSheets} {row.lateSheets === 1 ? "كشف" : "كشف"} عن جدول المدرسة
+                                                </p>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-right">
                                             {done ? (
@@ -278,6 +295,47 @@ function CoverageView() {
 }
 
 // ── Entry View — Spreadsheet-like grade input ─────────────────────────────
+// The week the school is in, and whether this subject owes an assessment now.
+function WeekBanner({ subjectName, grade }: { subjectName?: string; grade?: number }) {
+    // @ts-ignore
+    const plan = useQuery(api.assessmentPlan.getPlan) as any;
+    if (!plan || !plan.weeks?.length || plan.currentWeek == null) return null;
+
+    const weeks: number[] = weeksFor(plan.entries, subjectName, grade);
+    const dueNow = subjectName ? weeks.includes(plan.currentWeek) : false;
+    const index = subjectName ? assessmentIndexOf(plan.entries, subjectName, grade, plan.currentWeek) : null;
+    const due = dueByNow(plan.weeks, plan.entries, subjectName, grade);
+
+    return (
+        <div className={`rounded-2xl border p-3 flex items-center gap-3 flex-wrap text-xs font-bold ${
+            dueNow ? "bg-amber-50 border-amber-200 text-amber-900" : "bg-white border-slate-100 text-slate-600"}`}>
+            <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-700 font-black">
+                الأسبوع {plan.currentWeek} · {plan.currentWeekLabel}
+            </span>
+            {plan.currentWeekNote && (
+                <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-500">{plan.currentWeekNote}</span>
+            )}
+            {!subjectName ? (
+                <span>اختر المادة لمعرفة موعد تقييمها حسب جدول المدرسة.</span>
+            ) : weeks.length === 0 ? (
+                <span>لا يوجد جدول أسابيع لهذه المادة.</span>
+            ) : dueNow ? (
+                <span className="font-black">
+                    تقييم {index} لمادة {subjectName} هذا الأسبوع.
+                </span>
+            ) : (
+                <span>
+                    لا تقييم لمادة {subjectName} هذا الأسبوع · القادم:{" "}
+                    {weeks.find(w => w > plan.currentWeek)
+                        ? `الأسبوع ${weeks.find(w => w > plan.currentWeek)}`
+                        : "انتهت تقييمات الفصل"}
+                </span>
+            )}
+            <span className="text-slate-400">المستحق حتى اليوم: {due} من 5</span>
+        </div>
+    );
+}
+
 function EntryView({ meta, settings }: { meta: any; settings: any }) {
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -334,6 +392,8 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
                     </select>
                 </div>
             </div>
+
+            <WeekBanner subjectName={selectedSubject || undefined} grade={selectedClassMeta?.grade}/>
 
             {/* A track with no subjects assigned yet cannot be graded at all */}
             {selectedClass && subjectsForClass.length === 0 && (

@@ -30,12 +30,55 @@ type Row = {
     sourceGrade: string;
 };
 
+// The ministry's export writes a dimension of four rows however many students
+// a sheet holds, so a plain read stops after the first one. Rebuild the range
+// from the cells that are actually there.
+function repairRange(ws: any): void {
+    const addresses = Object.keys(ws).filter(k => !k.startsWith("!"));
+    if (addresses.length === 0) return;
+    const range = { s: { r: Infinity, c: Infinity }, e: { r: -1, c: -1 } };
+    for (const a of addresses) {
+        const { r, c } = xlsx.utils.decode_cell(a);
+        range.s.r = Math.min(range.s.r, r);
+        range.s.c = Math.min(range.s.c, c);
+        range.e.r = Math.max(range.e.r, r);
+        range.e.c = Math.max(range.e.c, c);
+    }
+    ws["!ref"] = xlsx.utils.encode_range(range as any);
+}
+
+// Newer exports name the class in the sheet's own title instead of in columns:
+//   «سجل القيد (الشعبة الصفية: 11/4[Technology])»
+//   «سجل القيد (الصف: 11)»  ← every student of a grade, no section
+function titleClass(title: string): { section: string; source: string } | null {
+    const m = title.match(/الشعبة الصفية:\s*([^)]+)\)/);
+    if (!m) return null;
+    const raw = m[1].trim();                      // "11/4[Technology]" · "10/ESE"
+    return { section: raw.replace(/\[.*$/, "").trim(), source: raw };
+}
+
+const isGradeSheet = (title: string) => /\(\s*الصف\s*:/.test(title);
+
 function parseWorkbook(filePath: string): Row[] {
     const wb = xlsx.read(fs.readFileSync(filePath), { type: "buffer" });
     const rows: Row[] = [];
 
+    // A workbook that carries per-section sheets also repeats every student in
+    // a per-grade sheet; those rows have no section, so they are skipped.
+    const titleOf = (name: string) => {
+        repairRange(wb.Sheets[name]);
+        return String(wb.Sheets[name]?.["A1"]?.v ?? "");
+    };
+    const hasSectionSheets = wb.SheetNames.some(n => titleClass(titleOf(n)));
+
     for (const sheetName of wb.SheetNames) {
-        const grid = xlsx.utils.sheet_to_json<any[]>(wb.Sheets[sheetName], {
+        const ws = wb.Sheets[sheetName];
+        repairRange(ws);
+        const title = String(ws?.["A1"]?.v ?? "");
+        const fromTitle = titleClass(title);
+        if (hasSectionSheets && !fromTitle && isGradeSheet(title)) continue;
+
+        const grid = xlsx.utils.sheet_to_json<any[]>(ws, {
             header: 1, raw: false, defval: "",
         });
 
@@ -62,8 +105,8 @@ function parseWorkbook(filePath: string): Row[] {
             rows.push({
                 fullName,
                 nationalId:  cell(row, idx.nationalId),
-                sourceGrade: cell(row, idx.grade),
-                className:   cell(row, idx.section),
+                sourceGrade: cell(row, idx.grade) || fromTitle?.source || "",
+                className:   cell(row, idx.section) || fromTitle?.section || "",
                 phones:      cell(row, idx.phones),
             });
         }
@@ -140,6 +183,17 @@ async function main() {
     console.log(`  retracked classes   : ${result.updatedClasses.join(", ") || "—"}`);
     console.log(`  deactivated classes : ${result.deactivatedClasses.join(", ") || "—"}`);
     console.log(`  without a section   : ${result.unassignedCount}`);
+    console.log(`  moved sections      : ${result.movedCount ?? 0}`);
+    for (const m of result.movedStudents ?? []) {
+        const carried = [
+            m.grades ? `${m.grades} درجة` : "",
+            m.diagnostics ? `${m.diagnostics} تشخيصي` : "",
+            m.followUp ? `${m.followUp} متابعة` : "",
+            m.practical ? `${m.practical} عملي` : "",
+            m.attendance ? `${m.attendance} حضور` : "",
+        ].filter(Boolean).join(" · ") || "لا سجلات";
+        console.log(`    ${m.fullName}: ${m.from} → ${m.to} (${carried})`);
+    }
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

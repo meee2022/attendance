@@ -79,7 +79,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                         </div>
 
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                            <p className="font-black text-slate-800 text-sm">المجالات</p>
+                            <p className="font-bold text-slate-700 text-sm">المجالات</p>
                             {DOMAINS.map(d => (
                                 <div key={d}>
                                     <div className="flex justify-between text-xs font-bold mb-1">
@@ -96,7 +96,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                         </div>
 
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                            <p className="font-black text-slate-800 text-sm">تطور المعدل</p>
+                            <p className="font-bold text-slate-700 text-sm">تطور المعدل</p>
                             {mine.length === 0 ? (
                                 <p className="text-xs font-bold text-slate-400">لا توجد زيارات معتمدة بعد.</p>
                             ) : (
@@ -127,7 +127,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
 
                     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div className="px-5 py-3 border-b border-slate-100">
-                            <p className="font-black text-slate-800 text-sm">الزيارات ({mine.length})</p>
+                            <p className="font-bold text-slate-700 text-sm">الزيارات ({mine.length})</p>
                         </div>
                         {mine.length === 0 ? (
                             <p className="p-6 text-center text-sm font-bold text-slate-400">لم يُزَر هذا المعلم بعد.</p>
@@ -170,7 +170,7 @@ function CriteriaList({ title, icon, items, visits, criteria, showTrail }: {
 }) {
     return (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-            <p className="font-black text-slate-800 text-sm flex items-center gap-2">{icon}{title}</p>
+            <p className="font-bold text-slate-700 text-sm flex items-center gap-2">{icon}{title}</p>
             {items.map(c => {
                 const trail = visits.map(v => parseRatings(v.ratings)[c._id]).filter(r => r !== undefined && r !== "not_measured") as number[];
                 return (

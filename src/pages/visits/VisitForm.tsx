@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
@@ -39,12 +39,19 @@ type FormState = {
     notes: string;
 };
 
-function emptyForm(today: string): FormState {
+function emptyForm(today: string, department = ""): FormState {
     return {
-        department: "", teacherId: "", classId: "", subjectName: "", lessonTopic: "",
+        department, teacherId: "", classId: "", subjectName: "", lessonTopic: "",
         visitDate: today, followUpType: "full", ratings: {},
         planningRec: "", executionRec: "", evalMgmtRec: "", notes: "",
     };
+}
+
+// Anything the visitor actually entered — an untouched form is not a draft
+function hasContent(f: FormState): boolean {
+    return Boolean(f.teacherId || f.classId || f.lessonTopic.trim()
+        || Object.keys(f.ratings).length
+        || f.planningRec.trim() || f.executionRec.trim() || f.evalMgmtRec.trim() || f.notes.trim());
 }
 
 function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
@@ -70,20 +77,28 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
     onDone: () => void;
 }) {
     const criteria: { _id: string; domain: Domain; text: string }[] = setup.criteria;
+    const soleDepartment: string = setup.departments.length === 1 ? setup.departments[0] : "";
     const editing = editingId ? visits.find(v => v._id === editingId) ?? null : null;
     const editingSubmitted = editing?.status === "submitted";
 
-    const [form, setForm] = useState<FormState>(() => {
-        if (editing) return fromVisit(editing);
+    const [initial] = useState<{ form: FormState; restored: boolean }>(() => {
+        if (editing) return { form: fromVisit(editing), restored: false };
         try {
             const saved = localStorage.getItem(DRAFT_KEY);
-            if (saved) return { ...emptyForm(setup.today), ...JSON.parse(saved) };
+            if (saved) {
+                const restoredForm = { ...emptyForm(setup.today, soleDepartment), ...JSON.parse(saved) };
+                // a draft left by someone from another department is not shown,
+                // and a form nobody started is not worth announcing
+                if (hasContent(restoredForm)
+                    && (!restoredForm.department || setup.departments.includes(restoredForm.department))) {
+                    return { form: restoredForm, restored: true };
+                }
+            }
         } catch { /* storage unavailable */ }
-        return emptyForm(setup.today);
+        return { form: emptyForm(setup.today, soleDepartment), restored: false };
     });
-    const [restored] = useState(() => !editing && (() => {
-        try { return Boolean(localStorage.getItem(DRAFT_KEY)); } catch { return false; }
-    })());
+    const [form, setForm] = useState<FormState>(initial.form);
+    const restored = initial.restored;
 
     const [reviewOpen, setReviewOpen] = useState(false);
     const [saving, setSaving] = useState<"draft" | "submitted" | null>(null);
@@ -100,12 +115,13 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
 
     // Keep a copy on the device while writing a new visit — a dropped
     // connection or a closed tab must not cost the visitor the lesson.
-    const firstRender = useRef(true);
     useEffect(() => {
-        if (editing) return;
-        if (firstRender.current) { firstRender.current = false; return; }
-        try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)); } catch { /* ignore */ }
-    }, [form, editing]);
+        if (editing || form === initial.form) return;
+        try {
+            if (hasContent(form)) localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+            else localStorage.removeItem(DRAFT_KEY);
+        } catch { /* ignore */ }
+    }, [form, editing, initial.form]);
 
     const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }));
 
@@ -187,7 +203,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
 
     const resetForm = () => {
         try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
-        setForm(emptyForm(setup.today));
+        setForm(emptyForm(setup.today, soleDepartment));
         setSaved(null);
         setOldDateReason("");
     };
@@ -229,7 +245,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
     const doneCount = Object.keys(form.ratings).filter(id => criteria.some(c => c._id === id)).length;
 
     return (
-        <div className="space-y-4 pb-28">
+        <div className="space-y-4 pb-56 lg:pb-28">
             {restored && !editing && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3 flex-wrap text-xs font-bold text-amber-900">
                     <span>استُرجعت زيارة لم تُحفظ من آخر مرة على هذا الجهاز.</span>
@@ -250,10 +266,10 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
             <Section n={1} title="المعلم والحصة">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <Field label="القسم">
-                        <select value={form.department} disabled={editingSubmitted}
+                        <select value={form.department} disabled={editingSubmitted || Boolean(soleDepartment)}
                             onChange={e => setForm(f => ({ ...f, department: e.target.value, teacherId: "" }))}
                             className={inputCls}>
-                            <option value="">كل الأقسام</option>
+                            {!soleDepartment && <option value="">كل الأقسام</option>}
                             {setup.departments.map((d: string) => <option key={d} value={d}>{d}</option>)}
                         </select>
                     </Field>
@@ -331,7 +347,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                         return (
                             <div key={domain} className="space-y-2">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                                    <h4 className="font-black text-slate-800">
+                                    <h4 className="font-bold text-slate-700 text-sm">
                                         {DOMAIN_LABELS[domain]}
                                         <span className="mr-2 text-xs font-black" style={{ color: scoreTone(scores.domains[domain]) }}>
                                             {pct(scores.domains[domain])}
@@ -342,41 +358,43 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                                         {RATING_SCALE.map(r => (
                                             <button key={String(r.value)} type="button" onClick={() => rateDomain(domain, r.value)}
                                                 title={`تعبئة معايير «${DOMAIN_LABELS[domain]}» غير المقدَّرة بـ: ${r.label}`}
-                                                className="px-2 py-1 rounded-md text-[10px] font-black border border-slate-200 text-slate-500 hover:border-slate-400">
+                                                className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-500 hover:bg-slate-100">
                                                 {r.value === "not_measured" ? "لم يُقَس" : r.value}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
-                                {list.map(c => {
-                                    const n = criteria.indexOf(c) + 1;
-                                    const current = form.ratings[c._id];
-                                    return (
-                                        <div key={c._id}
-                                            className={`rounded-xl border p-3 ${current === undefined ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50"}`}>
-                                            <p className="text-sm font-bold text-slate-800 leading-relaxed">
-                                                <span className="text-slate-400 ml-1">{n}.</span>{c.text}
-                                            </p>
-                                            <div className="grid grid-cols-5 gap-1.5 mt-2">
-                                                {RATING_SCALE.map(r => {
-                                                    const active = current === r.value;
-                                                    const color = RATING_COLORS[String(r.value)];
-                                                    return (
-                                                        <button key={String(r.value)} type="button" onClick={() => rate(c._id, r.value)}
-                                                            aria-pressed={active} title={r.label}
-                                                            className="min-h-[44px] rounded-lg border-2 text-xs font-black transition-colors px-1"
-                                                            style={active
-                                                                ? { background: color, borderColor: color, color: "#fff" }
-                                                                : { borderColor: "#e2e8f0", color: "#475569", background: "#fff" }}>
-                                                            <span className="block text-sm">{r.value === "not_measured" ? "—" : r.value}</span>
-                                                            <span className="block text-[10px] font-bold opacity-80">{r.short}</span>
-                                                        </button>
-                                                    );
-                                                })}
+                                <div className="rounded-xl border border-slate-100 overflow-hidden">
+                                    {list.map((c, idx) => {
+                                        const n = criteria.indexOf(c) + 1;
+                                        const current = form.ratings[c._id];
+                                        return (
+                                            <div key={c._id}
+                                                className={`grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 items-center px-3 py-2 ${idx ? "border-t border-slate-100" : ""} ${current === undefined ? "bg-white" : "bg-slate-50"}`}>
+                                                <p className="text-sm text-slate-800 leading-relaxed">
+                                                    <span className="text-slate-400 font-bold ml-1">{n}.</span>{c.text}
+                                                </p>
+                                                <div className="grid grid-cols-5 gap-1 lg:w-[380px]" role="radiogroup" aria-label={`تقدير المعيار ${n}`}>
+                                                    {RATING_SCALE.map(r => {
+                                                        const active = current === r.value;
+                                                        const color = RATING_COLORS[String(r.value)];
+                                                        return (
+                                                            <button key={String(r.value)} type="button" onClick={() => rate(c._id, r.value)}
+                                                                role="radio" aria-checked={active} title={r.label}
+                                                                className="min-h-[40px] rounded-lg border text-xs font-bold transition-colors px-1 leading-tight"
+                                                                style={active
+                                                                    ? { background: color, borderColor: color, color: "#fff" }
+                                                                    : { borderColor: "#e2e8f0", color: "#475569", background: "#fff" }}>
+                                                                <span className="block text-[13px] font-black">{r.value === "not_measured" ? "—" : r.value}</span>
+                                                                <span className="block text-[10px] opacity-80">{r.short}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
                         );
                     })}
@@ -398,7 +416,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
             </Section>
 
             {/* Sticky bar: progress, live average, save */}
-            <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-slate-200">
+            <div className="fixed bottom-[104px] lg:bottom-0 inset-x-3 lg:inset-x-0 z-30 bg-white/95 backdrop-blur border border-slate-200 lg:border-x-0 lg:border-b-0 rounded-2xl lg:rounded-none shadow-lg lg:shadow-none">
                 <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-3 text-xs font-black text-slate-600">
                         <span>{doneCount}/{criteria.length} معيار</span>
@@ -492,14 +510,14 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
     );
 }
 
-const inputCls = "w-full border-2 border-slate-100 rounded-xl px-3 py-2.5 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon disabled:opacity-60";
+const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-qatar-maroon disabled:opacity-60 disabled:bg-slate-50";
 
 function Section({ n, title, right, children }: { n: number; title: string; right?: React.ReactNode; children: React.ReactNode }) {
     return (
         <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
-                    <span className="w-7 h-7 rounded-full bg-qatar-maroon text-white text-xs flex items-center justify-center">{n}</span>
+                <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-qatar-maroon/10 text-qatar-maroon text-xs font-black flex items-center justify-center">{n}</span>
                     {title}
                 </h3>
                 {right}
@@ -512,7 +530,7 @@ function Section({ n, title, right, children }: { n: number; title: string; righ
 function Field({ label, error, children }: { label: string; error?: boolean; children: React.ReactNode }) {
     return (
         <label className="block">
-            <span className={`block text-xs font-black mb-1.5 ${error ? "text-slate-700" : "text-slate-500"}`}>
+            <span className={`block text-xs font-semibold mb-1.5 ${error ? "text-slate-700" : "text-slate-600"}`}>
                 {label}{error ? <span className="text-rose-500"> *</span> : null}
             </span>
             {children}
@@ -528,7 +546,7 @@ function RecField({ label, value, onChange, suggestions }: {
     return (
         <div>
             <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-black text-slate-500">{label}</span>
+                <span className="text-xs font-semibold text-slate-600">{label}</span>
                 {suggestions.length > 0 && (
                     <button type="button" onClick={() => setOpen(o => !o)}
                         className="text-[11px] font-black text-qatar-maroon hover:underline">
@@ -537,7 +555,7 @@ function RecField({ label, value, onChange, suggestions }: {
                 )}
             </div>
             <textarea value={value} onChange={e => onChange(e.target.value)} rows={4}
-                className="w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon leading-relaxed"/>
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-qatar-maroon leading-relaxed"/>
             {open && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                     {suggestions.map(s => (

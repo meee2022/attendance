@@ -83,9 +83,9 @@ export default function VisitsAnalysis({ setup, visits }: { setup: any; visits: 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div className="xl:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="font-black text-slate-800 text-sm">متوسط كل معيار</h3>
+                        <h3 className="font-bold text-slate-700 text-sm">متوسط كل معيار</h3>
                         <button onClick={exportExcel}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-black">
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:border-qatar-maroon hover:text-qatar-maroon">
                             <Download className="w-3.5 h-3.5"/>Excel
                         </button>
                     </div>
@@ -116,7 +116,7 @@ export default function VisitsAnalysis({ setup, visits }: { setup: any; visits: 
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3 h-fit">
-                    <h3 className="font-black text-slate-800 text-sm">الاحتياج التدريبي</h3>
+                    <h3 className="font-bold text-slate-700 text-sm">الاحتياج التدريبي</h3>
                     <p className="text-[11px] font-bold text-slate-500">أضعف المعايير في النطاق المختار — موضوعات مقترحة للورش.</p>
                     {weakest.length === 0 ? <p className="text-xs font-bold text-slate-400">لا توجد بيانات.</p> : weakest.map(c => (
                         <div key={c._id} className="rounded-xl bg-rose-50 p-3">
@@ -130,7 +130,7 @@ export default function VisitsAnalysis({ setup, visits }: { setup: any; visits: 
             {/* Department × criterion map — the workbook's «stats» sheet */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100">
-                    <h3 className="font-black text-slate-800 text-sm">خريطة الأقسام × المعايير</h3>
+                    <h3 className="font-bold text-slate-700 text-sm">خريطة الأقسام × المعايير</h3>
                 </div>
                 <div className="overflow-auto max-h-[70vh]">
                     <table className="text-[11px] border-collapse">

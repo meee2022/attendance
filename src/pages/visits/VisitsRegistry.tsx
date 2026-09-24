@@ -112,11 +112,11 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                     <div className="relative mr-auto">
                         <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2"/>
                         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم أو الدرس أو رقم السجل"
-                            className="border-2 border-slate-100 rounded-xl pr-8 pl-3 py-1.5 text-xs font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon w-56"/>
+                            className="border border-slate-200 rounded-lg pr-8 pl-3 py-2 text-xs bg-white focus:outline-none focus:border-qatar-maroon w-56"/>
                     </div>
                     {view === "submitted" && (
                         <button onClick={exportExcel}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-black">
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:border-qatar-maroon hover:text-qatar-maroon">
                             <Download className="w-3.5 h-3.5"/>Excel
                         </button>
                     )}

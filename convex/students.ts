@@ -130,6 +130,8 @@ export const importStudentsFromSheet = mutation({
         let importedCount = 0;
         let updatedCount = 0;
         let unassignedCount = 0;
+        const movedStudents: any[] = [];
+        const classNameById = new Map(existingClasses.map(c => [String(c._id), c.name]));
 
         for (const r of resolved) {
             const classId = classIdByName.get(r.className);
@@ -145,6 +147,23 @@ export const importStudentsFromSheet = mutation({
                     isActive: true,
                 });
                 updatedCount++;
+
+                // A student who changed section this year keeps everything that
+                // was recorded for them: the sheets store the class by name, so
+                // without this their marks stay behind in last term's section.
+                if (classId && existing.classId !== classId) {
+                    const newClass = await ctx.db.get(classId as any);
+                    if (newClass) {
+                        const moved = await moveStudentRecords(
+                            ctx, { ...existing, fullName: r.fullName }, newClass);
+                        movedStudents.push({
+                            fullName: r.fullName,
+                            from: classNameById.get(String(existing.classId)) ?? "—",
+                            to: (newClass as any).name,
+                            ...moved,
+                        });
+                    }
+                }
             } else {
                 await ctx.db.insert("students", {
                     schoolId: args.schoolId,
@@ -169,6 +188,8 @@ export const importStudentsFromSheet = mutation({
             updatedClasses,
             deactivatedClasses,
             totalClasses: classPlan.size,
+            movedStudents,
+            movedCount: movedStudents.length,
         };
     }
 });
@@ -348,6 +369,8 @@ async function moveStudentRecords(ctx: any, student: any, newClass: any) {
     let practical = 0;
     let assessments = 0;
     let attendance = 0;
+    let diagnostics = 0;
+    let followUp = 0;
 
     // درجات الطالب — mapped by name within the school (studentId is optional there)
     const gradeRows = await ctx.db.query("studentGrades")
@@ -393,6 +416,32 @@ async function moveStudentRecords(ctx: any, student: any, newClass: any) {
         assessments++;
     }
 
+    // الاختبارات التشخيصية — the sheet is read per class, so the copy must move
+    const diagnosticRows = await ctx.db.query("diagnosticScores")
+        .withIndex("by_student", (q: any) => q.eq("studentId", student._id))
+        .collect();
+
+    for (const row of diagnosticRows) {
+        if (row.className === newClass.name) continue;
+        await ctx.db.patch(row._id, { className: newClass.name, updatedAt: Date.now() });
+        diagnostics++;
+    }
+
+    // المتابعة اليومية — same story: class name and id are denormalised
+    const followUpRows = await ctx.db.query("followUpRecords")
+        .withIndex("by_student", (q: any) => q.eq("studentId", student._id))
+        .collect();
+
+    for (const row of followUpRows) {
+        if (row.classId === newClass._id && row.className === newClass.name) continue;
+        await ctx.db.patch(row._id, {
+            classId: newClass._id,
+            className: newClass.name,
+            updatedAt: Date.now(),
+        });
+        followUp++;
+    }
+
     // سجل الحضور — the row keeps its original period (that lesson really did
     // happen in the old class), only the denormalised classId is re-pointed so
     // per-class reports follow the student.
@@ -406,7 +455,7 @@ async function moveStudentRecords(ctx: any, student: any, newClass: any) {
         attendance++;
     }
 
-    return { grades, practical, assessments, attendance };
+    return { grades, practical, assessments, attendance, diagnostics, followUp };
 }
 
 export const updateStudentDetails = mutation({

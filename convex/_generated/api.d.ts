@@ -22,6 +22,8 @@ import type * as setup from "../setup.js";
 import type * as students from "../students.js";
 import type * as supervision from "../supervision.js";
 import type * as surveys from "../surveys.js";
+import type * as visitMath from "../visitMath.js";
+import type * as visits from "../visits.js";
 
 import type {
   ApiFromModules,
@@ -44,6 +46,8 @@ declare const fullApi: ApiFromModules<{
   students: typeof students;
   supervision: typeof supervision;
   surveys: typeof surveys;
+  visitMath: typeof visitMath;
+  visits: typeof visits;
 }>;
 
 /**

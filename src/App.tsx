@@ -15,8 +15,8 @@ import AssessmentsPage from "./pages/AssessmentsPage";
 import StudentsPage from "./pages/StudentsPage";
 import { FileCheck, ClipboardList, Stethoscope } from "lucide-react";
 import SurveysPage from "./pages/SurveysPage";
-import SupervisionPage from "./pages/SupervisionPage";
-import SupervisionPrint from "./pages/SupervisionPrint";
+import VisitsPage from "./pages/visits/VisitsPage";
+import VisitFormPrint from "./pages/visits/VisitFormPrint";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
 import GradesSheetPrint from "./pages/GradesSheetPrint";
@@ -123,8 +123,8 @@ function App() {
           <Route path="/reports"             element={<FeatureRoute featureKey="/reports"><ReportsPage /></FeatureRoute>} />
           <Route path="/messages"            element={<FeatureRoute featureKey="/messages"><MessagesPage /></FeatureRoute>} />
           <Route path="/surveys"             element={<FeatureRoute featureKey="/surveys"><SurveysPage /></FeatureRoute>} />
-          <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><SupervisionPage /></FeatureRoute>} />
-          <Route path="/supervision/print/:id" element={<SupervisionPrint />} />
+          <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><VisitsPage /></FeatureRoute>} />
+          <Route path="/supervision/print/:id" element={<VisitFormPrint />} />
           <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
           <Route path="/grades/print/class" element={<GradesSheetPrint />} />
           <Route path="/grades/print/plan" element={<PlanPrint />} />

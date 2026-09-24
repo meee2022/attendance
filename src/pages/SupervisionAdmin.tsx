@@ -2,11 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, BarChart3, KeyRound, Save, Users, Activity, History, BookOpen } from "lucide-react";
-import SupervisionAnalytics from "./SupervisionAnalytics";
-import SupervisionAdvancedAnalytics from "./SupervisionAdvancedAnalytics";
-import SupervisionTeachers from "./SupervisionTeachers";
+import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, KeyRound, Save, History, BookOpen, FileCog } from "lucide-react";
 import SupervisionAuditLog from "./SupervisionAuditLog";
+import FormSettings from "./visits/FormSettings";
 
 type Domain = "planning" | "execution" | "evaluation" | "management";
 type Role = "coordinator" | "supervisor" | "deputy";
@@ -18,15 +16,15 @@ const DOMAIN_ORDER: Domain[] = ["planning", "execution", "evaluation", "manageme
 const ROLE_LABELS: Record<Role, string> = { coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" };
 const ROLE_COLORS: Record<Role, string> = { coordinator: "#5C1523", supervisor: "#1e40af", deputy: "#065f46" };
 
-type AdminTab = "analytics" | "advanced" | "teachers" | "criteria" | "recs" | "pins" | "audit";
+// Analysis and the teacher list now live on the supervision page itself;
+// what stays here is what an administrator sets once a year.
+type AdminTab = "form" | "criteria" | "recs" | "pins" | "audit";
 
 export default function SupervisionAdmin() {
-    const [tab, setTab] = useState<AdminTab>("analytics");
+    const [tab, setTab] = useState<AdminTab>("form");
 
     const TABS: { key: AdminTab; label: string; icon: any }[] = [
-        { key: "analytics", label: "التحليل", icon: BarChart3 },
-        { key: "advanced",  label: "تحليل متقدم", icon: Activity },
-        { key: "teachers",  label: "المعلمون والزائرون", icon: Users },
+        { key: "form",      label: "إعدادات الاستمارة", icon: FileCog },
         { key: "criteria",  label: "المعايير", icon: ClipboardCheck },
         { key: "recs",      label: "بنك التوصيات", icon: BookOpen },
         { key: "pins",      label: "كلمات المرور", icon: KeyRound },
@@ -51,9 +49,7 @@ export default function SupervisionAdmin() {
                     </span>
                 </div>
                 <div className="p-5">
-                    {tab === "analytics" && <SupervisionAnalytics/>}
-                    {tab === "advanced"  && <SupervisionAdvancedAnalytics/>}
-                    {tab === "teachers"  && <SupervisionTeachers/>}
+                    {tab === "form"      && <FormSettings/>}
                     {tab === "criteria"  && <CriteriaManager/>}
                     {tab === "recs"      && <RecommendationBankManager/>}
                     {tab === "pins"      && <PinsManager/>}

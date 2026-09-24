@@ -246,6 +246,34 @@ export default defineSchema({
     }).index("by_school", ["schoolId"])
       .index("by_dept", ["schoolId", "department"]),
 
+    // Every earlier state of an edited visit — the workbook's «log» sheet
+    supervisionVisitVersions: defineTable({
+        schoolId: v.id("schools"),
+        visitId: v.id("supervisionVisits"),
+        version: v.number(),
+        data: v.string(),                   // JSON of the visit before the change
+        changedBy: v.optional(v.string()),
+        changedAt: v.number(),
+        reason: v.optional(v.string()),
+    }).index("by_visit", ["visitId"]),
+
+    // Settings of the supervision form that change from year to year
+    supervisionSettings: defineTable({
+        schoolId: v.id("schools"),
+        academicYear: v.string(),           // "2026 - 2027"
+        yearStart: v.optional(v.string()),  // ISO — bounds «this year» in the dashboards
+        yearEnd: v.optional(v.string()),
+        schoolNameOnForm: v.optional(v.string()),
+        principalName: v.optional(v.string()),
+        deputyName: v.optional(v.string()),
+        headerImageId: v.optional(v.id("_storage")),
+        footerImageId: v.optional(v.id("_storage")),
+        // Visits expected per teacher per year, by visitor type
+        requiredCoordinator: v.optional(v.number()),
+        requiredSupervisor: v.optional(v.number()),
+        requiredDeputy: v.optional(v.number()),
+    }).index("by_school", ["schoolId"]),
+
     // سجل المراجعات (audit log)
     supervisionAuditLog: defineTable({
         schoolId: v.id("schools"),
@@ -403,7 +431,23 @@ export default defineSchema({
         teacherSignedAt: v.optional(v.number()),
         teacherSignedNote: v.optional(v.string()),
         createdAt: v.number(),
+        // ── references by id: the names above are display text only ──
+        teacherId: v.optional(v.id("schoolTeachers")),
+        classId: v.optional(v.id("classes")),
+        // رقم السجل: sequential across the school within an academic year
+        recordNo: v.optional(v.number()),
+        academicYear: v.optional(v.string()),
+        // The form as it stood when the visit was made — criteria wording, school,
+        // deputy — so a later change never rewrites an old PDF. JSON.
+        snapshot: v.optional(v.string()),
+        updatedAt: v.optional(v.number()),
+        updatedBy: v.optional(v.string()),
+        // Soft delete: a visit is never lost, only moved to the bin
+        deletedAt: v.optional(v.number()),
+        deletedBy: v.optional(v.string()),
+        deleteReason: v.optional(v.string()),
     }).index("by_school", ["schoolId"])
+      .index("by_teacher_id", ["schoolId", "teacherId"])
       .index("by_teacher", ["schoolId", "teacherName"])
       .index("by_role", ["schoolId", "visitorRole"])
       .index("by_subject", ["schoolId", "subjectName"])

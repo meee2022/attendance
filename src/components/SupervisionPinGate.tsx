@@ -19,7 +19,7 @@ const ROLE_COLORS: Record<VisitorRole, string> = {
 
 const STORAGE_KEY = "supervision_role_session";
 
-export function getStoredRole(): { role: VisitorRole; name: string; expiresAt: number } | null {
+export function getStoredRole(): { role: VisitorRole; name: string; visitorId?: string; expiresAt: number } | null {
     try {
         const raw = sessionStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
@@ -40,17 +40,29 @@ export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: Visi
     const [visitorName, setVisitorName] = useState("");
     const [showPin, setShowPin] = useState(false);
     const [error, setError] = useState("");
+    const [visitorId, setVisitorId] = useState("");
     const verify = useQuery(
         api.supervision.verifyRolePin,
         selectedRole && pin.length >= 4 ? { role: selectedRole, pin } : "skip" as any
     );
+    // The visitor picks their own name from the school's list, so every visit
+    // carries the same spelling — and an id — instead of whatever was typed.
+    // @ts-ignore
+    const setup = useQuery(api.visits.getSetup) as any;
+    const people: { _id: string; fullName: string }[] = selectedRole
+        ? (setup?.visitors ?? []).filter((p: any) => p.role === selectedRole)
+        : [];
+    const deputyName: string = setup?.settings?.deputyName ?? "";
 
     const handleSubmit = () => {
-        if (!visitorName.trim()) { setError("يرجى كتابة اسمك أولاً"); return; }
+        const name = visitorName.trim() || (selectedRole === "deputy" && people.length === 0 ? deputyName : "");
+        if (!name.trim()) { setError("يرجى اختيار اسمك أولاً"); return; }
+        if (name !== visitorName) setVisitorName(name);
         if (verify === true && selectedRole) {
             sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
                 role: selectedRole,
-                name: visitorName.trim(),
+                name: name.trim(),
+                visitorId: visitorId || undefined,
                 expiresAt: Date.now() + 8 * 60 * 60 * 1000, // 8 ساعات
             }));
             onAuthed(selectedRole);
@@ -91,12 +103,24 @@ export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: Visi
                 </div>
                 <div className="p-5 space-y-4">
                     <div>
-                        <label className="block text-xs font-black text-slate-500 mb-1.5">اسمك الكامل</label>
-                        <input type="text" value={visitorName}
-                            onChange={e => { setVisitorName(e.target.value); setError(""); }}
-                            placeholder={`اكتب اسمك كـ ${ROLE_LABELS[selectedRole]}...`}
-                            autoFocus
-                            className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-slate-200 focus:border-qatar-maroon text-right"/>
+                        <label className="block text-xs font-black text-slate-500 mb-1.5">اسمك</label>
+                        {people.length > 0 ? (
+                            <select value={visitorId}
+                                onChange={e => {
+                                    const p = people.find(x => x._id === e.target.value);
+                                    setVisitorId(e.target.value); setVisitorName(p?.fullName ?? ""); setError("");
+                                }}
+                                className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-slate-200 focus:border-qatar-maroon bg-white">
+                                <option value="">— اختر اسمك —</option>
+                                {people.map(p => <option key={p._id} value={p._id}>{p.fullName}</option>)}
+                            </select>
+                        ) : (
+                            <input type="text" value={visitorName || (selectedRole === "deputy" ? deputyName : "")}
+                                onChange={e => { setVisitorName(e.target.value); setError(""); }}
+                                placeholder={`اكتب اسمك كـ ${ROLE_LABELS[selectedRole]}...`}
+                                autoFocus
+                                className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-slate-200 focus:border-qatar-maroon text-right"/>
+                        )}
                     </div>
                     <p className="text-sm text-slate-400 font-bold text-center">أدخل رمز PIN</p>
                     <div className="relative">
@@ -120,9 +144,6 @@ export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: Visi
                         className="w-full text-xs text-slate-400 font-bold hover:text-slate-600">
                         تغيير الصفة
                     </button>
-                </div>
-                <div className="bg-slate-50 px-5 py-2 text-[10px] text-slate-400 font-bold text-center">
-                    الافتراضي: المنسق 1111 · الموجه 2222 · النائب 3333
                 </div>
             </div>
         </div>

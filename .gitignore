@@ -73,3 +73,11 @@ _*.tmp.mjs
 
 # Public build-time values for hosts without .env.local (the Convex URLs ship in the bundle anyway)
 !.env.production
+
+# School data never goes to the repository: rosters, marks and forms carry
+# student and staff names, national ids and emails.
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+*MERN*.md

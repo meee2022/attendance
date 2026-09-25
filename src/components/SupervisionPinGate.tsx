@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { Lock, Eye, EyeOff, Shield } from "lucide-react";
+import { Lock, Eye, EyeOff, ArrowLeft, ArrowRight } from "lucide-react";
+import "./SupervisionPinGate.css";
 
 type VisitorRole = "coordinator" | "supervisor" | "deputy";
 
@@ -11,20 +12,20 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
     supervisor: "الموجه",
     deputy: "النائب الأكاديمي",
 };
-const ROLE_COLORS: Record<VisitorRole, string> = {
-    coordinator: "#5C1523",
-    supervisor: "#1e40af",
-    deputy: "#5C1523",
+const ROLE_DESCRIPTIONS: Record<VisitorRole, string> = {
+    coordinator: "زيارات القسم ومتابعة المعلمين",
+    supervisor: "الزيارات الإشرافية والتوصيات",
+    deputy: "متابعة الإشراف وإدارة إعداداته",
 };
 
 const STORAGE_KEY = "supervision_role_session";
 
-export function getStoredRole(): { role: VisitorRole; name: string; visitorId?: string; expiresAt: number } | null {
+export function getStoredRole(): { role: VisitorRole; name: string; visitorId?: string; expiresAt: number; token: string } | null {
     try {
         const raw = sessionStorage.getItem(STORAGE_KEY);
         if (!raw) return null;
         const obj = JSON.parse(raw);
-        if (obj.expiresAt && obj.expiresAt > Date.now()) return obj;
+        if (obj.token && obj.expiresAt && obj.expiresAt > Date.now()) return obj;
         sessionStorage.removeItem(STORAGE_KEY);
         return null;
     } catch { return null; }
@@ -32,6 +33,7 @@ export function getStoredRole(): { role: VisitorRole; name: string; visitorId?: 
 
 export function clearStoredRole() {
     sessionStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event("supervision-session"));
 }
 
 export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: VisitorRole) => void }) {
@@ -41,111 +43,100 @@ export default function SupervisionPinGate({ onAuthed }: { onAuthed: (role: Visi
     const [showPin, setShowPin] = useState(false);
     const [error, setError] = useState("");
     const [visitorId, setVisitorId] = useState("");
-    const verify = useQuery(
-        api.supervision.verifyRolePin,
-        selectedRole && pin.length >= 4 ? { role: selectedRole, pin } : "skip" as any
-    );
-    // The visitor picks their own name from the school's list, so every visit
-    // carries the same spelling — and an id — instead of whatever was typed.
-    // @ts-ignore
-    const setup = useQuery(api.visits.getSetup) as any;
+    const login = useMutation((api as any).supervisionSessions.login);
+    const [busy, setBusy] = useState(false);
+    const setup = useQuery((api as any).supervisionSessions.directory) as any;
     const people: { _id: string; fullName: string }[] = selectedRole
         ? (setup?.visitors ?? []).filter((p: any) => p.role === selectedRole)
         : [];
-    const deputyName: string = setup?.settings?.deputyName ?? "";
+    const deputyName: string = setup?.deputyName ?? "";
 
-    const handleSubmit = () => {
-        const name = visitorName.trim() || (selectedRole === "deputy" && people.length === 0 ? deputyName : "");
-        if (!name.trim()) { setError("يرجى اختيار اسمك أولاً"); return; }
-        if (name !== visitorName) setVisitorName(name);
-        if (verify === true && selectedRole) {
-            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-                role: selectedRole,
-                name: name.trim(),
-                visitorId: visitorId || undefined,
-                expiresAt: Date.now() + 8 * 60 * 60 * 1000, // 8 ساعات
-            }));
+    const handleSubmit = async () => {
+        if (busy || !selectedRole) return;
+        const name = visitorName.trim() || (selectedRole === "deputy" ? deputyName : "");
+        if (!name || (selectedRole !== "deputy" && !visitorId)) { setError("اختر اسمك؛ إن لم تجده راجع النائب الأكاديمي"); return; }
+        setBusy(true); setError("");
+        try {
+            const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
+            const result = await login({ role: selectedRole, visitorId: visitorId || undefined, name, pin, token });
+            if (result.error) { setError(result.error); return; }
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result.session));
             onAuthed(selectedRole);
-        } else {
-            setError("رمز PIN غير صحيح");
-        }
+        } catch { setError("تعذّر الاتصال؛ حاول مرة أخرى"); }
+        finally { setBusy(false); }
     };
 
-    if (!selectedRole) {
-        return (
-            <div dir="rtl" className="max-w-md mx-auto pt-8 space-y-4 animate-in fade-in duration-300">
-                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                    <div className="bg-slate-700 px-5 py-4 flex items-center gap-3">
-                        <Shield className="w-5 h-5 text-white/70"/>
-                        <span className="font-black text-white">تسجيل الدخول للإشراف الصفي</span>
+    const resetRole = () => {
+        setSelectedRole(null); setVisitorId(""); setVisitorName(""); setPin(""); setError(""); setShowPin(false);
+    };
+
+    return (
+        <section dir="rtl" className="supervision-entry" aria-labelledby="supervision-entry-title">
+            <header className="supervision-entry-heading">
+                <h1 id="supervision-entry-title">الإشراف الصفي</h1>
+                <p>الزيارات الصفية ومتابعة تطوير أداء المعلمين</p>
+            </header>
+            <div className="supervision-entry-panel">
+                {!selectedRole ? <>
+                    <div className="supervision-entry-intro">
+                        <h2>تسجيل الدخول</h2>
+                        <p>اختر صفتك، ثم أدخل بيانات الدخول.</p>
                     </div>
-                    <div className="p-5 space-y-3">
-                        <p className="text-sm text-slate-500 font-bold text-center">اختر صفتك للمتابعة</p>
-                        {(Object.keys(ROLE_LABELS) as VisitorRole[]).map(r => (
-                            <button key={r} onClick={() => { setSelectedRole(r); setError(""); }}
-                                className="w-full py-4 rounded-xl text-white font-black text-base transition-all hover:opacity-90 qatar-card-shadow"
-                                style={{ background: ROLE_COLORS[r] }}>
-                                {ROLE_LABELS[r]}
+                    <div className="supervision-role-list">
+                        {(["coordinator", "deputy"] as VisitorRole[]).map(role => (
+                            <button key={role} type="button" className="supervision-role-option"
+                                onClick={() => { setSelectedRole(role); setError(""); }}>
+                                <span><strong>{ROLE_LABELS[role]}</strong><small>{ROLE_DESCRIPTIONS[role]}</small></span>
+                                <ArrowLeft size={18} aria-hidden="true"/>
                             </button>
                         ))}
                     </div>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div dir="rtl" className="max-w-md mx-auto pt-8 space-y-4 animate-in fade-in duration-300">
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                <div className="px-5 py-4 flex items-center gap-3" style={{ background: ROLE_COLORS[selectedRole] }}>
-                    <Lock className="w-5 h-5 text-white/80"/>
-                    <span className="font-black text-white">دخول {ROLE_LABELS[selectedRole]}</span>
-                </div>
-                <div className="p-5 space-y-4">
-                    <div>
-                        <label className="block text-xs font-black text-slate-500 mb-1.5">اسمك</label>
-                        {people.length > 0 ? (
-                            <select value={visitorId}
-                                onChange={e => {
-                                    const p = people.find(x => x._id === e.target.value);
-                                    setVisitorId(e.target.value); setVisitorName(p?.fullName ?? ""); setError("");
-                                }}
-                                className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-slate-200 focus:border-qatar-maroon bg-white">
-                                <option value="">— اختر اسمك —</option>
-                                {people.map(p => <option key={p._id} value={p._id}>{p.fullName}</option>)}
-                            </select>
-                        ) : (
-                            <input type="text" value={visitorName || (selectedRole === "deputy" ? deputyName : "")}
-                                onChange={e => { setVisitorName(e.target.value); setError(""); }}
-                                placeholder={`اكتب اسمك كـ ${ROLE_LABELS[selectedRole]}...`}
-                                autoFocus
-                                className="w-full border-2 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-slate-200 focus:border-qatar-maroon text-right"/>
-                        )}
+                </> : <>
+                    <div className="supervision-entry-selected">
+                        <div><h2>دخول {ROLE_LABELS[selectedRole]}</h2><p>{ROLE_DESCRIPTIONS[selectedRole]}</p></div>
+                        <button type="button" onClick={resetRole} disabled={busy} className="supervision-entry-back"><ArrowRight size={15} aria-hidden="true"/>تغيير الصفة</button>
                     </div>
-                    <p className="text-sm text-slate-400 font-bold text-center">أدخل رمز PIN</p>
-                    <div className="relative">
-                        <input type={showPin ? "text" : "password"} value={pin}
-                            onChange={e => { setPin(e.target.value); setError(""); }}
-                            onKeyDown={e => e.key === "Enter" && handleSubmit()}
-                            placeholder="• • • •" autoFocus
-                            className={`w-full border-2 rounded-xl px-4 py-3 text-center text-2xl tracking-widest font-black focus:outline-none ${error ? "border-red-400" : "border-qatar-gray-border focus:border-qatar-maroon"}`}/>
-                        <button type="button" onClick={() => setShowPin(v => !v)}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                            {showPin ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                    <form className="supervision-entry-form" onSubmit={e => { e.preventDefault(); void handleSubmit(); }}>
+                        <div className="supervision-entry-field">
+                            <label htmlFor="supervision-visitor">الاسم</label>
+                            {selectedRole !== "deputy" ? (
+                                <select id="supervision-visitor" value={visitorId} disabled={busy || !setup || !people.length} autoFocus
+                                    onChange={e => {
+                                        const person = people.find(x => x._id === e.target.value);
+                                        setVisitorId(e.target.value); setVisitorName(person?.fullName ?? ""); setError("");
+                                    }} required>
+                                    <option value="">{!setup ? "جاري تحميل الأسماء…" : !people.length ? "لا توجد أسماء مسجلة لهذه الصفة" : "اختر اسمك من القائمة"}</option>
+                                    {people.map(person => <option key={person._id} value={person._id}>{person.fullName}</option>)}
+                                </select>
+                            ) : (
+                                <input id="supervision-visitor" type="text" value={deputyName} readOnly
+                                    onChange={e => { setVisitorName(e.target.value); setError(""); }}
+                                    placeholder="اسم النائب لم يُسجّل بعد" autoComplete="name" disabled={busy} autoFocus required/>
+                            )}
+                            {setup && selectedRole !== "deputy" && !people.length && <p className="supervision-entry-help">راجع النائب الأكاديمي لإضافة اسمك قبل تسجيل الدخول.</p>}
+                        </div>
+                        {selectedRole === "deputy" && setup && !deputyName && <p role="status" className="supervision-entry-help">يجب ضبط اسم النائب في إعدادات الإشراف أولًا.</p>}
+                        <div className="supervision-entry-field">
+                            <label htmlFor="supervision-pin">رمز الدخول <span>(PIN)</span></label>
+                            <div className="supervision-pin-input">
+                                <input id="supervision-pin" type={showPin ? "text" : "password"} value={pin} dir="ltr"
+                                    onChange={e => { setPin(e.target.value); setError(""); }}
+                                    placeholder="••••" autoComplete="current-password" disabled={busy} required
+                                    aria-invalid={!!error} aria-describedby={error ? "supervision-entry-error" : undefined}/>
+                                <button type="button" onClick={() => setShowPin(value => !value)}
+                                    aria-label={showPin ? "إخفاء رمز الدخول" : "إظهار رمز الدخول"} aria-pressed={showPin}>
+                                    {showPin ? <EyeOff size={18}/> : <Eye size={18}/>}
+                                </button>
+                            </div>
+                        </div>
+                        {error && <p id="supervision-entry-error" role="alert" className="supervision-entry-error">{error}</p>}
+                        <button type="submit" className="supervision-entry-submit" disabled={busy || !setup || (selectedRole === "deputy" && !deputyName) || (selectedRole !== "deputy" && !people.length)}>
+                            {busy ? "جاري تسجيل الدخول…" : "دخول الإشراف"}<ArrowLeft size={17} aria-hidden="true"/>
                         </button>
-                    </div>
-                    {error && <p className="text-red-500 text-sm text-center font-bold">{error}</p>}
-                    <button onClick={handleSubmit}
-                        className="w-full py-3 rounded-xl font-black text-white text-sm transition-all hover:opacity-90"
-                        style={{ background: ROLE_COLORS[selectedRole] }}>
-                        دخول
-                    </button>
-                    <button onClick={() => { setSelectedRole(null); setPin(""); setError(""); }}
-                        className="w-full text-xs text-slate-400 font-bold hover:text-slate-600">
-                        تغيير الصفة
-                    </button>
-                </div>
+                    </form>
+                </>}
+                <footer className="supervision-entry-footer"><Lock size={14} aria-hidden="true"/><span>الدخول مخصص لفريق الإشراف بالمدرسة</span></footer>
             </div>
-        </div>
+        </section>
     );
 }

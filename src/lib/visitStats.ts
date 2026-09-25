@@ -11,6 +11,10 @@ import {
 
 export type VisitRow = {
     _id: string;
+    visitorId?: string | null;
+    recordedByVisitorId?: string | null;
+    recordedByName?: string | null;
+    academicYear?: string | null;
     recordNo: number | null;
     visitNumber: number | null;
     teacherId: string | null;

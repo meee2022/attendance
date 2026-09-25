@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { deputyMutation as mutation, deputyQuery as query, sessionQuery } from "./supervisionAccess";
 import { v } from "convex/values";
 
 // ── Default 24 criteria from the original Excel form ───────────────────────
@@ -39,7 +39,7 @@ async function getSchool(ctx: any) {
 }
 
 // ── Criteria ──────────────────────────────────────────────────────────────
-export const getCriteria = query({
+export const getCriteria = sessionQuery({
     args: {},
     handler: async (ctx) => {
         const school = await ctx.db.query("schools").first();
@@ -136,9 +136,10 @@ export const getSupervisors = query({
     handler: async (ctx) => {
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
-        return ctx.db.query("supervisors")
+        const people = await ctx.db.query("supervisors")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
+        return people.map(({ pin, ...person }) => person);
     },
 });
 
@@ -262,98 +263,7 @@ export const saveVisit = mutation({
         notes: v.optional(v.string()),
         status: v.union(v.literal("draft"), v.literal("submitted")),
     },
-    handler: async (ctx, args) => {
-        const school = await getSchool(ctx);
-        const criteria = await ctx.db.query("supervisionCriteria")
-            .withIndex("by_school", q => q.eq("schoolId", school._id))
-            .collect();
-        let parsedRatings: Record<string, number | string> = {};
-        try { parsedRatings = JSON.parse(args.ratings); } catch {}
-        const { averageScore, domainAverages } = computeAverages(parsedRatings, criteria as any);
-
-        if (args.id) {
-            const existing = await ctx.db.get(args.id);
-            if (!existing) throw new Error("الزيارة غير موجودة");
-            // منع التعديل بعد توقيع المعلم
-            if (existing.teacherSignedAt) {
-                throw new Error("لا يمكن تعديل زيارة موقَّعة من المعلم");
-            }
-            const wasSubmitted = existing.status === "submitted";
-            await ctx.db.patch(args.id, {
-                visitorRole: args.visitorRole,
-                visitorName: args.visitorName.trim(),
-                teacherName: args.teacherName.trim(),
-                teacherDepartment: args.teacherDepartment,
-                subjectName: args.subjectName,
-                className: args.className,
-                lessonTopic: args.lessonTopic.trim(),
-                visitDate: args.visitDate,
-                followUpType: args.followUpType,
-                ratings: args.ratings,
-                averageScore,
-                domainAverages: JSON.stringify(domainAverages),
-                praiseText: args.praiseText?.trim(),
-                planningRec: args.planningRec?.trim(),
-                executionRec: args.executionRec?.trim(),
-                evalMgmtRec: args.evalMgmtRec?.trim(),
-                notes: args.notes?.trim(),
-                status: args.status,
-                submittedAt: args.status === "submitted" && !wasSubmitted ? Date.now() : existing.submittedAt,
-            });
-            // audit log
-            await ctx.db.insert("supervisionAuditLog", {
-                schoolId: school._id,
-                visitId: args.id,
-                action: args.status === "submitted" && !wasSubmitted ? "submitted" : "updated",
-                actorRole: args.visitorRole,
-                actorName: args.visitorName.trim(),
-                details: `تعديل زيارة ${args.teacherName.trim()}`,
-                timestamp: Date.now(),
-            });
-            return args.id;
-        }
-
-        // Compute visit number for this teacher
-        const previous = await ctx.db.query("supervisionVisits")
-            .withIndex("by_teacher", q => q.eq("schoolId", school._id).eq("teacherName", args.teacherName.trim()))
-            .collect();
-        const visitNumber = previous.length + 1;
-
-        const id = await ctx.db.insert("supervisionVisits", {
-            schoolId: school._id,
-            visitorRole: args.visitorRole,
-            visitorName: args.visitorName.trim(),
-            teacherName: args.teacherName.trim(),
-            teacherDepartment: args.teacherDepartment,
-            subjectName: args.subjectName,
-            className: args.className,
-            lessonTopic: args.lessonTopic.trim(),
-            visitDate: args.visitDate,
-            followUpType: args.followUpType,
-            visitNumber,
-            ratings: args.ratings,
-            averageScore,
-            domainAverages: JSON.stringify(domainAverages),
-            praiseText: args.praiseText?.trim(),
-            planningRec: args.planningRec?.trim(),
-            executionRec: args.executionRec?.trim(),
-            evalMgmtRec: args.evalMgmtRec?.trim(),
-            notes: args.notes?.trim(),
-            status: args.status,
-            submittedAt: args.status === "submitted" ? Date.now() : undefined,
-            createdAt: Date.now(),
-        });
-        await ctx.db.insert("supervisionAuditLog", {
-            schoolId: school._id,
-            visitId: id,
-            action: "created",
-            actorRole: args.visitorRole,
-            actorName: args.visitorName.trim(),
-            details: `إنشاء زيارة لـ ${args.teacherName.trim()}`,
-            timestamp: Date.now(),
-        });
-        return id;
-    },
+    handler: async () => { throw new Error("استخدم واجهة الزيارات الحالية؛ هذه العملية القديمة متوقفة"); },
 });
 
 // ── Default school teachers from Excel ────────────────────────────────────
@@ -683,33 +593,12 @@ export const deleteImprovementPlan = mutation({
 
 export const deleteVisit = mutation({
     args: { id: v.id("supervisionVisits"), actorRole: v.optional(v.string()), actorName: v.optional(v.string()) },
-    handler: async (ctx, args) => {
-        const v = await ctx.db.get(args.id);
-        if (v?.teacherSignedAt) throw new Error("لا يمكن حذف زيارة موقَّعة");
-        const school = await ctx.db.query("schools").first();
-        if (school && v) {
-            await ctx.db.insert("supervisionAuditLog", {
-                schoolId: school._id,
-                visitId: args.id,
-                action: "deleted",
-                actorRole: args.actorRole,
-                actorName: args.actorName,
-                details: `حذف زيارة ${v.teacherName}`,
-                timestamp: Date.now(),
-            });
-        }
-        await ctx.db.delete(args.id);
-    },
+    handler: async () => { throw new Error("استخدم سلة المحذوفات في سجل الزيارات الحالي"); },
 });
 
 export const signVisitAsTeacher = mutation({
     args: { id: v.id("supervisionVisits"), note: v.optional(v.string()) },
-    handler: async (ctx, args) => {
-        await ctx.db.patch(args.id, {
-            teacherSignedAt: Date.now(),
-            teacherSignedNote: args.note?.trim(),
-        });
-    },
+    handler: async () => { throw new Error("استخدم واجهة الزيارات الحالية؛ هذه العملية القديمة متوقفة"); },
 });
 
 // ── PIN authentication for visitor roles ──────────────────────────────────
@@ -736,6 +625,7 @@ export const updateRolePin = mutation({
     handler: async (ctx, args) => {
         const school = await getSchool(ctx);
         const patch: any = {};
+        if (args.newPin.trim().length < 4) throw new Error("رمز الدخول يجب أن يكون أربعة أحرف على الأقل");
         if (args.role === "coordinator") patch.coordinatorPin = args.newPin;
         else if (args.role === "supervisor") patch.supervisorPin = args.newPin;
         else patch.deputyPin = args.newPin;
@@ -766,21 +656,7 @@ export const bulkImportVisits = mutation({
             notes: v.optional(v.string()),
         })),
     },
-    handler: async (ctx, args) => {
-        const school = await getSchool(ctx);
-        let inserted = 0;
-        for (const v of args.visits) {
-            await ctx.db.insert("supervisionVisits", {
-                schoolId: school._id,
-                ...v,
-                status: "submitted",
-                submittedAt: Date.now(),
-                createdAt: Date.now(),
-            });
-            inserted++;
-        }
-        return { inserted };
-    },
+    handler: async () => { throw new Error("استخدم واجهة الزيارات الحالية؛ هذه العملية القديمة متوقفة"); },
 });
 
 // ── Recommendation Bank ────────────────────────────────────────────────────
@@ -811,7 +687,7 @@ const DEFAULT_RECOMMENDATIONS: { domain: "planning"|"execution"|"evaluation"|"ma
     { domain: "general", text: "التواصل المستمر مع المنسق لمناقشة الصعوبات وإيجاد الحلول." },
 ];
 
-export const getRecommendationBank = query({
+export const getRecommendationBank = sessionQuery({
     args: {},
     handler: async (ctx) => {
         const school = await ctx.db.query("schools").first();

@@ -1,4 +1,8 @@
-import { useMemo } from "react";
+import { AcknowledgementControl } from "./TeacherAcknowledgement";
+import { useSupervisionSession } from "../../lib/supervisionSession";
+import FiltersBar, { periodPresets } from "./FiltersBar";
+import { applyFilters, type Filters } from "../../lib/visitStats";
+import { useMemo, useState } from "react";
 import { Printer, TrendingUp, TrendingDown } from "lucide-react";
 import { DOMAINS, DOMAIN_LABELS, ROLE_LABELS, formatDate, parseRatings, type VisitorRole } from "../../../convex/visitMath";
 import { countByRole, criterionAverages, pct, scoreTone, submittedOnly, type VisitRow } from "../../lib/visitStats";
@@ -7,23 +11,28 @@ import { countByRole, criterionAverages, pct, scoreTone, submittedOnly, type Vis
 // the strongest and weakest criteria, and — for the weakest — how the rating
 // moved from one visit to the next, which is how a recommendation is followed up.
 
-export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher, onPrint }: {
+export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher, onPrint, onFollowUp }: {
     setup: any;
     visits: VisitRow[];
     teacherId: string;
     onChangeTeacher: (id: string) => void;
     onPrint: (id: string) => void;
+    onFollowUp: (id: string) => void;
 }) {
+    const session = useSupervisionSession();
+    const year = periodPresets(setup)[0];
+    const [filters, setFilters] = useState<Filters>({ department: "", teacherId: "", role: "", from: year.from, to: year.to });
     const teacher = setup.teachers.find((t: any) => t._id === teacherId);
-    const mine = useMemo(() => submittedOnly(visits)
+    const mine = useMemo(() => submittedOnly(applyFilters(visits, filters))
         .filter(v => v.teacherId === teacherId)
-        .sort((a, b) => a.visitDate.localeCompare(b.visitDate)), [visits, teacherId]);
+        .sort((a, b) => a.visitDate.localeCompare(b.visitDate)), [visits, teacherId, filters]);
 
     const stats = criterionAverages(mine, setup.criteria);
     const measured = stats.criteria.filter(c => c.average !== null);
     const strongest = [...measured].sort((a, b) => b.average! - a.average!).slice(0, 3);
     const weakest = [...measured].sort((a, b) => a.average! - b.average!).slice(0, 3);
-    const byRole = countByRole(mine);
+    const annualVisits = submittedOnly(visits).filter(v => v.teacherId === teacherId && v.visitDate >= year.from && v.visitDate <= year.to);
+    const byRole = countByRole(annualVisits);
     const required: Record<VisitorRole, number> = {
         coordinator: setup.settings.requiredCoordinator,
         supervisor: setup.settings.requiredSupervisor,
@@ -34,6 +43,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
 
     return (
         <div className="space-y-4">
+            <FiltersBar setup={{ ...setup, departments: [] }} value={filters} onChange={setFilters}/>
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex flex-wrap gap-2 items-center">
                 <select value={teacher?.department ?? ""} aria-label="القسم"
                     onChange={e => {
@@ -53,6 +63,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                 </select>
             </div>
 
+            {teacher && <button onClick={() => onFollowUp(teacherId)} className="rounded-xl bg-qatar-maroon text-white px-4 py-3 text-sm font-bold">خطة التحسين ومتابعة توصيات المعلم</button>}
             {!teacher ? (
                 <p className="bg-white rounded-2xl border border-slate-100 p-8 text-center text-sm font-bold text-slate-400">
                     اختر معلماً لعرض ملفه.
@@ -66,7 +77,9 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                                 <p className="text-xs font-bold text-slate-500">{teacher.department}{teacher.email ? ` · ${teacher.email}` : ""}</p>
                             </div>
                             <p className="text-4xl font-black" style={{ color: scoreTone(stats.overall) }}>{pct(stats.overall, 1)}</p>
+                            <p className="text-sm text-slate-600">{mine.length} زيارة في الفترة المحددة</p>
                             <div className="space-y-1.5">
+                                <p className="text-xs text-slate-600">استيفاء الزيارات للعام الحالي {setup.settings.academicYear}</p>
                                 {(Object.keys(required) as VisitorRole[]).map(r => (
                                     <div key={r} className="flex items-center justify-between text-xs font-bold">
                                         <span className="text-slate-600">زيارات {ROLE_LABELS[r]}</span>
@@ -146,6 +159,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                                                 <Printer className="w-4 h-4"/>
                                             </button>
                                         </div>
+                                        <AcknowledgementControl visitId={v._id} updatedAt={v.updatedAt} canManage={session?.role === "deputy" || session?.visitorId === v.visitorId}/>
                                         {[["التخطيط", v.planningRec], ["تنفيذ الدرس", v.executionRec],
                                           ["التقويم والإدارة الصفية", v.evalMgmtRec], ["عامة", v.notes]]
                                             .filter(([, t]) => t && t.trim())

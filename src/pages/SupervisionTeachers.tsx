@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Plus, Trash2, Pencil, Check, X, Download, Search, Users, Mail, AlertCircle, RotateCcw } from "lucide-react";

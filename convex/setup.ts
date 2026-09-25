@@ -1,3 +1,4 @@
+import { publicSchool } from "./supervisionAccess";
 import { mutation, query } from "./_generated/server";
 
 export const seedDatabase = mutation({
@@ -175,7 +176,7 @@ export const getInitialData = query({
         const subjects = await ctx.db.query("subjects")
             .filter(q => q.eq(q.field("schoolId"), school._id))
             .collect();
-        return { schools: [school], classes, subjects };
+        return { schools: [publicSchool(school)], classes, subjects };
     },
 });
 

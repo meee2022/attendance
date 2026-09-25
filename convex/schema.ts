@@ -2,6 +2,28 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+    supervisionAcknowledgements: defineTable({
+        schoolId: v.id("schools"), visitId: v.id("supervisionVisits"), tokenHash: v.string(),
+        visitUpdatedAt: v.number(), expiresAt: v.number(), createdBy: v.string(),
+        acknowledgedAt: v.optional(v.number()), comment: v.optional(v.string()),
+        revoked: v.boolean(),
+    }).index("by_token", ["tokenHash"]).index("by_visit", ["visitId"]),
+    supervisionSessions: defineTable({
+        schoolId: v.id("schools"), tokenHash: v.string(), credentialHash: v.string(),
+        role: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy")),
+        visitorId: v.optional(v.id("supervisors")), name: v.string(), expiresAt: v.number(),
+    }).index("by_token", ["tokenHash"]),
+    supervisionLoginAttempts: defineTable({
+        key: v.string(), failures: v.number(), resetAt: v.number(),
+    }).index("by_key", ["key"]),
+    supervisionActions: defineTable({
+        schoolId: v.id("schools"), teacherId: v.id("schoolTeachers"), department: v.string(),
+        visitId: v.optional(v.id("supervisionVisits")), completionVisitId: v.optional(v.id("supervisionVisits")),
+        kind: v.union(v.literal("improvement"), v.literal("training"), v.literal("visit")),
+        title: v.string(), owner: v.string(), dueDate: v.string(), evidence: v.string(),
+        status: v.union(v.literal("open"), v.literal("done"), v.literal("cancelled")),
+        createdBy: v.string(), updatedBy: v.string(), createdAt: v.number(), updatedAt: v.number(),
+    }).index("by_school", ["schoolId"]),
     schools: defineTable({
         name: v.string(),
         code: v.string(),
@@ -403,6 +425,8 @@ export default defineSchema({
         visitorRole: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy")),
         visitorId: v.optional(v.id("supervisors")),
         visitorName: v.string(),
+        recordedByVisitorId: v.optional(v.id("supervisors")),
+        recordedByName: v.optional(v.string()),
         // المعلم المُقَيَّم
         teacherName: v.string(),
         teacherDepartment: v.string(),

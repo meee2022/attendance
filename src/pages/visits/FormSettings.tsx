@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import { CheckCircle2, ImageUp, Loader2, Save, Trash2 } from "lucide-react";
@@ -61,7 +61,7 @@ export default function FormSettings() {
                 <L label="بداية العام"><input type="date" className={input} value={draft.yearStart} onChange={e => set("yearStart", e.target.value)}/></L>
                 <L label="نهاية العام"><input type="date" className={input} value={draft.yearEnd} onChange={e => set("yearEnd", e.target.value)}/></L>
                 <L label="اسم المدرسة على الاستمارة"><input className={input} value={draft.schoolNameOnForm} onChange={e => set("schoolNameOnForm", e.target.value)}/></L>
-                <L label="نائب المدير للشؤون الأكاديمية"><input className={input} value={draft.deputyName} onChange={e => set("deputyName", e.target.value)} placeholder="يظهر في خانة التوقيع"/></L>
+                <L label="نائب المدير للشؤون الأكاديمية"><input className={input} value={draft.deputyName} onChange={e => set("deputyName", e.target.value)} placeholder="يظهر تلقائيًا عند الدخول وفي الزيارات الجديدة"/></L>
                 <L label="مدير المدرسة"><input className={input} value={draft.principalName} onChange={e => set("principalName", e.target.value)}/></L>
             </div>
 

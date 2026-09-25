@@ -1,5 +1,7 @@
+import { AutoArchiveVisit } from "./VisitArchive";
+import { useUnsavedChanges } from "../../lib/useUnsavedChanges";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import {
@@ -18,13 +20,15 @@ import type { Session } from "./VisitsPage";
 // write the recommendations, then review. The average moves as you tap, and
 // the review screen lists anything the server would refuse before it is sent.
 
-const DRAFT_KEY = "visit-form-autosave";
+const DRAFT_PREFIX = "supervision-draft-v2";
 
 const RATING_COLORS: Record<string, string> = {
     "3": "#059669", "2": "#2563eb", "1": "#d97706", "0": "#dc2626", not_measured: "#64748b",
 };
 
 type FormState = {
+    recordedRole?: "coordinator" | "supervisor";
+    supervisorId?: string;
     department: string;
     teacherId: string;
     classId: string;
@@ -56,6 +60,8 @@ function hasContent(f: FormState): boolean {
 
 function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
     return {
+        recordedRole: v.visitorRole === "supervisor" ? "supervisor" : "coordinator",
+        supervisorId: v.visitorRole === "supervisor" ? v.visitorId ?? "" : "",
         department: v.department,
         teacherId: v.teacherId ?? "",
         classId: (v as any).classId ?? "",
@@ -69,24 +75,34 @@ function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
     };
 }
 
-export default function VisitForm({ setup, session, editingId, visits, onDone }: {
+export default function VisitForm({ setup, session, editingId, visits, onDone, onDirtyChange, onNewVisit }: {
     setup: any;
     session: Session;
     editingId: string | null;
     visits: VisitRow[];
     onDone: () => void;
+    onDirtyChange?: (dirty: boolean) => void;
+    onNewVisit?: () => void;
 }) {
     const criteria: { _id: string; domain: Domain; text: string }[] = setup.criteria;
     const soleDepartment: string = setup.departments.length === 1 ? setup.departments[0] : "";
     const editing = editingId ? visits.find(v => v._id === editingId) ?? null : null;
     const editingSubmitted = editing?.status === "submitted";
 
-    const [initial] = useState<{ form: FormState; restored: boolean }>(() => {
-        if (editing) return { form: fromVisit(editing), restored: false };
+    const draftKey = `${DRAFT_PREFIX}:${session.role}:${session.visitorId ?? session.name}:${editingId ?? "new"}`;
+    const [storageError, setStorageError] = useState(false);
+    const [baseUpdatedAt, setBaseUpdatedAt] = useState(() => {
         try {
-            const saved = localStorage.getItem(DRAFT_KEY);
+            const stored = JSON.parse(localStorage.getItem(draftKey) || "null");
+            if (editing && typeof stored?.baseUpdatedAt === "number") return stored.baseUpdatedAt;
+        } catch { /* use the server version */ }
+        return editing?.updatedAt;
+    });
+    const [initial] = useState<{ form: FormState; restored: boolean }>(() => {
+        try {
+            const saved = localStorage.getItem(draftKey);
             if (saved) {
-                const restoredForm = { ...emptyForm(setup.today, soleDepartment), ...JSON.parse(saved) };
+                const restoredForm = { ...emptyForm(setup.today, soleDepartment), ...JSON.parse(saved).form };
                 // a draft left by someone from another department is not shown,
                 // and a form nobody started is not worth announcing
                 if (hasContent(restoredForm)
@@ -95,10 +111,11 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                 }
             }
         } catch { /* storage unavailable */ }
-        return { form: emptyForm(setup.today, soleDepartment), restored: false };
+        return { form: editing ? fromVisit(editing) : emptyForm(setup.today, soleDepartment), restored: false };
     });
     const [form, setForm] = useState<FormState>(initial.form);
-    const restored = initial.restored;
+    const [restored, setRestored] = useState(initial.restored);
+    const [baseline, setBaseline] = useState(() => editing ? fromVisit(editing) : emptyForm(setup.today, soleDepartment));
 
     const [reviewOpen, setReviewOpen] = useState(false);
     const [saving, setSaving] = useState<"draft" | "submitted" | null>(null);
@@ -113,21 +130,26 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
     // @ts-ignore
     const bank = useQuery(api.supervision.getRecommendationBank) as any[] | undefined;
 
-    // Keep a copy on the device while writing a new visit — a dropped
-    // connection or a closed tab must not cost the visitor the lesson.
+    const dirty = !saved && JSON.stringify(form) !== JSON.stringify(baseline);
+    useUnsavedChanges(dirty, onDirtyChange);
     useEffect(() => {
-        if (editing || form === initial.form) return;
+        if (saved || !dirty) return;
         try {
-            if (hasContent(form)) localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
-            else localStorage.removeItem(DRAFT_KEY);
-        } catch { /* ignore */ }
-    }, [form, editing, initial.form]);
+            localStorage.setItem(draftKey, JSON.stringify({ form, baseUpdatedAt: baseUpdatedAt ?? null }));
+            setStorageError(false);
+        } catch { setStorageError(true); }
+    }, [form, dirty, saved, draftKey, baseUpdatedAt]);
 
     const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }));
 
     const teachers: any[] = setup.teachers;
     const teachersInDept = form.department ? teachers.filter(t => t.department === form.department) : teachers;
     const teacher = teachers.find(t => t._id === form.teacherId);
+
+    const recordedRole = editing?.visitorRole ?? (session.role === "coordinator" ? form.recordedRole ?? "coordinator" : session.role);
+    const availableSupervisors = setup.visitors.filter((v: any) => v.role === "supervisor" && (!form.department || v.subjects.includes(form.department)));
+    const selectedSupervisor = availableSupervisors.find((v: any) => v._id === form.supervisorId);
+    const recordedName = editing?.visitorName ?? (recordedRole === "supervisor" ? selectedSupervisor?.fullName ?? "اختر الموجه" : session.name);
 
     const scores = useMemo(() => computeScores(form.ratings, criteria), [form.ratings, criteria]);
     const issues: ValidationIssue[] = useMemo(() => validateVisit({
@@ -165,13 +187,15 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
 
     const submit = async (status: "draft" | "submitted", confirmDuplicate = false) => {
         setServerError("");
+        if (!editing && recordedRole === "supervisor" && !selectedSupervisor) { setServerError("اختر الموجه المسجل للقسم قبل الحفظ"); return; }
         setSaving(status);
         try {
             const res = await saveVisit({
                 id: (editingId ?? undefined) as any,
-                visitorRole: editing?.visitorRole ?? session.role,
-                visitorId: (session.visitorId as any) || undefined,
-                visitorName: editing?.visitorName ?? session.name,
+                expectedUpdatedAt: baseUpdatedAt,
+                visitorRole: recordedRole,
+                visitorId: (recordedRole === "supervisor" ? form.supervisorId : session.visitorId) as any || undefined,
+                visitorName: recordedName,
                 teacherId: (form.teacherId || undefined) as any,
                 classId: (form.classId || undefined) as any,
                 subjectName: form.subjectName || form.department,
@@ -189,7 +213,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
             }) as any;
 
             if (!res.ok && res.duplicate) { setDuplicate(res.duplicate); return; }
-            try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+            try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
             setDuplicate(null);
             setReviewOpen(false);
             setSaved({ id: res.id, status, recordNo: res.recordNo });
@@ -202,8 +226,11 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
     };
 
     const resetForm = () => {
-        try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
-        setForm(emptyForm(setup.today, soleDepartment));
+        setRestored(false);
+        setBaseUpdatedAt(editing?.updatedAt);
+        setBaseline(editing ? fromVisit(editing) : emptyForm(setup.today, soleDepartment));
+        try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+        setForm(editing ? fromVisit(editing) : emptyForm(setup.today, soleDepartment));
         setSaved(null);
         setOldDateReason("");
     };
@@ -222,14 +249,15 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                         {scores.average !== null ? ` · المعدل ${pct(scores.average)}` : ""}
                     </p>
                 </div>
+                {saved.status === "submitted" && <AutoArchiveVisit visitId={saved.id}/>}
                 <div className="flex gap-2 justify-center flex-wrap">
                     {saved.status === "submitted" && (
-                        <a href={`/supervision/print/${saved.id}?autoprint=1`} target="_blank" rel="noreferrer"
+                        <button onClick={() => window.open(`/supervision/print/${saved.id}?autoprint=1`, "_blank")}
                             className="flex items-center gap-2 px-5 py-3 rounded-xl bg-qatar-maroon text-white font-black text-sm">
                             <Printer className="w-4 h-4"/>الاستمارة (PDF)
-                        </a>
+                        </button>
                     )}
-                    <button onClick={resetForm}
+                    <button onClick={() => editingId ? onNewVisit?.() : resetForm()}
                         className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-slate-200 font-black text-sm text-slate-700 hover:border-qatar-maroon">
                         زيارة جديدة
                     </button>
@@ -246,10 +274,12 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
 
     return (
         <div className="space-y-4 pb-56 lg:pb-28">
-            {restored && !editing && (
+            {editing && baseUpdatedAt !== editing.updatedAt && <p role="alert" className="rounded-xl p-3 bg-amber-50 text-amber-900 text-sm">توجد نسخة أحدث من الزيارة في السجل. احتفظ بملاحظاتك قبل البدء من جديد؛ لن تُستبدل النسخة الأحدث بتعديلك القديم.</p>}
+            {storageError && <p role="alert" className="p-3 bg-amber-50 text-amber-900 rounded-xl">الحفظ على الجهاز غير متاح؛ احفظ المسودة قبل المغادرة.</p>}
+            {restored && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between gap-3 flex-wrap text-xs font-bold text-amber-900">
                     <span>استُرجعت زيارة لم تُحفظ من آخر مرة على هذا الجهاز.</span>
-                    <button onClick={resetForm} className="flex items-center gap-1 text-amber-800 hover:underline">
+                    <button onClick={() => { if (window.confirm("تجاهل النسخة المحلية والبدء من السجل المحفوظ؟")) resetForm(); }} className="flex items-center gap-1 text-amber-800 hover:underline">
                         <RotateCcw className="w-3.5 h-3.5"/>ابدأ من جديد
                     </button>
                 </div>
@@ -314,6 +344,20 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                     </Field>
                 </div>
 
+                {session.role === "coordinator" && !editing && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    <Field label="الزيارة باسم">
+                        <select className={inputCls} value={form.recordedRole ?? "coordinator"} onChange={e => setForm(f => ({ ...f, recordedRole: e.target.value as "coordinator" | "supervisor", supervisorId: "" }))}>
+                            <option value="coordinator">المنسق — {session.name}</option><option value="supervisor">الموجه — يسجلها المنسق</option>
+                        </select>
+                    </Field>
+                    {recordedRole === "supervisor" && <Field label="اسم الموجه">
+                        <select className={inputCls} value={form.supervisorId ?? ""} onChange={e => set("supervisorId", e.target.value)}>
+                            <option value="">اختر الموجه المسجل للقسم</option>
+                            {availableSupervisors.map((v: any) => <option key={v._id} value={v._id}>{v.fullName}</option>)}
+                        </select>
+                        {!availableSupervisors.length && <p className="text-sm text-qatar-maroon mt-2">يضيف النائب اسم الموجه وأقسامه من إدارة المعلمين والزائرين.</p>}
+                    </Field>}
+                </div>}
                 <div className="flex items-center gap-2 flex-wrap mt-3">
                     <span className="text-xs font-black text-slate-500">نوع المتابعة:</span>
                     {(["full", "partial"] as const).map(t => (
@@ -326,7 +370,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                         </button>
                     ))}
                     <span className="text-xs font-bold text-slate-400 mr-auto">
-                        الزائر: {ROLE_LABELS[editing?.visitorRole ?? session.role]} · {editing?.visitorName ?? session.name}
+                        الزائر: {ROLE_LABELS[recordedRole]} · {recordedName}
                     </span>
                 </div>
                 {dateTooOld && (
@@ -458,7 +502,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone }:
                                     ["القسم", teacher?.department ?? "—"],
                                     ["الصف", setup.classes.find((c: any) => c._id === form.classId)?.name ?? "—"],
                                     ["التاريخ", form.visitDate ? `${dayName(form.visitDate)} ${formatDate(form.visitDate)}` : "—"],
-                                    ["الزائر", `${ROLE_LABELS[editing?.visitorRole ?? session.role]} — ${editing?.visitorName ?? session.name}`],
+                                    ["الزائر", `${ROLE_LABELS[recordedRole]} — ${recordedName}`],
                                     ["الدرس", form.lessonTopic || "—"],
                                     ["المتابعة", form.followUpType === "partial" ? "جزئيّة" : "كليّة"],
                                     ["المعدل", pct(scores.average, 1)],

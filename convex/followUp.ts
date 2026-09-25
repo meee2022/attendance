@@ -1,3 +1,4 @@
+import { publicSchool } from "./supervisionAccess";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -146,7 +147,7 @@ async function ensureSession(ctx: any, args: {
         if (args.teacherName && args.teacherName !== existing.teacherName) {
             await ctx.db.patch(existing._id, { teacherName: args.teacherName });
         }
-        return { session: existing, school, cls };
+        return { session: existing, school: publicSchool(school), cls };
     }
 
     const id = await ctx.db.insert("followUpSessions", {
@@ -158,7 +159,7 @@ async function ensureSession(ctx: any, args: {
         teacherName: args.teacherName,
         createdAt: Date.now(),
     });
-    return { session: (await ctx.db.get(id))!, school, cls };
+    return { session: (await ctx.db.get(id))!, school: publicSchool(school), cls };
 }
 
 export const openSheet = mutation({

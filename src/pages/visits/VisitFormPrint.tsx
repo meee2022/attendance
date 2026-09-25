@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import { DOMAINS, DOMAIN_LABELS, RATING_SCALE, dayName, formatDate, type VisitorRole } from "../../../convex/visitMath";
@@ -47,7 +47,8 @@ function fitText(text: string, rows: number): CSSProperties {
     return { fontFamily: CALIBRI, fontSize: `${size}pt`, textAlign: "right", verticalAlign: "top", whiteSpace: "pre-line", lineHeight: 1.25, padding: "4px 6px" };
 }
 
-export default function VisitFormPrint() {
+export default function VisitFormPrint() { return <SupervisionBoundary><VisitFormPrintContent/></SupervisionBoundary>; }
+function VisitFormPrintContent() {
     const { id } = useParams();
     const [params] = useSearchParams();
     // @ts-ignore
@@ -68,6 +69,10 @@ export default function VisitFormPrint() {
     if (data === undefined) return <p dir="rtl" className="p-10 text-center font-bold text-slate-500">جاري تجهيز الاستمارة…</p>;
     if (!data) return <p dir="rtl" className="p-10 text-center font-bold text-slate-500">الزيارة غير موجودة.</p>;
 
+    return <OfficialVisitForm data={data}/>;
+}
+
+export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar?: boolean }) {
     const { visit, criteria, form } = data;
     const role: VisitorRole = visit.visitorRole;
     const rows = 11;                                   // first criterion row
@@ -108,14 +113,14 @@ export default function VisitFormPrint() {
                 .sheet table { border-collapse: collapse; table-layout: fixed; width: ${COL_WIDTHS.reduce((a, b) => a + b, 0)}px; color: #000; }
             `}</style>
 
-            <div className="no-print p-3 flex gap-2 items-center justify-center">
+            {toolbar && <div className="no-print p-3 flex gap-2 items-center justify-center">
                 <button onClick={() => window.print()} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm">
                     طباعة / حفظ PDF
                 </button>
                 {visit.status !== "submitted" && (
                     <span className="text-xs font-bold text-amber-700">مسودة — لم تُعتمد بعد</span>
                 )}
-            </div>
+            </div>}
 
             <div className="sheet">
                 {/* Header — the school's official band, replaceable from the settings */}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation, SupervisionBoundary } from "../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Plus, Trash2, Pencil, Check, X, RotateCcw, ClipboardCheck, KeyRound, Save, History, BookOpen, FileCog } from "lucide-react";
@@ -20,7 +20,8 @@ const ROLE_COLORS: Record<Role, string> = { coordinator: "#5C1523", supervisor: 
 // what stays here is what an administrator sets once a year.
 type AdminTab = "form" | "criteria" | "recs" | "pins" | "audit";
 
-export default function SupervisionAdmin() {
+export default function SupervisionAdmin() { return <SupervisionBoundary deputy><SupervisionAdminContent/></SupervisionBoundary>; }
+function SupervisionAdminContent() {
     const [tab, setTab] = useState<AdminTab>("form");
 
     const TABS: { key: AdminTab; label: string; icon: any }[] = [

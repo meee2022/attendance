@@ -1,5 +1,7 @@
+import { api } from "../../../convex/_generated/api";
+import { useSupervisionQuery } from "../../lib/supervisionSession";
 import { useMemo, useState } from "react";
-import { Plus, Download, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Download, ArrowUp, ArrowDown, ArrowLeft } from "lucide-react";
 import { DOMAINS, DOMAIN_LABELS, ROLE_LABELS, formatDate } from "../../../convex/visitMath";
 import {
     applyFilters, countByRole, criterionAverages, departmentTable, monthLabel, monthlyCounts, pct, scoreTone,
@@ -12,13 +14,17 @@ import FiltersBar, { periodPresets } from "./FiltersBar";
 // assessments' «متابعة الرصد»: one line that says how much of the staff has
 // been visited, the departments ranked, and the names still waiting.
 
-export default function VisitsDashboard({ setup, visits, onOpenTeacher, onNewVisit, onOpenDrafts }: {
+export default function VisitsDashboard({ setup, visits, onOpenTeacher, onNewVisit, onOpenDrafts, onOpenFollowUp }: {
     setup: any;
     visits: VisitRow[];
     onOpenTeacher: (teacherId: string) => void;
     onNewVisit: () => void;
     onOpenDrafts: () => void;
+    onOpenFollowUp: () => void;
 }) {
+    const actions = useSupervisionQuery((api as any).supervisionActions.list) as any[] | undefined;
+    const overdue = (actions ?? []).filter(a => a.status === "open" && a.dueDate < setup.today);
+    const planned = (actions ?? []).filter(a => a.kind === "visit" && a.status === "open");
     const year = periodPresets(setup)[0];
     const [filters, setFilters] = useState<Filters>({ department: "", teacherId: "", role: "", from: year.from, to: year.to });
 
@@ -90,6 +96,11 @@ export default function VisitsDashboard({ setup, visits, onOpenTeacher, onNewVis
         <div className="space-y-4">
             <FiltersBar setup={setup} value={filters} onChange={setFilters}/>
 
+            <div className="bg-qatar-maroon text-white rounded-2xl p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap"><h2 className="font-bold">ما يحتاج متابعة</h2><button onClick={onOpenFollowUp} className="bg-white text-qatar-maroon px-4 py-2 rounded-lg text-sm font-bold min-h-11">فتح المتابعة والخطة</button></div>
+                <div className="flex gap-x-6 gap-y-2 flex-wrap text-sm"><span>{overdue.length} إجراء متأخر</span><span>{planned.length} موعد زيارة مفتوح</span><button onClick={onOpenDrafts} className="underline underline-offset-4">{drafts} مسودة غير معتمدة</button></div>
+                <p className="text-sm text-white/85">المواعيد والإجراءات المفتوحة تشمل السنوات السابقة حتى تُنجز أو تُلغى.</p>
+            </div>
             {/* One summary card, as «متابعة الرصد» has */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -122,88 +133,61 @@ export default function VisitsDashboard({ setup, visits, onOpenTeacher, onNewVis
                 </div>
             </div>
 
-            {/* Departments — the workbook's «sts» sheet */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
-                    <h3 className="font-bold text-slate-700 text-sm">الأقسام — الأعلى معدلاً أولاً</h3>
-                    <button onClick={exportExcel}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:border-qatar-maroon hover:text-qatar-maroon">
-                        <Download className="w-3.5 h-3.5"/>Excel
-                    </button>
-                </div>
-                <div className="overflow-auto">
-                    <table className="w-full text-xs">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                {["القسم", "منسق", "موجّه", "نائب", "الإجمالي", "المعلمون", "بلا زيارة",
-                                  ...DOMAINS.map(d => DOMAIN_LABELS[d]), "المعدل", "عن المدرسة"].map((h, i) => (
-                                    <th key={h} className={`px-3 font-semibold text-slate-600 whitespace-nowrap ${i === 0 ? "text-right" : "text-center"}`}>{h}</th>
-                                ))}
+            <section className="visit-results" aria-labelledby="department-results-title">
+                <header className="visit-results-heading">
+                    <div><h3 id="department-results-title">نتائج الأقسام</h3><p>الزيارات المعتمدة ومتوسطات الأداء في الفترة المحددة</p></div>
+                    <button onClick={exportExcel} className="visit-results-export"><Download size={16} aria-hidden="true"/>تصدير Excel</button>
+                </header>
+                <div className="visit-results-scroll" tabIndex={0} role="region" aria-label="نتائج الأقسام، مرّر أفقيًا لعرض جميع الأعمدة">
+                    <table className="visit-results-table">
+                        <thead>
+                            <tr className="visit-results-groups">
+                                <th rowSpan={2} scope="col" className="visit-department-cell">القسم</th>
+                                <th colSpan={4} scope="colgroup">الزيارات المعتمدة</th>
+                                <th colSpan={2} scope="colgroup">تغطية المعلمين</th>
+                                <th colSpan={4} scope="colgroup">متوسطات المجالات</th>
+                                <th colSpan={2} scope="colgroup">النتيجة العامة</th>
                             </tr>
+                            <tr>{["منسق", "موجّه", "نائب", "الإجمالي", "المعلمون", "بلا زيارة", ...DOMAINS.map(d => DOMAIN_LABELS[d]), "المعدل", "مقارنة بالمدرسة"].map(h => <th key={h} scope="col">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {deptRows.map(r => (
-                                <tr key={r.department} className="border-t border-slate-100">
-                                    <td className="px-3 text-right font-black text-slate-700 whitespace-nowrap">
-                                        <span className="text-slate-400 font-bold ml-1">{r.rank ?? "—"}</span>{r.department}
-                                    </td>
-                                    <td className="px-3 text-center">{r.coordinator || "—"}</td>
-                                    <td className="px-3 text-center">{r.supervisor || "—"}</td>
-                                    <td className="px-3 text-center">{r.deputy || "—"}</td>
-                                    <td className="px-3 text-center font-black">{r.total}</td>
-                                    <td className="px-3 text-center">{r.teachers}</td>
-                                    <td className="px-3 text-center">
-                                        <span className={`px-2 py-0.5 rounded-lg font-black ${r.withoutVisit ? "bg-rose-100 text-rose-800" : "bg-emerald-50 text-emerald-700"}`}>
-                                            {r.withoutVisit}
-                                        </span>
-                                    </td>
-                                    {DOMAINS.map(d => (
-                                        <td key={d} className="px-3 text-center font-bold" style={{ color: scoreTone(r.domains[d]) }}>{pct(r.domains[d])}</td>
-                                    ))}
-                                    <td className="px-3 text-center font-black" style={{ color: scoreTone(r.average) }}>{pct(r.average, 1)}</td>
-                                    <td className="px-3 text-center font-bold">
-                                        {r.vsSchool === null ? "—" : (
-                                            <span className={`inline-flex items-center gap-0.5 ${r.vsSchool >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                                                {r.vsSchool >= 0 ? <ArrowUp className="w-3 h-3"/> : <ArrowDown className="w-3 h-3"/>}
-                                                {Math.abs(r.vsSchool * 100).toFixed(1)}%
-                                            </span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
+                            {deptRows.map(r => <tr key={r.department}>
+                                <th scope="row" className="visit-department-cell">{r.department}</th>
+                                <td>{r.coordinator}</td><td>{r.supervisor}</td><td>{r.deputy}</td>
+                                <td className="visit-result-total">{r.total}</td><td>{r.teachers}</td>
+                                <td><span className={r.withoutVisit ? "visit-missing-count" : "visit-complete-count"}>{r.withoutVisit}</span></td>
+                                {DOMAINS.map(d => <td key={d}><span className="visit-domain-value">{pct(r.domains[d])}</span></td>)}
+                                <td className="visit-result-average">{pct(r.average, 1)}</td>
+                                <td>{r.vsSchool === null ? "—" : Math.abs(r.vsSchool * 100) < .05 ? <span className="visit-result-equal">مماثل للمدرسة</span> :
+                                    <span className={`visit-result-difference ${r.vsSchool > 0 ? "is-positive" : "is-negative"}`}>
+                                        {r.vsSchool > 0 ? <ArrowUp size={13} aria-hidden="true"/> : <ArrowDown size={13} aria-hidden="true"/>}
+                                        <span>{Math.abs(r.vsSchool * 100).toFixed(1)} نقطة {r.vsSchool > 0 ? "أعلى" : "أقل"}</span>
+                                    </span>}
+                                </td>
+                            </tr>)}
+                            {!deptRows.length && <tr><td colSpan={13} className="visit-results-empty">لا توجد أقسام ضمن الاختيار الحالي.</td></tr>}
                         </tbody>
                     </table>
                 </div>
-            </div>
+                <p className="visit-results-note">تُقرأ المتوسطات مع عدد الزيارات ومرات القياس؛ قلة الزيارات قد تجعل المقارنة غير ممثلة لأداء القسم. الفرق عن المدرسة بالنقاط المئوية.</p>
+            </section>
 
-            {/* Teachers nobody has visited — one row per department */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-100">
-                    <h3 className="font-bold text-slate-700 text-sm">معلمون لم تتم زيارتهم ({unvisited.length})</h3>
-                </div>
-                {unvisited.length === 0 ? (
-                    <p className="px-5 py-4 text-sm font-black text-emerald-700">تمت زيارة كل المعلمين في هذه الفترة ✓</p>
-                ) : (
-                    <div className="overflow-auto max-h-[60vh] divide-y divide-slate-100 text-xs">
-                        {unvisitedByDept.map(({ department, list }) => (
-                            <div key={department} className="px-5 py-2.5 flex flex-col sm:flex-row gap-2 sm:items-start">
-                                <div className="flex items-center gap-2 sm:w-56 shrink-0">
-                                    <span className="font-black text-slate-700">{department}</span>
-                                    <span className="px-2 py-0.5 rounded-lg bg-rose-100 text-rose-800 font-black">{list.length}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1">
-                                    {list.map(c => (
-                                        <button key={c.teacher._id} onClick={() => onOpenTeacher(c.teacher._id)}
-                                            className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-[11px] hover:bg-qatar-maroon hover:text-white">
-                                            {c.teacher.fullName}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+            <section className="visit-results" aria-labelledby="unvisited-teachers-title">
+                <header className="visit-results-heading">
+                    <div><h3 id="unvisited-teachers-title">معلمون بانتظار الزيارة <span className="visit-missing-count">{unvisited.length}</span></h3><p>لم تُسجّل لهم زيارة معتمدة ضمن الفلاتر الحالية. اختر الاسم لفتح ملف المعلم.</p></div>
+                </header>
+                {unvisited.length === 0 ? <p className="visit-results-empty">{teachers.length ? "لا يوجد معلمون بانتظار الزيارة ضمن الاختيار الحالي." : "لا يوجد معلمون ضمن الاختيار الحالي."}</p> :
+                    <div className="visit-unvisited-departments">
+                        {unvisitedByDept.map(({ department, list }) => <div key={department} className="visit-unvisited-department">
+                            <div className="visit-unvisited-label"><h4>{department}</h4><span>{list.length} بانتظار الزيارة</span></div>
+                            <ul className="visit-unvisited-list">
+                                {list.map(c => <li key={c.teacher._id}>
+                                    <button onClick={() => onOpenTeacher(c.teacher._id)} aria-label={`فتح ملف ${c.teacher.fullName}`}><span>{c.teacher.fullName}</span><ArrowLeft size={15} aria-hidden="true"/></button>
+                                </li>)}
+                            </ul>
+                        </div>)}
+                    </div>}
+            </section>
 
             {monthly.length > 1 && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-2">

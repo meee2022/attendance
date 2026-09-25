@@ -10,13 +10,16 @@
     "preview": "vite preview",
     "migrate-convex": "tsx scripts/migrateConvexData.ts",
     "import-registry": "tsx --env-file=.env.local scripts/importRegistry.ts",
-    "import-plan": "tsx --env-file=.env.local scripts/importAssessmentPlan.ts"
+    "import-plan": "tsx --env-file=.env.local scripts/importAssessmentPlan.ts",
+    "test:supervision": "vitest run tests/supervision.test.ts tests/visitArchive.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "convex": "^1.32.0",
     "date-fns": "^4.1.0",
     "exceljs": "^4.4.0",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.576.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -32,6 +35,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.27",
+    "convex-test": "0.0.38",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
@@ -42,6 +46,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^5.0.1"
   }
 }

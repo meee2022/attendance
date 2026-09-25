@@ -1,4 +1,4 @@
-import { useQuery } from "convex/react";
+import { useSupervisionQuery as useQuery } from "../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { History, Plus, Pencil, Trash2, FileSignature, Send } from "lucide-react";

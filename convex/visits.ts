@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { deputyNameOf } from "./supervisionDefaults";
+import { sessionMutation as mutation, sessionQuery as query, deputyMutation, canAccess, requireVisit } from "./supervisionAccess";
 import { ConvexError, v } from "convex/values";
 import {
     DOMAINS, computeScores, nameKey, parseRatings, todayInQatar, validateVisit,
@@ -35,7 +36,7 @@ async function settingsOf(ctx: any, school: any) {
         yearEnd: s?.yearEnd ?? "2027-06-30",
         schoolNameOnForm: s?.schoolNameOnForm ?? school.name,
         principalName: s?.principalName ?? "",
-        deputyName: s?.deputyName ?? "",
+        deputyName: deputyNameOf(s),
         headerImageId: s?.headerImageId ?? null,
         footerImageId: s?.footerImageId ?? null,
         requiredCoordinator: s?.requiredCoordinator ?? 2,
@@ -68,10 +69,11 @@ export const getSetup = query({
         const settings = await settingsOf(ctx, school);
         const criteria = await activeCriteria(ctx, school._id);
 
+        const access = (ctx as any).supervisionSession;
         const teachers = (await ctx.db.query("schoolTeachers")
             .withIndex("by_school", (q: any) => q.eq("schoolId", school._id))
             .collect())
-            .filter((t: any) => t.isActive !== false)
+            .filter((t: any) => t.isActive !== false && canAccess(access, t.schoolId, t.department ?? ""))
             .map((t: any) => ({
                 _id: t._id, fullName: t.fullName.replace(/\s+/g, " ").trim(),
                 department: (t.department ?? "").trim(), email: t.email ?? "",
@@ -81,7 +83,7 @@ export const getSetup = query({
         const visitors = (await ctx.db.query("supervisors")
             .withIndex("by_school", (q: any) => q.eq("schoolId", school._id))
             .collect())
-            .filter((s: any) => s.isActive !== false)
+            .filter((s: any) => s.isActive !== false && (access.role === "deputy" || s._id === access.visitorId || (s.role === "supervisor" && (s.subjects ?? []).some((d: string) => access.departments?.includes(d.trim())))))
             .map((s: any) => ({ _id: s._id, fullName: s.fullName, role: s.role, subjects: s.subjects ?? [] }));
 
         const classes = (await ctx.db.query("classes")
@@ -120,10 +122,15 @@ export const listVisits = query({
             .collect();
 
         return all
+            .filter((x: any) => canAccess((ctx as any).supervisionSession, x.schoolId, x.teacherDepartment ?? ""))
             .filter((x: any) => Boolean(x.deletedAt) === Boolean(args.deleted))
             .map((x: any) => ({
                 _id: x._id,
                 recordNo: x.recordNo ?? null,
+                visitorId: x.visitorId ?? null,
+                recordedByVisitorId: x.recordedByVisitorId ?? null,
+                recordedByName: x.recordedByName ?? null,
+                academicYear: x.academicYear ?? null,
                 visitNumber: x.visitNumber ?? null,
                 teacherId: x.teacherId ?? null,
                 teacherName: x.teacherName,
@@ -159,7 +166,7 @@ export const listVisits = query({
 export const getVisitForm = query({
     args: { id: v.id("supervisionVisits") },
     handler: async (ctx, args) => {
-        const visit = await ctx.db.get(args.id);
+        const visit = await requireVisit(ctx, (ctx as any).supervisionSession, args.id);
         if (!visit) return null;
         const school = await getSchool(ctx);
         const settings = await settingsOf(ctx, school);
@@ -196,6 +203,7 @@ export const getVisitForm = query({
 export const getVersions = query({
     args: { id: v.id("supervisionVisits") },
     handler: async (ctx, args) => {
+        await requireVisit(ctx, (ctx as any).supervisionSession, args.id);
         const rows = await ctx.db.query("supervisionVisitVersions")
             .withIndex("by_visit", (q: any) => q.eq("visitId", args.id))
             .collect();
@@ -234,6 +242,7 @@ const visitArgs = {
     oldDateReason: v.optional(v.string()),
     editReason: v.optional(v.string()),
     actorName: v.optional(v.string()),
+    expectedUpdatedAt: v.optional(v.number()),
 };
 
 export const saveVisit = mutation({
@@ -244,13 +253,24 @@ export const saveVisit = mutation({
         const criteria = await activeCriteria(ctx, school._id);
         const criteriaRefs: CriterionRef[] = criteria.map((c: any) => ({ _id: c._id, domain: c.domain as Domain }));
         const ratings = parseRatings(args.ratings);
-        const existing = args.id ? await ctx.db.get(args.id) : null;
+        const access = (ctx as any).supervisionSession;
+        const existing = args.id ? await requireVisit(ctx, access, args.id, true) : null;
+        args.actorName = access.name;
+        const delegated = !existing && access.role === "coordinator" && args.visitorRole === "supervisor";
+        const supervisor = delegated && args.visitorId ? await ctx.db.get(args.visitorId) : null;
+        if (delegated && (!supervisor || supervisor.schoolId !== school._id || supervisor.role !== "supervisor" || !supervisor.isActive)) throw new ConvexError("اختر الموجه المسجل للقسم");
+        args.visitorRole = existing?.visitorRole ?? (delegated ? "supervisor" : access.role);
+        args.visitorName = existing?.visitorName ?? (delegated ? supervisor!.fullName : access.role === "deputy" ? settings.deputyName : access.name);
+        args.visitorId = existing ? existing.visitorId : delegated ? supervisor!._id : access.visitorId;
+        if (existing && args.expectedUpdatedAt !== (existing.updatedAt ?? existing.createdAt)) throw new ConvexError("تم تعديل الزيارة في جلسة أخرى؛ أعد فتحها قبل الحفظ");
         if (args.id && !existing) throw new ConvexError("الزيارة غير موجودة");
         if (existing?.deletedAt) throw new ConvexError("الزيارة في سلة المحذوفات — استرجعها أولاً");
 
         const teacher = args.teacherId ? await ctx.db.get(args.teacherId) : null;
         const cls = args.classId ? await ctx.db.get(args.classId) : null;
-        if (!teacher) throw new ConvexError("اختر المعلم");
+        if (!teacher || !canAccess(access, teacher.schoolId, teacher.department ?? "")) throw new ConvexError("المعلم خارج الأقسام المسموحة لك");
+        if (delegated && !supervisor!.subjects.map((d: string) => d.trim()).includes((teacher.department ?? "").trim())) throw new ConvexError("الموجه غير مسجل لهذا القسم");
+        if (cls && cls.schoolId !== school._id) throw new ConvexError("الصف غير متاح");
 
         // A submitted visit keeps who, by whom, what and when — as in the workbook
         if (existing && existing.status === "submitted") {
@@ -297,6 +317,8 @@ export const saveVisit = mutation({
             visitorRole: args.visitorRole,
             visitorId: args.visitorId,
             visitorName: args.visitorName.trim(),
+            recordedByVisitorId: existing ? existing.recordedByVisitorId : access.visitorId,
+            recordedByName: existing ? existing.recordedByName : access.name,
             teacherId: args.teacherId,
             teacherName,
             teacherDepartment: (teacher.department ?? "").trim(),
@@ -387,9 +409,10 @@ export const saveVisit = mutation({
     },
 });
 
-export const deleteVisit = mutation({
+export const deleteVisit = deputyMutation({
     args: { id: v.id("supervisionVisits"), reason: v.string(), actorName: v.optional(v.string()) },
     handler: async (ctx, args) => {
+        args.actorName = (ctx as any).supervisionSession.name;
         if (!args.reason.trim()) throw new ConvexError("اكتب سبب الحذف");
         const visit = await ctx.db.get(args.id);
         if (!visit) throw new ConvexError("الزيارة غير موجودة");
@@ -401,18 +424,19 @@ export const deleteVisit = mutation({
     },
 });
 
-export const restoreVisit = mutation({
+export const restoreVisit = deputyMutation({
     args: { id: v.id("supervisionVisits"), actorName: v.optional(v.string()) },
     handler: async (ctx, args) => {
         const visit = await ctx.db.get(args.id);
         if (!visit) throw new ConvexError("الزيارة غير موجودة");
+        args.actorName = (ctx as any).supervisionSession.name;
         await ctx.db.patch(args.id, { deletedAt: undefined, deletedBy: undefined, deleteReason: undefined });
         await audit(ctx, visit.schoolId, args.id, "restored", args.actorName, `استرجاع زيارة ${visit.teacherName}`);
     },
 });
 
 // ── Settings ─────────────────────────────────────────────────────────────
-export const updateSettings = mutation({
+export const updateSettings = deputyMutation({
     args: {
         academicYear: v.optional(v.string()),
         yearStart: v.optional(v.string()),
@@ -427,6 +451,7 @@ export const updateSettings = mutation({
         footerImageId: v.optional(v.union(v.id("_storage"), v.null())),
     },
     handler: async (ctx, args) => {
+        if (args.deputyName !== undefined && !args.deputyName.trim()) throw new ConvexError("اسم النائب الأكاديمي مطلوب");
         const school = await getSchool(ctx);
         const existing = await ctx.db.query("supervisionSettings")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
@@ -443,7 +468,7 @@ export const updateSettings = mutation({
     },
 });
 
-export const generateUploadUrl = mutation({
+export const generateUploadUrl = deputyMutation({
     args: {},
     handler: async (ctx) => ctx.storage.generateUploadUrl(),
 });

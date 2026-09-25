@@ -1,3 +1,4 @@
+import TeacherAcknowledgement from "./pages/visits/TeacherAcknowledgement";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 import { LayoutGrid, LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen, Lock, FlaskConical } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
@@ -109,7 +110,7 @@ function useHomePath(): string {
 
 function App() {
   const { pathname } = useLocation();
-  const isPrintPage = pathname.includes("/print/");
+  const isPrintPage = pathname.includes("/print/") || pathname === "/supervision/acknowledge";
   return (
     <div className={`${isPrintPage ? "" : "app-shell"} min-h-screen bg-qatar-gray-bg text-slate-900 font-sans`} dir="rtl">
       <a href="#main-content" className="skip-link">انتقل إلى المحتوى</a>
@@ -124,6 +125,7 @@ function App() {
           <Route path="/messages"            element={<FeatureRoute featureKey="/messages"><MessagesPage /></FeatureRoute>} />
           <Route path="/surveys"             element={<FeatureRoute featureKey="/surveys"><SurveysPage /></FeatureRoute>} />
           <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><VisitsPage /></FeatureRoute>} />
+          <Route path="/supervision/acknowledge" element={<TeacherAcknowledgement />} />
           <Route path="/supervision/print/:id" element={<VisitFormPrint />} />
           <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
           <Route path="/grades/print/class" element={<GradesSheetPrint />} />

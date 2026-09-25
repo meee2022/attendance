@@ -1,12 +1,15 @@
+import { VisitArchiveSettings } from "./VisitArchive";
+import VisitFollowUp from "./VisitFollowUp";
+import "./visits.css";
 import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useSupervisionQuery as useQuery, SupervisionBoundary, useSupervisionSession } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import {
     ClipboardCheck, LayoutDashboard, Plus, Layers, User, BarChart3, Users, LogOut,
 } from "lucide-react";
 import { PageHeader, LoadingSpinner } from "../../components/ui";
-import SupervisionPinGate, { getStoredRole, clearStoredRole } from "../../components/SupervisionPinGate";
+import { clearStoredRole } from "../../components/SupervisionPinGate";
 import SupervisionTeachers from "../SupervisionTeachers";
 import { ROLE_LABELS, type VisitorRole } from "../../../convex/visitMath";
 import type { VisitRow } from "../../lib/visitStats";
@@ -21,32 +24,20 @@ import VisitsAnalysis from "./VisitsAnalysis";
 // is the question the academic deputy comes with; recording a visit is one
 // tab away.
 
-type Tab = "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people";
+type Tab = "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
 
 export type Session = { role: VisitorRole; name: string; visitorId?: string };
 
 export default function VisitsPage() {
-    const [session, setSession] = useState<Session | null>(() => {
-        const s = getStoredRole();
-        return s ? { role: s.role, name: s.name, visitorId: s.visitorId } : null;
-    });
-
-    // @ts-ignore
+    return <SupervisionBoundary><AuthenticatedVisits/></SupervisionBoundary>;
+}
+function AuthenticatedVisits() {
+    const session = useSupervisionSession()!;
     const setup = useQuery(api.visits.getSetup) as any;
-    // @ts-ignore
     const visits = useQuery(api.visits.listVisits, {}) as VisitRow[] | undefined;
-
-    if (!session) {
-        return <SupervisionPinGate onAuthed={() => {
-            const s = getStoredRole();
-            if (s) setSession({ role: s.role, name: s.name, visitorId: s.visitorId });
-        }}/>;
-    }
-
     if (!setup || !visits) return <LoadingSpinner label="جاري تحميل الإشراف الصفي…"/>;
-
     return <VisitsWorkspace setup={setup} visits={visits} session={session}
-        onSignOut={() => { clearStoredRole(); setSession(null); }}/>;
+        onSignOut={() => { clearStoredRole(); }}/ >;
 }
 
 // The departments a visitor works in: a coordinator or a supervisor sees the
@@ -55,7 +46,7 @@ export function scopeOf(setup: any, session: Session): string[] | null {
     if (session.role === "deputy") return null;
     const me = setup.visitors.find((v: any) => v._id === session.visitorId);
     const mine = (me?.subjects ?? []).map((s: string) => s.trim()).filter((s: string) => setup.departments.includes(s));
-    return mine.length ? mine : null;
+    return mine;
 }
 
 // The page once the visitor is known — kept apart from the sign-in so it can be
@@ -65,6 +56,9 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
 }) {
     const [tab, setTab] = useState<Tab>("dashboard");
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);
+    const [registryView, setRegistryView] = useState<"submitted" | "draft">("submitted");
+    const [followupTeacher, setFollowupTeacher] = useState("");
     const [teacherFocus, setTeacherFocus] = useState<string>("");
 
     // Everything below is narrowed to the visitor's departments once, here, so
@@ -84,7 +78,8 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fullSetup, allVisits, scopeKey]);
 
-    const openTeacher = (teacherId: string) => { setTeacherFocus(teacherId); setTab("teacher"); };
+    const openFollowUp = (id = "") => { setFollowupTeacher(id); setTab("followup"); };
+    const openTeacher = (teacherId: string) => { if (dirty && !window.confirm("يوجد تعديل لم يُحفظ. هل تريد فتح ملف المعلم؟")) return; setTeacherFocus(teacherId); setTab("teacher"); };
     const editVisit = (id: string) => { setEditingId(id); setTab("new"); };
     const printVisit = (id: string) => window.open(`/supervision/print/${id}`, "_blank");
 
@@ -94,6 +89,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
         { key: "registry", label: "سجل الزيارات", icon: <Layers className="w-4 h-4"/> },
         { key: "teacher", label: "ملف المعلم", icon: <User className="w-4 h-4"/> },
         { key: "analysis", label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
+        { key: "followup", label: "المتابعة والخطة", icon: <ClipboardCheck className="w-4 h-4"/> },
         // Managing the staff list is the deputy's job, not each department's
         ...(session.role === "deputy"
             ? [{ key: "people" as Tab, label: "المعلمون والزائرون", icon: <Users className="w-4 h-4"/> }]
@@ -106,17 +102,18 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
                 subtitle={`استمارة الإشراف على أداء المعلم · العام الأكاديمي ${setup.settings.academicYear}`}>
                 <span className="grades-header-note flex items-center gap-2">
                     {ROLE_LABELS[session.role]} · {session.name}{scope ? ` · ${scope.join("، ")}` : ""}
-                    <button onClick={onSignOut} title="تبديل المستخدم" aria-label="تبديل المستخدم"
+                    <button onClick={() => { if (!dirty || window.confirm("يوجد تعديل لم يُحفظ في السجل. هل تريد تغيير المستخدم؟")) onSignOut(); }} title="تبديل المستخدم" aria-label="تبديل المستخدم"
                         className="p-1 rounded-md text-slate-400 hover:text-qatar-maroon hover:bg-qatar-cream-dark">
                         <LogOut className="w-4 h-4"/>
                     </button>
                 </span>
             </PageHeader>
 
+            <VisitArchiveSettings/>
             <div className="grades-tabs" role="group" aria-label="أقسام الإشراف الصفي">
                 {tabs.map(({ key, label, icon }) => (
                     <button key={key} aria-pressed={tab === key}
-                        onClick={() => { if (key !== "new") setEditingId(null); setTab(key); }}
+                        onClick={() => { if (key !== tab && dirty && !window.confirm("يوجد تعديل لم يُحفظ في السجل. هل تريد مغادرة النموذج؟")) return; if (key !== "new") setEditingId(null); setTab(key); }}
                         className={`grades-tab ${tab === key ? "is-active" : ""}`}>
                         {icon}{label}
                     </button>
@@ -126,21 +123,24 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
             {tab === "dashboard" && (
                 <VisitsDashboard setup={setup} visits={visits} onOpenTeacher={openTeacher}
                     onNewVisit={() => { setEditingId(null); setTab("new"); }}
-                    onOpenDrafts={() => setTab("registry")}/>
+                    onOpenFollowUp={() => openFollowUp()}
+                    onOpenDrafts={() => { setRegistryView("draft"); setTab("registry"); }}/>
             )}
             {tab === "new" && (
                 <VisitForm key={editingId ?? "new"} setup={setup} session={session} editingId={editingId}
-                    visits={visits}
-                    onDone={() => { setEditingId(null); setTab("registry"); }}/>
+                    onNewVisit={() => { setDirty(false); setEditingId(null); }}
+                    visits={visits} onDirtyChange={setDirty}
+                    onDone={() => { setDirty(false); setEditingId(null); setRegistryView("submitted"); setTab("registry"); }}/>
             )}
             {tab === "registry" && (
-                <VisitsRegistry setup={setup} visits={visits} session={session}
+                <VisitsRegistry initialView={registryView} setup={setup} visits={visits} session={session}
                     onEdit={editVisit} onPrint={printVisit} onOpenTeacher={openTeacher}/>
             )}
             {tab === "teacher" && (
                 <TeacherFile setup={setup} visits={visits} teacherId={teacherFocus}
-                    onChangeTeacher={setTeacherFocus} onPrint={printVisit}/>
+                    onChangeTeacher={setTeacherFocus} onPrint={printVisit} onFollowUp={openFollowUp}/>
             )}
+            {tab === "followup" && <VisitFollowUp onDirtyChange={setDirty} setup={setup} visits={visits} teacherId={followupTeacher} onOpenTeacher={openTeacher}/>}
             {tab === "analysis" && <VisitsAnalysis setup={setup} visits={visits}/>}
             {tab === "people" && session.role === "deputy" && <SupervisionTeachers/>}
         </div>

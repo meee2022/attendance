@@ -117,7 +117,7 @@ export default function VisitsAnalysis({ setup, visits }: { setup: any; visits: 
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3 h-fit">
                     <h3 className="font-bold text-slate-700 text-sm">الاحتياج التدريبي</h3>
-                    <p className="text-[11px] font-bold text-slate-500">أضعف المعايير في النطاق المختار — موضوعات مقترحة للورش.</p>
+                    <p className="text-[11px] font-bold text-slate-500">معايير أقل متوسطًا في الفترة — أولويات للمراجعة قبل تحديد التدريب، مع مراعاة مرات القياس.</p>
                     {weakest.length === 0 ? <p className="text-xs font-bold text-slate-400">لا توجد بيانات.</p> : weakest.map(c => (
                         <div key={c._id} className="rounded-xl bg-rose-50 p-3">
                             <p className="text-xs font-bold text-rose-900 leading-relaxed">{c.text}</p>

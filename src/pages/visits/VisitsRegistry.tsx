@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import { Download, Pencil, Printer, RotateCcw, Search, Trash2, X } from "lucide-react";
@@ -15,8 +15,9 @@ import type { Session } from "./VisitsPage";
 
 type View = "submitted" | "draft" | "deleted";
 
-export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint, onOpenTeacher }: {
+export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint, onOpenTeacher, initialView = "submitted" }: {
     setup: any;
+    initialView?: "submitted" | "draft";
     visits: VisitRow[];
     session: Session;
     onEdit: (id: string) => void;
@@ -24,11 +25,12 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
     onOpenTeacher: (teacherId: string) => void;
 }) {
     const year = periodPresets(setup)[0];
-    const [filters, setFilters] = useState<Filters>({ department: "", teacherId: "", role: "", from: year.from, to: year.to });
-    const [view, setView] = useState<View>(() => visits.some(v => v.status === "draft") ? "draft" : "submitted");
+    const [filters, setFilters] = useState<Filters>({ department: "", teacherId: "", role: "", from: initialView === "draft" ? "" : year.from, to: initialView === "draft" ? "" : year.to });
+    const [view, setView] = useState<View>(initialView);
     const [search, setSearch] = useState("");
     const [deleting, setDeleting] = useState<VisitRow | null>(null);
     const [reason, setReason] = useState("");
+    const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
 
     // @ts-ignore
@@ -47,23 +49,23 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
     }, [source, filters, search]);
 
     const counts = {
-        submitted: visits.filter(v => v.status === "submitted").length,
-        draft: visits.filter(v => v.status === "draft").length,
+        submitted: applyFilters(visits, filters).filter(v => v.status === "submitted").length,
+        draft: applyFilters(visits, filters).filter(v => v.status === "draft").length,
     };
 
     const confirmDelete = async () => {
         if (!deleting || !reason.trim()) return;
-        setBusy(true);
+        setBusy(true); setError("");
         try {
             await deleteVisit({ id: deleting._id as any, reason, actorName: session.name });
             setDeleting(null); setReason("");
-        } finally { setBusy(false); }
+        } catch (e: any) { setError(typeof e?.data === "string" ? e.data : "تعذّر تنفيذ العملية؛ حاول مرة أخرى"); } finally { setBusy(false); }
     };
 
     const exportExcel = () => downloadWorkbook(`سجل الزيارات الصفية - ${setup.settings.academicYear}`, [{
         name: "سجل الزيارات",
         title: "سجل الزيارات الصفية",
-        meta: [setup.settings.schoolNameOnForm, `العام الأكاديمي ${setup.settings.academicYear} · ${rows.length} زيارة`],
+        meta: [setup.settings.schoolNameOnForm, `الفترة: ${filters.from ? formatDate(filters.from) : "البداية"} — ${filters.to ? formatDate(filters.to) : "كل التواريخ"} · ${rows.length} زيارة`],
         columns: [
             { header: "رقم السجل", width: 9, align: "center" },
             { header: "التاريخ", width: 12, align: "center" },
@@ -94,6 +96,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
 
     return (
         <div className="space-y-4">
+            {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
             <FiltersBar setup={setup} value={filters} onChange={setFilters} showTeacher/>
 
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -101,7 +104,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                     {([
                         ["submitted", `المعتمدة (${counts.submitted})`],
                         ["draft", `المسودات (${counts.draft})`],
-                        ["deleted", "سلة المحذوفات"],
+                        ...(session.role === "deputy" ? [["deleted", "سلة المحذوفات"]] : []),
                     ] as [View, string][]).map(([k, label]) => (
                         <button key={k} onClick={() => setView(k)} aria-pressed={view === k}
                             className={`px-3 py-1.5 rounded-lg text-xs font-black border ${
@@ -168,7 +171,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                         <td className="px-2 py-2">
                                             <div className="flex gap-1 justify-end">
                                                 {view === "deleted" ? (
-                                                    <IconBtn title="استرجاع" onClick={() => restoreVisit({ id: v._id as any, actorName: session.name })}>
+                                                    <IconBtn title="استرجاع" onClick={() => { void restoreVisit({ id: v._id as any, actorName: session.name }).catch((e: any) => setError(typeof e?.data === "string" ? e.data : "تعذّر الاسترجاع")); }}>
                                                         <RotateCcw className="w-4 h-4"/>
                                                     </IconBtn>
                                                 ) : (
@@ -178,12 +181,12 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                                                 <Printer className="w-4 h-4"/>
                                                             </IconBtn>
                                                         )}
-                                                        <IconBtn title={v.status === "draft" ? "إكمال المسودة" : "تعديل"} onClick={() => onEdit(v._id)}>
+                                                        {(session.role === "deputy" || v.visitorId === session.visitorId || v.recordedByVisitorId === session.visitorId) && <IconBtn title={v.status === "draft" ? "إكمال المسودة" : "تعديل"} onClick={() => onEdit(v._id)}>
                                                             <Pencil className="w-4 h-4"/>
-                                                        </IconBtn>
-                                                        <IconBtn title="حذف" danger onClick={() => { setDeleting(v); setReason(""); }}>
+                                                        </IconBtn>}
+                                                        {session.role === "deputy" && <IconBtn title="حذف" danger onClick={() => { setDeleting(v); setReason(""); }}>
                                                             <Trash2 className="w-4 h-4"/>
-                                                        </IconBtn>
+                                                        </IconBtn>}
                                                     </>
                                                 )}
                                             </div>

@@ -1,51 +1,154 @@
-import { useEffect, useRef } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
-import { DOMAINS, DOMAIN_LABELS, RATING_SCALE, dayName, formatDate, type VisitorRole } from "../../../convex/visitMath";
+import { DOMAINS, dayName, formatDate, type Domain, type Rating, type VisitorRole } from "../../../convex/visitMath";
 
-// «استمارة الإشراف على أداء المعلّم» as the ministry workbook prints it
-// (print area B1:P40 of the «<subject> - coordinator» sheets): the same rows,
-// the same merged cells, the rating columns written vertically, the
-// recommendations merged per domain, and the signature row that differs by
-// visitor type. Column widths and row heights are the workbook's own.
+// «استمارة الإشراف على أداء المعلّم» exactly as the ministry prints it in
+// «النماذج المعتمدة للنائب 2026-2027» (pages 10 and 11). The two pages are the
+// document itself, exported from Word as vector drawings with the text turned
+// into outlines — so the lines, shading, fonts and wording are the ministry's
+// own and do not depend on what is installed on the printing machine. The
+// visit's details are written into the cells on top of them.
 //
-// The wording, the school, the academic year and the deputy's name come from
-// the snapshot frozen when the visit was submitted, so a later change in the
-// settings never rewrites an old form.
+// Every position below is in PDF points on an A4 page (595.32 × 841.92), read
+// from the document's own table borders.
 
-// Excel column widths (characters) → pixels, B..O
-const COL_WIDTHS = [6, 5, 36.45, 14.54, 5.18, 5.18, 5.18, 5.18, 5.18, 5.82, 8.43, 5.82, 8.43, 7.54]
-    .map(w => Math.round(w * 7 + 5));
-const COLS = "BCDEFGHIJKLMNO".split("");
-const col = (letter: string) => COLS.indexOf(letter);
-const span = (from: string, to: string) => col(to) - col(from) + 1;
-
-// Row heights in points, as set in the sheet
-const ROW_PT: Record<number, number> = {
-    1: 15, 2: 15, 3: 15, 4: 15, 5: 23.25, 6: 25.5, 7: 24, 8: 21, 9: 12, 10: 120, 11: 33.75,
-    34: 27, 35: 18, 36: 18, 37: 18, 38: 17.15, 39: 21.75, 40: 36,
-};
-const rowPt = (r: number) => ROW_PT[r] ?? 23.25;
-
+const PAGE_W = 595.32;
+const PAGE_H = 841.92;
 const FORM_FONT = `"Sakkal Majalla", "Traditional Arabic", "Amiri", "Noto Naskh Arabic", serif`;
-const CALIBRI = `Calibri, "Segoe UI", Arial, sans-serif`;
-const HEADING = `"PT Bold Heading", "Sakkal Majalla", "Traditional Arabic", serif`;
 
-const cell: CSSProperties = { border: "1px solid #000", padding: "0 4px", verticalAlign: "middle", textAlign: "center" };
-const bold = (size: number, family = FORM_FONT): CSSProperties => ({ fontFamily: family, fontSize: `${size}pt`, fontWeight: 700 });
-const vertical: CSSProperties = { writingMode: "vertical-rl", transform: "rotate(180deg)", whiteSpace: "normal", margin: "0 auto" };
+type Box = [x0: number, x1: number, y0: number, y1: number];
 
-// Long recommendations shrink inside their cell instead of breaking the page,
-// the way «تقليص للملاءمة» does in Excel
-function fitText(text: string, rows: number): CSSProperties {
-    const perRow = 26;                                  // characters a row holds at 14pt
-    const room = Math.max(1, rows) * perRow * 3;
-    const size = text.length <= room ? 14 : Math.max(8, Math.floor(14 * Math.sqrt(room / text.length)));
-    return { fontFamily: CALIBRI, fontSize: `${size}pt`, textAlign: "right", verticalAlign: "top", whiteSpace: "pre-line", lineHeight: 1.25, padding: "4px 6px" };
+// المعلومات الأساسيّة
+const INFO = {
+    school: [404.1, 496.7, 111.3, 131.3],
+    date: [26.5, 285.9, 111.3, 131.3],
+    subject: [404.1, 496.7, 131.3, 151.3],
+    className: [26.5, 285.9, 131.3, 151.3],
+    topic: [404.1, 496.7, 151.3, 190.9],
+    visitorLabel: [285.9, 404.1, 151.3, 190.9],
+    visitor: [26.5, 285.9, 151.3, 190.9],
+    teacher: [404.1, 496.7, 190.9, 231.1],
+    field: [215.0, 245.6, 190.9, 211.0],
+    remote: [148.0, 172.9, 190.9, 211.0],
+    partial: [81.1, 113.8, 190.9, 211.0],
+    full: [26.5, 50.4, 190.9, 211.0],
+    merged: [148.0, 215.0, 211.0, 231.1],
+    unmerged: [26.5, 50.4, 211.0, 231.1],
+} satisfies Record<string, Box>;
+
+// The five rating columns, as printed from right to left
+const RATING_X: [Rating, number, number][] = [
+    [3, 301.0, 321.7], [2, 280.3, 301.0], [1, 259.6, 280.3], [0, 238.8, 259.6], ["not_measured", 218.2, 238.8],
+];
+const REC_X: [number, number] = [24.7, 218.2];
+
+// The criteria rows: page 1 holds التخطيط, تنفيذ الدرس and the first two of
+// التقويم; page 2 repeats the heading and continues with the third criterion
+// of التقويم and الإدارة الصفية.
+const P1_ROWS = [352.4, 386.3, 407.2, 428.0, 449.0, 469.7, 490.5, 511.4, 545.3, 566.1, 587.0, 607.8, 628.5,
+    649.4, 670.2, 690.9, 711.8, 732.7, 753.6];
+const P2_ROWS = [153.3, 174.0, 195.0, 215.8, 236.7, 257.4];
+const EXPECTED: Record<Domain, number> = { planning: 3, execution: 13, evaluation: 3, management: 4 };
+
+const NOTES: Box = [24.7, 569.9, 277.5, 325.1];
+const SIGN_LABEL: Box = [130.3, 290.0, 325.1, 345.2];
+const SIGNATURE: Box = [24.7, 130.3, 325.1, 345.2];
+const PAGE_NO: Box = [50, 68, 756, 775];
+
+type Row = { page: 1 | 2; y0: number; y1: number };
+
+function criterionRows(): Row[] {
+    const rows: Row[] = [];
+    for (let i = 0; i + 1 < P1_ROWS.length; i++) rows.push({ page: 1, y0: P1_ROWS[i], y1: P1_ROWS[i + 1] });
+    for (let i = 0; i + 1 < P2_ROWS.length; i++) rows.push({ page: 2, y0: P2_ROWS[i], y1: P2_ROWS[i + 1] });
+    return rows;
 }
+
+// A box drawn just inside a cell's borders, to cover a printed label
+const inside = ([x0, x1, y0, y1]: Box, d = 0.8): Box => [x0 + d, x1 - d, y0 + d, y1 - d];
+
+const at = ([x0, x1, y0, y1]: Box): CSSProperties => ({
+    position: "absolute",
+    left: `${(x0 / PAGE_W) * 100}%`, width: `${((x1 - x0) / PAGE_W) * 100}%`,
+    top: `${(y0 / PAGE_H) * 100}%`, height: `${((y1 - y0) / PAGE_H) * 100}%`,
+});
+
+// Text centred in a cell, as the form's own labels are
+function Cell({ box, size = 13, children, style }: { box: Box; size?: number; children: ReactNode; style?: CSSProperties }) {
+    return (
+        <div style={{
+            ...at(box), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
+            fontFamily: FORM_FONT, fontSize: `${size}pt`, fontWeight: 700, lineHeight: 1.1, padding: "0 3pt",
+            overflow: "hidden", color: "#000", ...style,
+        }}>{children}</div>
+    );
+}
+
+const Tick = ({ box }: { box: Box }) => (
+    <Cell box={box} size={12} style={{ fontFamily: `"Segoe UI Symbol", "DejaVu Sans", Arial, sans-serif`, padding: 0 }}>✓</Cell>
+);
+
+// A cell of free text that shrinks until it fits, the way «تقليص للملاءمة»
+// does, instead of spilling over the lines of the form
+function FitText({ box, text, max = 12, min = 6 }: { box: Box; text: string; max?: number; min?: number }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        let size = max;
+        el.style.fontSize = `${size}pt`;
+        while (size > min && el.scrollHeight > el.clientHeight + 1) {
+            size -= 0.5;
+            el.style.fontSize = `${size}pt`;
+        }
+    }, [text, max, min]);
+    if (!text.trim()) return null;
+    return (
+        <div ref={ref} style={{
+            ...at(box), fontFamily: FORM_FONT, fontSize: `${max}pt`, lineHeight: 1.15, padding: "2pt 4pt",
+            textAlign: "right", whiteSpace: "pre-line", overflow: "hidden", color: "#000", direction: "rtl",
+        }}>{text}</div>
+    );
+}
+
+// The recommendation of التقويم sits in a cell the page break cuts in two, as
+// in the Word document: what does not fit in the part on page 1 carries on in
+// the part on page 2, at the same size.
+function useSplit(text: string, first: Box, size = 11) {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const [cut, setCut] = useState(words.length);
+    useLayoutEffect(() => {
+        const probe = document.createElement("div");
+        const [x0, x1, y0, y1] = first;
+        // measured at print size: 1pt = 96/72 px
+        Object.assign(probe.style, {
+            position: "fixed", left: "-9999px", top: "0", visibility: "hidden", boxSizing: "border-box",
+            width: `${(x1 - x0) * 96 / 72}px`, fontFamily: FORM_FONT, fontSize: `${size}pt`, lineHeight: "1.15",
+            padding: "2pt 4pt", whiteSpace: "pre-line", direction: "rtl",
+        });
+        document.body.appendChild(probe);
+        const room = (y1 - y0) * 96 / 72;
+        let lo = 0, hi = words.length;
+        while (lo < hi) {
+            const mid = Math.ceil((lo + hi) / 2);
+            probe.textContent = words.slice(0, mid).join(" ");
+            if (probe.scrollHeight <= room + 1) lo = mid; else hi = mid - 1;
+        }
+        probe.remove();
+        setCut(lo);
+    }, [text]);
+    return [words.slice(0, cut).join(" "), words.slice(cut).join(" ")] as const;
+}
+
+const VISITOR_TITLE: Record<VisitorRole, string> = {
+    deputy: "نائب المدير للشؤون الأكاديمية",
+    coordinator: "المنسّق",
+    supervisor: "الموجّه",
+};
 
 export default function VisitFormPrint() { return <SupervisionBoundary><VisitFormPrintContent/></SupervisionBoundary>; }
 function VisitFormPrintContent() {
@@ -75,228 +178,131 @@ function VisitFormPrintContent() {
 export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar?: boolean }) {
     const { visit, criteria, form } = data;
     const role: VisitorRole = visit.visitorRole;
-    const rows = 11;                                   // first criterion row
-    const byDomain = DOMAINS.map(d => ({ domain: d, list: criteria.filter((c: any) => c.domain === d) }));
+    const visitorName = role === "deputy" ? (form.deputyName || visit.visitorName) : visit.visitorName;
 
-    // Row numbers per criterion and the merged ranges of the domain/recommendation columns
-    let r = rows;
-    const layout = byDomain.map(({ domain, list }) => {
-        const start = r;
-        r += list.length;
-        return { domain, list, start, end: r - 1 };
+    // Criteria in the form's order, each on its printed row
+    const ordered = DOMAINS.flatMap(d => criteria
+        .filter((c: any) => c.domain === d)
+        .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)));
+    const rows = criterionRows();
+    const standard = DOMAINS.every(d => criteria.filter((c: any) => c.domain === d).length === EXPECTED[d]);
+    const placed = ordered.slice(0, rows.length).map((c: any, i: number) => ({ c, row: rows[i] }));
+
+    // Recommendations: one merged cell per domain. Visits recorded before the
+    // form had a separate box for الإدارة الصفية keep their joint text under التقويم.
+    const recs = {
+        planning: String(visit.planningRec ?? ""),
+        execution: String(visit.executionRec ?? ""),
+        evaluation: String(visit.evalMgmtRec ?? ""),
+        management: String(visit.managementRec ?? ""),
+    };
+    const ticks = (page: 1 | 2) => placed.filter(p => p.row.page === page).flatMap(({ c, row }) => {
+        const r = visit.ratings[c._id];
+        const col = RATING_X.find(([v]) => v === r);
+        return col ? [<Tick key={c._id} box={[col[1], col[2], row.y0, row.y1]}/>] : [];
     });
-    const lastCriterionRow = r - 1;
-    const recGroups = [
-        { key: "planningRec", start: layout[0].start, end: layout[0].end },
-        { key: "executionRec", start: layout[1].start, end: layout[1].end },
-        { key: "evalMgmtRec", start: layout[2].start, end: lastCriterionRow },
-    ];
 
-    const tick = (on: boolean) => (on ? <span style={{ fontFamily: "Segoe UI Symbol, Arial", fontWeight: 700, fontSize: "14pt" }}>✓</span> : null);
-    const signatureName = role === "deputy" ? (form.deputyName || visit.visitorName) : visit.visitorName;
+    const delivery = visit.deliveryMode ?? "field";
+    const evalBox1: Box = [...REC_X, P1_ROWS[16], P1_ROWS[18]];
+    const evalBox2: Box = [...REC_X, P2_ROWS[0], P2_ROWS[1]];
+    // Line breaks typed by the visitor are kept only when it all fits on page 1
+    const [evalHead, evalTail] = useSplit(recs.evaluation, evalBox1);
 
     return (
         <div dir="rtl" className="vfp">
             <style>{`
-                @page { size: A4 portrait; margin: 6mm 12mm 6mm 12mm; }
+                @page { size: A4 portrait; margin: 0; }
                 @media print {
                     .no-print, .skip-link { display: none !important; }
-                    html, body { background: #fff !important; }
+                    html, body { background: #fff !important; margin: 0 !important; }
                     /* the app frame keeps a full-height padded shell around print routes */
                     #main-content { padding: 0 !important; margin: 0 !important; max-width: none !important; }
                     .min-h-screen { min-height: 0 !important; }
-                    .vfp { background: #fff; min-height: 0 !important; }
-                    .sheet { zoom: 0.69; box-shadow: none !important; margin: 0 !important; break-after: avoid; }
+                    .vfp { background: #fff !important; min-height: 0 !important; padding: 0 !important; }
+                    .form-page { margin: 0 !important; box-shadow: none !important; }
                 }
-                .vfp { background: #e2e8f0; min-height: 100vh; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .sheet { background: #fff; width: ${COL_WIDTHS.reduce((a, b) => a + b, 0) + 24}px; margin: 16px auto; padding: 8px 12px; box-shadow: 0 4px 24px rgba(0,0,0,.12); }
-                .sheet table { border-collapse: collapse; table-layout: fixed; width: ${COL_WIDTHS.reduce((a, b) => a + b, 0)}px; color: #000; }
+                .vfp { background: #e2e8f0; min-height: 100vh; padding-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; }
+                .form-page:last-child { break-after: auto; page-break-after: auto; }
+                .form-page > img.form-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
             `}</style>
 
-            {toolbar && <div className="no-print p-3 flex gap-2 items-center justify-center">
+            {toolbar && <div className="no-print p-3 flex gap-2 items-center justify-center flex-wrap">
                 <button onClick={() => window.print()} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm">
                     طباعة / حفظ PDF
                 </button>
                 {visit.status !== "submitted" && (
                     <span className="text-xs font-bold text-amber-700">مسودة — لم تُعتمد بعد</span>
                 )}
+                {!standard && (
+                    <span className="text-xs font-bold text-amber-700">
+                        عدد المعايير في هذه الزيارة يختلف عن النموذج المعتمد (3 · 13 · 3 · 4) — راجع المعايير من الإعدادات.
+                    </span>
+                )}
             </div>}
 
-            <div className="sheet">
-                {/* Header — the school's official band, replaceable from the settings */}
-                {form.headerUrl ? (
-                    <img src={form.headerUrl} alt="" style={{ width: "100%", display: "block", marginBottom: 6 }}/>
-                ) : (
-                    <div style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", marginBottom: 6,
-                        background: "linear-gradient(90deg,#5C1523,#8a3a48 60%,#e8d6d9)", color: "#fff", borderRadius: 6,
-                    }}>
-                        <div style={bold(15)}>{form.schoolName}</div>
-                        <div style={{ ...bold(11), textAlign: "left", lineHeight: 1.3 }}>
-                            وزارة التربية والتعليم والتعليم العالي<br/>
-                            <span style={{ fontFamily: CALIBRI, fontSize: "8pt", fontWeight: 400 }}>Ministry of Education and Higher Education</span>
-                        </div>
+            {/* Page 1 */}
+            <div className="form-page">
+                <img className="form-bg" src="/forms/visit-form-p1.svg" alt=""/>
+
+                <Cell box={INFO.school}>{form.schoolName}</Cell>
+                <Cell box={INFO.date}>
+                    <span>{dayName(visit.visitDate)}</span>&nbsp;&nbsp;<bdi dir="ltr">{formatDate(visit.visitDate)}</bdi>
+                </Cell>
+                <Cell box={INFO.subject}>{visit.subjectName}</Cell>
+                <Cell box={INFO.className}>{visit.className}</Cell>
+                <Cell box={INFO.topic} size={visit.lessonTopic?.length > 28 ? 11 : 13}>{visit.lessonTopic}</Cell>
+                {role !== "deputy" && (
+                    <Cell box={inside(INFO.visitorLabel)} size={14} style={{ background: "#ECE9E3", fontWeight: 400 }}>
+                        {VISITOR_TITLE[role]}
+                    </Cell>
+                )}
+                <Cell box={INFO.visitor}>{visitorName}</Cell>
+                <Cell box={INFO.teacher} size={visit.teacherName?.length > 24 ? 11 : 13}>{visit.teacherName}</Cell>
+
+                {delivery === "field" ? <Tick box={INFO.field}/> : <Tick box={INFO.remote}/>}
+                {visit.followUpType === "partial" ? <Tick box={INFO.partial}/> : <Tick box={INFO.full}/>}
+                {delivery === "remote" && visit.streamMode === "merged" && <Tick box={INFO.merged}/>}
+                {delivery === "remote" && visit.streamMode === "unmerged" && <Tick box={INFO.unmerged}/>}
+
+                {ticks(1)}
+
+                {/* التخطيط · تنفيذ الدرس · التقويم (its first two rows) */}
+                <FitText box={[...REC_X, P1_ROWS[0], P1_ROWS[3]]} text={recs.planning}/>
+                <FitText box={[...REC_X, P1_ROWS[3], P1_ROWS[16]]} text={recs.execution}/>
+                {evalTail
+                    ? <FitText box={evalBox1} text={evalHead} max={11}/>
+                    : <FitText box={evalBox1} text={recs.evaluation}/>}
+
+                <Cell box={PAGE_NO} size={12}>1</Cell>
+            </div>
+
+            {/* Page 2 */}
+            <div className="form-page">
+                <img className="form-bg" src="/forms/visit-form-p2.svg" alt=""/>
+
+                {ticks(2)}
+                <FitText box={evalBox2} text={evalTail} max={11}/>
+                <FitText box={[...REC_X, P2_ROWS[1], P2_ROWS[5]]} text={recs.management}/>
+                <FitText box={NOTES} text={String(visit.notes ?? "")} max={13}/>
+
+                {role !== "deputy" && (
+                    <Cell box={inside(SIGN_LABEL)} size={14} style={{ background: "#DDDDDD", fontWeight: 400 }}>
+                        توقيع {VISITOR_TITLE[role]}
+                    </Cell>
+                )}
+
+                {role === "deputy" && form.signatureUrl && (
+                    // A signature is taller than the row: it sits centred on the
+                    // cell and crosses its lines, as a pen signature would
+                    <div style={{ ...at([SIGNATURE[0], SIGNATURE[1], SIGNATURE[2] - 9, SIGNATURE[3] + 9]), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <img src={form.signatureUrl} alt=""
+                            style={{ maxWidth: "88%", maxHeight: "100%", objectFit: "contain", display: "block" }}/>
                     </div>
                 )}
 
-                <table>
-                    <colgroup>{COL_WIDTHS.map((w, i) => <col key={i} style={{ width: w }}/>)}</colgroup>
-                    <tbody>
-                        <tr style={{ height: `${rowPt(1) + rowPt(2)}pt` }}>
-                            <td colSpan={14} style={{ ...bold(26), textAlign: "center" }}>
-                                استمارة الإشراف على أداء المعلّم - العام الأكاديميّ {form.academicYear}
-                            </td>
-                        </tr>
-                        <tr style={{ height: `${rowPt(3) + rowPt(4)}pt` }}>
-                            <td colSpan={14} style={{ ...bold(20), textAlign: "center" }}>المعلومات الأساسية</td>
-                        </tr>
-
-                        {/* Row 5: school · day/date · visit number */}
-                        <tr style={{ height: `${rowPt(5)}pt` }}>
-                            <td colSpan={2} style={{ ...cell, ...bold(14) }}>المدرسة</td>
-                            <td style={{ ...cell, ...bold(14) }}>{form.schoolName}</td>
-                            <td style={{ ...cell, ...bold(14) }}>اليوم/التاريخ</td>
-                            <td colSpan={2} style={{ ...cell, ...bold(14) }}>{dayName(visit.visitDate)}</td>
-                            <td colSpan={span("H", "K")} style={{ ...cell, ...bold(14), direction: "ltr" }}>{formatDate(visit.visitDate)}</td>
-                            <td colSpan={span("L", "N")} style={{ ...cell, ...bold(14) }}>رقم الزيارة</td>
-                            <td style={{ ...cell, ...bold(14) }}>{visit.visitNumber || ""}</td>
-                        </tr>
-                        {/* Row 6: subject · lesson */}
-                        <tr style={{ height: `${rowPt(6)}pt` }}>
-                            <td colSpan={2} style={{ ...cell, ...bold(14) }}>المادة</td>
-                            <td style={{ ...cell, ...bold(14) }}>{visit.subjectName}</td>
-                            <td style={{ ...cell, ...bold(14) }}>الموضوع</td>
-                            <td colSpan={10} style={{ ...cell, ...bold(14) }}>{visit.lessonTopic}</td>
-                        </tr>
-                        {/* Row 7: class · teacher */}
-                        <tr style={{ height: `${rowPt(7)}pt` }}>
-                            <td colSpan={2} style={{ ...cell, ...bold(14) }}>الصف</td>
-                            <td style={{ ...cell, ...bold(14) }}>{visit.className}</td>
-                            <td style={{ ...cell, ...bold(14) }}>المعلم</td>
-                            <td colSpan={10} style={{ ...cell, ...bold(14) }}>{visit.teacherName}</td>
-                        </tr>
-                        {/* Row 8: visitor · follow-up type */}
-                        <tr style={{ height: `${rowPt(8)}pt` }}>
-                            <td colSpan={2} style={{ ...cell, ...bold(14) }}>الزائر</td>
-                            <td style={{ ...cell, ...bold(14) }}>{signatureName}</td>
-                            <td style={{ ...cell, ...bold(14) }}>نوع المتابعة</td>
-                            <td colSpan={5} style={{ ...cell, ...bold(14) }}>كليّة</td>
-                            <td style={{ ...cell }}>{tick(visit.followUpType !== "partial")}</td>
-                            <td colSpan={3} style={{ ...cell, ...bold(14) }}>جزئيّة</td>
-                            <td style={{ ...cell }}>{tick(visit.followUpType === "partial")}</td>
-                        </tr>
-                        <tr style={{ height: `${rowPt(9)}pt` }}><td colSpan={14}/></tr>
-
-                        {/* Row 10: column heads, rating columns written vertically */}
-                        <tr style={{ height: `${rowPt(10)}pt` }}>
-                            <td style={{ ...cell, fontFamily: HEADING, fontSize: "14pt" }}><div style={vertical}>المجال</div></td>
-                            <td colSpan={3} style={{ ...cell, fontFamily: HEADING, fontSize: "16pt" }}>معايير الأداء</td>
-                            {RATING_SCALE.map(s => (
-                                <td key={String(s.value)} style={{ ...cell, ...bold(12, CALIBRI), padding: "2px 0" }}>
-                                    <div style={vertical}>{s.label}</div>
-                                </td>
-                            ))}
-                            <td colSpan={5} style={{ ...cell, fontFamily: CALIBRI, fontSize: "16pt" }}>التوصيات</td>
-                        </tr>
-
-                        {layout.flatMap(({ domain, list, start, end }) => list.map((c: any, i: number) => {
-                            const row = start + i;
-                            const rating = visit.ratings[c._id];
-                            const rec = recGroups.find(g => g.start === row);
-                            return (
-                                <tr key={c._id} style={{ height: `${rowPt(row)}pt` }}>
-                                    {i === 0 && (
-                                        <td rowSpan={end - start + 1} style={{ ...cell, fontFamily: HEADING, fontSize: "14pt", fontWeight: 700 }}>
-                                            <div style={vertical}>{DOMAIN_LABELS[domain]}</div>
-                                        </td>
-                                    )}
-                                    <td colSpan={3} style={{ ...cell, fontFamily: CALIBRI, fontSize: "13pt", textAlign: "right", lineHeight: 1.15 }}>
-                                        {c.text}
-                                    </td>
-                                    {RATING_SCALE.map(s => <td key={String(s.value)} style={cell}>{tick(rating === s.value)}</td>)}
-                                    {rec && (
-                                        <td colSpan={5} rowSpan={rec.end - rec.start + 1}
-                                            style={{ ...cell, ...fitText(String(visit[rec.key] ?? ""), rec.end - rec.start + 1) }}>
-                                            {visit[rec.key] ?? ""}
-                                        </td>
-                                    )}
-                                </tr>
-                            );
-                        }))}
-
-                        {/* Rows 34-38: general notes */}
-                        <tr style={{ height: `${rowPt(34)}pt` }}>
-                            <td colSpan={14} style={{ ...cell, fontFamily: HEADING, fontSize: "14pt" }}>ملاحظات وتوصيات عامّة</td>
-                        </tr>
-                        <tr style={{ height: `${rowPt(35) + rowPt(36) + rowPt(37) + rowPt(38)}pt` }}>
-                            <td colSpan={14} style={{ ...cell, ...fitText(visit.notes ?? "", 8), fontFamily: FORM_FONT }}>
-                                {visit.notes ?? ""}
-                            </td>
-                        </tr>
-
-                        <Signatures role={role} teacherName={visit.teacherName} visitorName={signatureName}
-                            deputyName={form.deputyName}/>
-                    </tbody>
-                </table>
-
-                {/* Footer */}
-                {form.footerUrl ? (
-                    <img src={form.footerUrl} alt="" style={{ width: "100%", display: "block", marginTop: 8 }}/>
-                ) : (
-                    <div style={{ marginTop: 8, borderTop: "3px solid #5C1523", paddingTop: 4, display: "flex", justifyContent: "space-between", fontFamily: CALIBRI, fontSize: "9pt", color: "#333" }}>
-                        <span>تاريخ الطباعة: {formatDate(new Date().toISOString().slice(0, 10))}</span>
-                        <span>نظام الإشراف على أداء المعلم{visit.recordNo ? ` · رقم السجل ${visit.recordNo}` : ""}</span>
-                        <span>صفحة 1 من 1</span>
-                    </div>
-                )}
+                <Cell box={PAGE_NO} size={12}>2</Cell>
             </div>
         </div>
-    );
-}
-
-// Rows 39-40 — three blocks for a coordinator's visit (teacher · coordinator ·
-// academic deputy), two for a supervisor's or the deputy's own visit.
-function Signatures({ role, teacherName, visitorName, deputyName }: {
-    role: VisitorRole; teacherName: string; visitorName: string; deputyName: string;
-}) {
-    const label = (size = 14): CSSProperties => ({ ...cell, fontFamily: CALIBRI, fontSize: `${size}pt`, fontWeight: 700 });
-    const name: CSSProperties = { ...cell, fontFamily: FORM_FONT, fontSize: "16pt", fontWeight: 700 };
-    const line: CSSProperties = { ...cell, height: "36pt" };
-
-    if (role === "coordinator") {
-        return (
-            <>
-                <tr style={{ height: `${rowPt(39)}pt` }}>
-                    <td colSpan={2} rowSpan={2} style={label()}>المعلم</td>
-                    <td style={name}>{teacherName}</td>
-                    <td rowSpan={2} style={label()}>المنسق</td>
-                    <td colSpan={5} style={name}>{visitorName}</td>
-                    <td colSpan={2} rowSpan={2} style={{ ...label(12), verticalAlign: "top" }}>نائب المدير للشؤون الأكاديمية</td>
-                    <td colSpan={3} style={name}>{deputyName}</td>
-                </tr>
-                <tr style={{ height: `${rowPt(40)}pt` }}>
-                    <td style={line}/>
-                    <td colSpan={5} style={line}/>
-                    <td colSpan={3} style={line}/>
-                </tr>
-            </>
-        );
-    }
-
-    const visitorLabel = role === "supervisor" ? "الموجه" : "نائب المدير للشؤون الأكاديمية";
-    const [labelSpan, nameSpan] = role === "supervisor" ? [3, 7] : [5, 5];
-    return (
-        <>
-            <tr style={{ height: `${rowPt(39)}pt` }}>
-                <td colSpan={2} rowSpan={2} style={label()}>المعلم</td>
-                <td colSpan={2} style={name}>{teacherName}</td>
-                <td colSpan={labelSpan} rowSpan={2} style={label()}>{visitorLabel}</td>
-                <td colSpan={nameSpan} style={name}>{visitorName}</td>
-            </tr>
-            <tr style={{ height: `${rowPt(40)}pt` }}>
-                <td colSpan={2} style={line}/>
-                <td colSpan={nameSpan} style={line}/>
-            </tr>
-        </>
     );
 }

@@ -4,8 +4,8 @@ import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation 
 import { api } from "../../../convex/_generated/api";
 import { CheckCircle2, ImageUp, Loader2, Save, Trash2 } from "lucide-react";
 
-// What changes on the form from one year to the next — the year, the names in
-// the signature row, the official header and footer — kept out of the code.
+// What changes on the form from one year to the next — the year, the names,
+// the deputy's signature — kept out of the code.
 // A visit freezes these when it is submitted, so changing them here only
 // affects visits made from now on.
 
@@ -20,7 +20,7 @@ export default function FormSettings() {
     const [draft, setDraft] = useState<any>(null);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [uploading, setUploading] = useState<"header" | "footer" | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     useEffect(() => { if (setup && !draft) setDraft({ ...setup.settings }); }, [setup, draft]);
 
@@ -42,14 +42,14 @@ export default function FormSettings() {
         } finally { setSaving(false); }
     };
 
-    const upload = async (kind: "header" | "footer", file: File) => {
-        setUploading(kind);
+    const upload = async (file: File) => {
+        setUploading(true);
         try {
             const url = await uploadUrl({});
             const res = await fetch(url, { method: "POST", headers: { "Content-Type": file.type }, body: file });
             const { storageId } = await res.json();
-            await update(kind === "header" ? { headerImageId: storageId } : { footerImageId: storageId });
-        } finally { setUploading(null); }
+            await update({ deputySignatureId: storageId });
+        } finally { setUploading(false); }
     };
 
     const input = "w-full border-2 border-slate-100 rounded-xl px-3 py-2 text-sm font-bold bg-slate-50 focus:outline-none focus:border-qatar-maroon";
@@ -82,37 +82,34 @@ export default function FormSettings() {
                 {saved && <span className="flex items-center gap-1 text-xs font-black text-emerald-700"><CheckCircle2 className="w-4 h-4"/>حُفظت</span>}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {(["header", "footer"] as const).map(kind => {
-                    const url = kind === "header" ? setup.settings.headerUrl : setup.settings.footerUrl;
-                    return (
-                        <div key={kind} className="rounded-2xl border border-slate-200 p-4 space-y-3">
-                            <p className="text-sm font-black text-slate-700">
-                                {kind === "header" ? "رأس الاستمارة (الهيدر)" : "تذييل الاستمارة (الفوتر)"}
-                            </p>
-                            <p className="text-[11px] font-bold text-slate-500">
-                                صورة الشريط الرسمي بعرض الصفحة. تسري على الزيارات التي تُعتمد بعد رفعها فقط.
-                            </p>
-                            {url ? <img src={url} alt="" className="w-full rounded-lg border border-slate-100"/> : (
-                                <p className="text-xs font-bold text-slate-400">لم تُرفع صورة — تُستخدم ترويسة نصية بديلة.</p>
-                            )}
-                            <div className="flex gap-2">
-                                <label className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-slate-200 text-xs font-black text-slate-700 cursor-pointer hover:border-qatar-maroon">
-                                    {uploading === kind ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImageUp className="w-4 h-4"/>}
-                                    رفع صورة
-                                    <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden"
-                                        onChange={e => { const f = e.target.files?.[0]; if (f) upload(kind, f); e.target.value = ""; }}/>
-                                </label>
-                                {url && (
-                                    <button onClick={() => update(kind === "header" ? { headerImageId: null } : { footerImageId: null })}
-                                        className="flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-rose-100 text-xs font-black text-rose-600">
-                                        <Trash2 className="w-4 h-4"/>إزالة
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
+            {/* The printed form is the ministry's own page, header and footer
+                included; the one thing added to it is the deputy's signature */}
+            <div className="rounded-2xl border border-slate-200 p-4 space-y-3 max-w-xl">
+                <p className="text-sm font-black text-slate-700">توقيع النائب الأكاديمي</p>
+                <p className="text-[11px] font-bold text-slate-500">
+                    يُطبع في خانة «توقيع نائب المدير للشؤون الأكاديمية» على زيارات النائب المعتمدة فقط.
+                    يُفضَّل صورة PNG بخلفية شفافة.
+                </p>
+                {setup.settings.signatureUrl ? (
+                    <img src={setup.settings.signatureUrl} alt="توقيع النائب الأكاديمي"
+                        className="h-24 max-w-full object-contain rounded-lg border border-slate-100 bg-white p-2"/>
+                ) : (
+                    <p className="text-xs font-bold text-slate-400">لم يُرفع توقيع — تبقى الخانة فارغة للتوقيع باليد.</p>
+                )}
+                <div className="flex gap-2">
+                    <label className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-slate-200 text-xs font-black text-slate-700 cursor-pointer hover:border-qatar-maroon">
+                        {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImageUp className="w-4 h-4"/>}
+                        {setup.settings.signatureUrl ? "تغيير التوقيع" : "رفع التوقيع"}
+                        <input type="file" accept="image/png,image/jpeg" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }}/>
+                    </label>
+                    {setup.settings.signatureUrl && (
+                        <button onClick={() => { if (window.confirm("إزالة التوقيع؟ لن يُطبع على الزيارات التي لم تُعتمد بعد.")) update({ deputySignatureId: null }); }}
+                            className="flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-rose-100 text-xs font-black text-rose-600">
+                            <Trash2 className="w-4 h-4"/>إزالة
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );

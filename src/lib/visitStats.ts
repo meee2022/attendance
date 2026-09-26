@@ -34,6 +34,9 @@ export type VisitRow = {
     planningRec: string;
     executionRec: string;
     evalMgmtRec: string;
+    managementRec?: string;
+    deliveryMode?: "field" | "remote";
+    streamMode?: "merged" | "unmerged" | null;
     notes: string;
     createdAt: number;
     updatedAt: number;

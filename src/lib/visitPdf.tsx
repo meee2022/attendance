@@ -13,17 +13,18 @@ export async function createVisitPdf(data: any): Promise<Blob> {
     try {
         flushSync(() => root.render(<OfficialVisitForm data={data} toolbar={false}/>));
         await document.fonts.ready;
-        const sheet = host.querySelector<HTMLElement>(".sheet")!;
-        for (const img of sheet.querySelectorAll("img")) {
-            await img.decode(); // Fail visibly instead of archiving a form with a missing official image.
+        const pages = [...host.querySelectorAll<HTMLElement>(".form-page")];
+        for (const img of host.querySelectorAll("img")) {
+            await img.decode(); // Fail visibly instead of archiving a form with a missing official page.
         }
-        const width = sheet.offsetWidth, height = sheet.offsetHeight;
-        const image = await toPng(sheet, { pixelRatio: 3, backgroundColor: "#ffffff", width, height,
-            style: { margin: "0", boxShadow: "none", zoom: "1" } });
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-        // Match the official print margins and keep the full form on one page.
-        const scale = Math.min(186 / width, 285 / height);
-        pdf.addImage(image, "PNG", 12, 6, width * scale, height * scale, undefined, "FAST");
+        for (const [i, page] of pages.entries()) {
+            const image = await toPng(page, { pixelRatio: 3, backgroundColor: "#ffffff",
+                width: page.offsetWidth, height: page.offsetHeight, style: { margin: "0", boxShadow: "none" } });
+            if (i > 0) pdf.addPage("a4", "portrait");
+            // Each page of the ministry form fills an A4 sheet, as it does when printed.
+            pdf.addImage(image, "PNG", 0, 0, 210, 297, undefined, "FAST");
+        }
         return pdf.output("blob");
     } finally { root.unmount(); host.remove(); }
 }

@@ -40,7 +40,7 @@ export const read = query({ args: { token: v.string() }, handler: async (ctx, ar
     const data = await resolve(ctx, args.token); if (!data) return null;
     const { visit, row } = data;
     return { teacherName: visit.teacherName, visitDate: visit.visitDate, lessonTopic: visit.lessonTopic,
-        recommendations: [visit.planningRec, visit.executionRec, visit.evalMgmtRec, visit.notes].filter(Boolean),
+        recommendations: [visit.planningRec, visit.executionRec, visit.evalMgmtRec, visit.managementRec, visit.notes].filter(Boolean),
         acknowledgedAt: row.acknowledgedAt ?? null, comment: row.comment ?? "" };
 } });
 export const acknowledge = mutation({ args: { token: v.string(), comment: v.string() }, handler: async (ctx, args) => {

@@ -73,7 +73,7 @@ export default function VisitFollowUp({ setup, visits, teacherId = "", onOpenTea
                 <label>الزيارة الأصلية (اختياري)<select value={form.visitId} onChange={e => patch({ visitId: e.target.value })}><option value="">متابعة مستقلة</option>{relatedVisits.map(v => <option key={v._id} value={v._id}>{formatDate(v.visitDate)} — {v.lessonTopic}</option>)}</select></label>
                 <label>المسؤول عن التنفيذ<input required maxLength={200} value={form.owner} onChange={e => patch({ owner: e.target.value })}/></label>
             </div>
-            {origin && <div className="bg-slate-50 rounded-xl p-3 text-sm leading-7"><p className="font-bold">توصيات الزيارة الأصلية</p>{[origin.planningRec, origin.executionRec, origin.evalMgmtRec, origin.notes].filter(Boolean).map((t,i) => <p className="whitespace-pre-wrap" key={i}>{t}</p>)}</div>}
+            {origin && <div className="bg-slate-50 rounded-xl p-3 text-sm leading-7"><p className="font-bold">توصيات الزيارة الأصلية</p>{[origin.planningRec, origin.executionRec, origin.evalMgmtRec, origin.managementRec, origin.notes].filter(Boolean).map((t,i) => <p className="whitespace-pre-wrap" key={i}>{t}</p>)}</div>}
             <label className="block">الإجراء المطلوب ونتيجته المتوقعة<textarea required maxLength={2000} rows={3} value={form.title} onChange={e => patch({ title: e.target.value })} placeholder="إجراء محدد يمكن متابعة إنجازه"/></label>
             <div className="grid gap-4 sm:grid-cols-2">
                 <label>الموعد المستهدف<input required type="date" value={form.dueDate} onChange={e => patch({ dueDate: e.target.value })}/></label>

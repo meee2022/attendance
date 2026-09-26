@@ -114,6 +114,7 @@ export type VisitDraftInput = {
     planningRec?: string;
     executionRec?: string;
     evalMgmtRec?: string;
+    managementRec?: string;
     notes?: string;
 };
 
@@ -154,7 +155,7 @@ export function validateVisit(
         issues.push({ field: "ratings", message: `بقي ${missing} ${missing === 1 ? "معيار" : "معايير"} بلا تقدير` });
     }
 
-    const anyText = [input.planningRec, input.executionRec, input.evalMgmtRec, input.notes]
+    const anyText = [input.planningRec, input.executionRec, input.evalMgmtRec, input.managementRec, input.notes]
         .some(t => (t ?? "").trim().length > 0);
     if (!anyText) issues.push({ field: "recs", message: "اكتب توصية واحدة على الأقل أو ملاحظة عامة" });
 

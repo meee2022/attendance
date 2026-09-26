@@ -290,6 +290,8 @@ export default defineSchema({
         deputyName: v.optional(v.string()),
         headerImageId: v.optional(v.id("_storage")),
         footerImageId: v.optional(v.id("_storage")),
+        // The academic deputy's signature, printed on the deputy's submitted visits
+        deputySignatureId: v.optional(v.id("_storage")),
         // Visits expected per teacher per year, by visitor type
         requiredCoordinator: v.optional(v.number()),
         requiredSupervisor: v.optional(v.number()),
@@ -445,8 +447,12 @@ export default defineSchema({
         // التوصيات
         planningRec: v.optional(v.string()),
         executionRec: v.optional(v.string()),
-        evalMgmtRec: v.optional(v.string()),
+        evalMgmtRec: v.optional(v.string()),     // التقويم (and, in visits before the split, الإدارة الصفية too)
+        managementRec: v.optional(v.string()),   // الإدارة الصفية وبيئة التعلم
         notes: v.optional(v.string()),
+        // «ميدانيّة / عن بُعد» and, for a remote lesson, «بث مباشر مدمج / غير مدمج»
+        deliveryMode: v.optional(v.union(v.literal("field"), v.literal("remote"))),
+        streamMode: v.optional(v.union(v.literal("merged"), v.literal("unmerged"))),
         // إطراء المعلم
         praiseText: v.optional(v.string()),
         // الحالة والتوقيع

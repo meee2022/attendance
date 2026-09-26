@@ -36,18 +36,21 @@ type FormState = {
     lessonTopic: string;
     visitDate: string;
     followUpType: "full" | "partial" | null;
+    deliveryMode: "field" | "remote";
+    streamMode: "merged" | "unmerged" | "";
     ratings: Record<string, Rating>;
     planningRec: string;
     executionRec: string;
     evalMgmtRec: string;
+    managementRec: string;
     notes: string;
 };
 
 function emptyForm(today: string, department = ""): FormState {
     return {
         department, teacherId: "", classId: "", subjectName: "", lessonTopic: "",
-        visitDate: today, followUpType: "full", ratings: {},
-        planningRec: "", executionRec: "", evalMgmtRec: "", notes: "",
+        visitDate: today, followUpType: "full", deliveryMode: "field", streamMode: "", ratings: {},
+        planningRec: "", executionRec: "", evalMgmtRec: "", managementRec: "", notes: "",
     };
 }
 
@@ -55,7 +58,7 @@ function emptyForm(today: string, department = ""): FormState {
 function hasContent(f: FormState): boolean {
     return Boolean(f.teacherId || f.classId || f.lessonTopic.trim()
         || Object.keys(f.ratings).length
-        || f.planningRec.trim() || f.executionRec.trim() || f.evalMgmtRec.trim() || f.notes.trim());
+        || f.planningRec.trim() || f.executionRec.trim() || f.evalMgmtRec.trim() || f.managementRec.trim() || f.notes.trim());
 }
 
 function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
@@ -69,9 +72,11 @@ function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
         lessonTopic: v.lessonTopic,
         visitDate: v.visitDate,
         followUpType: v.followUpType,
+        deliveryMode: v.deliveryMode ?? "field",
+        streamMode: v.streamMode ?? "",
         ratings: parseRatings(v.ratings),
         planningRec: v.planningRec, executionRec: v.executionRec,
-        evalMgmtRec: v.evalMgmtRec, notes: v.notes,
+        evalMgmtRec: v.evalMgmtRec, managementRec: v.managementRec ?? "", notes: v.notes,
     };
 }
 
@@ -156,7 +161,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
         teacherId: form.teacherId, classId: form.classId, lessonTopic: form.lessonTopic,
         visitDate: form.visitDate, followUpType: form.followUpType, ratings: form.ratings,
         planningRec: form.planningRec, executionRec: form.executionRec,
-        evalMgmtRec: form.evalMgmtRec, notes: form.notes,
+        evalMgmtRec: form.evalMgmtRec, managementRec: form.managementRec, notes: form.notes,
     }, criteria, { today: setup.today, allowOldDate: Boolean(oldDateReason.trim()) }), [form, criteria, setup.today, oldDateReason]);
     const dateTooOld = issues.some(i => i.message.includes("أقدم من سنة"));
 
@@ -202,9 +207,11 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                 lessonTopic: form.lessonTopic,
                 visitDate: form.visitDate,
                 followUpType: form.followUpType ?? undefined,
+                deliveryMode: form.deliveryMode,
+                streamMode: form.deliveryMode === "remote" && form.streamMode ? form.streamMode : undefined,
                 ratings: JSON.stringify(form.ratings),
                 planningRec: form.planningRec, executionRec: form.executionRec,
-                evalMgmtRec: form.evalMgmtRec, notes: form.notes,
+                evalMgmtRec: form.evalMgmtRec, managementRec: form.managementRec, notes: form.notes,
                 status,
                 confirmDuplicate,
                 oldDateReason: oldDateReason || undefined,
@@ -369,6 +376,25 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                             {t === "full" ? "كليّة" : "جزئيّة"}
                         </button>
                     ))}
+                    <span className="w-px h-6 bg-slate-200 mx-1" aria-hidden/>
+                    {(["field", "remote"] as const).map(t => (
+                        <button key={t} type="button" onClick={() => setForm(f => ({ ...f, deliveryMode: t, streamMode: t === "field" ? "" : f.streamMode }))}
+                            aria-pressed={form.deliveryMode === t}
+                            className={`px-5 py-2 rounded-xl text-sm font-black border-2 transition-colors ${
+                                form.deliveryMode === t ? "bg-qatar-maroon text-white border-qatar-maroon"
+                                                        : "bg-white text-slate-600 border-slate-200"}`}>
+                            {t === "field" ? "ميدانيّة" : "عن بُعد"}
+                        </button>
+                    ))}
+                    {form.deliveryMode === "remote" && (["merged", "unmerged"] as const).map(t => (
+                        <button key={t} type="button" onClick={() => set("streamMode", form.streamMode === t ? "" : t)}
+                            aria-pressed={form.streamMode === t}
+                            className={`px-4 py-2 rounded-xl text-xs font-black border-2 transition-colors ${
+                                form.streamMode === t ? "bg-qatar-maroon/10 text-qatar-maroon border-qatar-maroon"
+                                                      : "bg-white text-slate-600 border-slate-200"}`}>
+                            {t === "merged" ? "بث مباشر مدمج" : "بث مباشر غير مدمج"}
+                        </button>
+                    ))}
                     <span className="text-xs font-bold text-slate-400 mr-auto">
                         الزائر: {ROLE_LABELS[recordedRole]} · {recordedName}
                     </span>
@@ -452,9 +478,11 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                         suggestions={(bank ?? []).filter(b => b.domain === "planning")}/>
                     <RecField label="توصيات تنفيذ الدرس" value={form.executionRec} onChange={v => set("executionRec", v)}
                         suggestions={(bank ?? []).filter(b => b.domain === "execution")}/>
-                    <RecField label="توصيات التقويم والإدارة الصفية" value={form.evalMgmtRec} onChange={v => set("evalMgmtRec", v)}
-                        suggestions={(bank ?? []).filter(b => b.domain === "evaluation" || b.domain === "management")}/>
-                    <RecField label="ملاحظات وتوصيات عامة" value={form.notes} onChange={v => set("notes", v)}
+                    <RecField label="توصيات التقويم" value={form.evalMgmtRec} onChange={v => set("evalMgmtRec", v)}
+                        suggestions={(bank ?? []).filter(b => b.domain === "evaluation")}/>
+                    <RecField label="توصيات الإدارة الصفية وبيئة التعلم" value={form.managementRec} onChange={v => set("managementRec", v)}
+                        suggestions={(bank ?? []).filter(b => b.domain === "management")}/>
+                    <RecField label="ملاحظات وتوصيات عامة" value={form.notes} onChange={v => set("notes", v)} wide
                         suggestions={(bank ?? []).filter(b => b.domain === "general")}/>
                 </div>
             </Section>
@@ -504,7 +532,8 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                     ["التاريخ", form.visitDate ? `${dayName(form.visitDate)} ${formatDate(form.visitDate)}` : "—"],
                                     ["الزائر", `${ROLE_LABELS[recordedRole]} — ${recordedName}`],
                                     ["الدرس", form.lessonTopic || "—"],
-                                    ["المتابعة", form.followUpType === "partial" ? "جزئيّة" : "كليّة"],
+                                    ["المتابعة", `${form.followUpType === "partial" ? "جزئيّة" : "كليّة"} · ${form.deliveryMode === "remote"
+                                        ? `عن بُعد${form.streamMode ? ` (${form.streamMode === "merged" ? "بث مباشر مدمج" : "بث مباشر غير مدمج"})` : ""}` : "ميدانيّة"}`],
                                     ["المعدل", pct(scores.average, 1)],
                                     ["بريد المعلم", teacher?.email || "—"],
                                 ].map(([k, v]) => (
@@ -582,13 +611,13 @@ function Field({ label, error, children }: { label: string; error?: boolean; chi
     );
 }
 
-function RecField({ label, value, onChange, suggestions }: {
-    label: string; value: string; onChange: (v: string) => void; suggestions: { _id: string; text: string }[];
+function RecField({ label, value, onChange, suggestions, wide = false }: {
+    label: string; value: string; onChange: (v: string) => void; suggestions: { _id: string; text: string }[]; wide?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const add = (text: string) => onChange(value.trim() ? `${value.trim()}\n${text}` : text);
     return (
-        <div>
+        <div className={wide ? "lg:col-span-2" : undefined}>
             <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-semibold text-slate-600">{label}</span>
                 {suggestions.length > 0 && (

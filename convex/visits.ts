@@ -39,6 +39,7 @@ async function settingsOf(ctx: any, school: any) {
         deputyName: deputyNameOf(s),
         headerImageId: s?.headerImageId ?? null,
         footerImageId: s?.footerImageId ?? null,
+        deputySignatureId: s?.deputySignatureId ?? null,
         requiredCoordinator: s?.requiredCoordinator ?? 2,
         requiredSupervisor: s?.requiredSupervisor ?? 1,
         requiredDeputy: s?.requiredDeputy ?? 1,
@@ -101,6 +102,7 @@ export const getSetup = query({
                 ...settings,
                 headerUrl: await imageUrl(ctx, settings.headerImageId),
                 footerUrl: await imageUrl(ctx, settings.footerImageId),
+                signatureUrl: await imageUrl(ctx, settings.deputySignatureId),
             },
             criteria: criteria.map((c: any) => ({ _id: c._id, domain: c.domain, text: c.text, order: c.order })),
             teachers, visitors, classes, departments,
@@ -143,6 +145,8 @@ export const listVisits = query({
                 visitorRole: x.visitorRole,
                 visitorName: x.visitorName,
                 followUpType: x.followUpType,
+                deliveryMode: x.deliveryMode ?? "field",
+                streamMode: x.streamMode ?? null,
                 status: x.status,
                 averageScore: x.status === "submitted" ? x.averageScore : null,
                 domainAverages: x.domainAverages,
@@ -150,6 +154,7 @@ export const listVisits = query({
                 planningRec: x.planningRec ?? "",
                 executionRec: x.executionRec ?? "",
                 evalMgmtRec: x.evalMgmtRec ?? "",
+                managementRec: x.managementRec ?? "",
                 notes: x.notes ?? "",
                 createdAt: x.createdAt,
                 updatedAt: x.updatedAt ?? x.createdAt,
@@ -181,6 +186,10 @@ export const getVisitForm = query({
 
         const headerId = snapshot?.headerImageId ?? settings.headerImageId;
         const footerId = snapshot?.footerImageId ?? settings.footerImageId;
+        // Only the deputy's own submitted visits carry the deputy's signature;
+        // a visit keeps the signature it was submitted with
+        const signatureId = visit.visitorRole === "deputy" && visit.status === "submitted"
+            ? snapshot?.deputySignatureId ?? settings.deputySignatureId : null;
 
         return {
             visit: {
@@ -195,6 +204,7 @@ export const getVisitForm = query({
                 principalName: snapshot?.principalName ?? settings.principalName,
                 headerUrl: await imageUrl(ctx, headerId),
                 footerUrl: await imageUrl(ctx, footerId),
+                signatureUrl: await imageUrl(ctx, signatureId),
             },
         };
     },
@@ -230,10 +240,13 @@ const visitArgs = {
     lessonTopic: v.string(),
     visitDate: v.string(),
     followUpType: v.optional(v.union(v.literal("full"), v.literal("partial"))),
+    deliveryMode: v.optional(v.union(v.literal("field"), v.literal("remote"))),
+    streamMode: v.optional(v.union(v.literal("merged"), v.literal("unmerged"))),
     ratings: v.string(),
     planningRec: v.optional(v.string()),
     executionRec: v.optional(v.string()),
     evalMgmtRec: v.optional(v.string()),
+    managementRec: v.optional(v.string()),
     notes: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("submitted")),
     // «نفس المعلم + نفس نوع الزائر + نفس التاريخ» warns first; this confirms it
@@ -288,7 +301,7 @@ export const saveVisit = mutation({
                 teacherId: args.teacherId, classId: args.classId, lessonTopic: args.lessonTopic,
                 visitDate: args.visitDate, followUpType: args.followUpType ?? null, ratings,
                 planningRec: args.planningRec, executionRec: args.executionRec,
-                evalMgmtRec: args.evalMgmtRec, notes: args.notes,
+                evalMgmtRec: args.evalMgmtRec, managementRec: args.managementRec, notes: args.notes,
             }, criteriaRefs, { allowOldDate: Boolean(args.oldDateReason?.trim()) });
             if (issues.length) throw new ConvexError(issues.map(i => i.message).join(" · "));
 
@@ -328,12 +341,16 @@ export const saveVisit = mutation({
             lessonTopic: args.lessonTopic.trim(),
             visitDate: args.visitDate,
             followUpType: args.followUpType ?? "full",
+            deliveryMode: args.deliveryMode ?? "field",
+            // the live-stream boxes only mean something for a remote lesson
+            streamMode: args.deliveryMode === "remote" ? args.streamMode : undefined,
             ratings: JSON.stringify(ratings),
             averageScore: scores.average ?? 0,
             domainAverages: JSON.stringify(scores.domains),
             planningRec: args.planningRec?.trim(),
             executionRec: args.executionRec?.trim(),
             evalMgmtRec: args.evalMgmtRec?.trim(),
+            managementRec: args.managementRec?.trim(),
             notes: [args.notes?.trim(), args.oldDateReason?.trim() ? `(إدخال لاحق: ${args.oldDateReason.trim()})` : ""]
                 .filter(Boolean).join("\n") || undefined,
             status: args.status,
@@ -368,6 +385,7 @@ export const saveVisit = mutation({
                     principalName: settings.principalName,
                     headerImageId: settings.headerImageId,
                     footerImageId: settings.footerImageId,
+                    deputySignatureId: settings.deputySignatureId,
                     criteria: criteria.map((c: any) => ({ _id: c._id, domain: c.domain, text: c.text, order: c.order })),
                 }),
             };
@@ -449,6 +467,7 @@ export const updateSettings = deputyMutation({
         requiredDeputy: v.optional(v.number()),
         headerImageId: v.optional(v.union(v.id("_storage"), v.null())),
         footerImageId: v.optional(v.union(v.id("_storage"), v.null())),
+        deputySignatureId: v.optional(v.union(v.id("_storage"), v.null())),
     },
     handler: async (ctx, args) => {
         if (args.deputyName !== undefined && !args.deputyName.trim()) throw new ConvexError("اسم النائب الأكاديمي مطلوب");

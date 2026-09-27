@@ -23,7 +23,7 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
     if (name === "visits:getSetup") return setup;
     if (name === "visits:listVisits") return visits;
     if (name === "visitWorkflow:reviewers") return [{ key: "deputy", toRole: "deputy", name: "نائب تجريبي", label: "النائب الأكاديمي" }, { key: "vc2", toRole: "coordinator", toVisitorId: "vc2", name: "منسق زميل تجريبي", label: "منسق" }];
-    if (name === "visitWorkflow:emailStatus") return { configured: true, teacherEmail: "teacher@example.com", sends: [] };
+    if (name === "visitWorkflow:emailStatus") return { teacherName: "معلم تجريبي", teacherEmail: "teacher@example.com", teacherPhone: null, sends: [] };
     if (name === "visitWorkflow:mySignature") return null;
     return [];
 }

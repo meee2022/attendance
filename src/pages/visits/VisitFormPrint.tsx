@@ -78,15 +78,36 @@ const at = ([x0, x1, y0, y1]: Box): CSSProperties => ({
 });
 
 // Text centred in a cell, as the form's own labels are
+// Text centred in a cell, as the form's own labels are; a long name or lesson
+// title steps down in size until it fits inside the cell's lines
 function Cell({ box, size = 13, children, style }: { box: Box; size?: number; children: ReactNode; style?: CSSProperties }) {
+    const outer = useRef<HTMLDivElement>(null);
+    const inner = useRef<HTMLSpanElement>(null);
+    useLayoutEffect(() => {
+        const o = outer.current, i = inner.current;
+        if (!o || !i) return;
+        let s = size;
+        i.style.fontSize = `${s}pt`;
+        while (s > 7 && (i.offsetHeight > o.clientHeight || i.scrollWidth > o.clientWidth)) {
+            s -= 0.5;
+            i.style.fontSize = `${s}pt`;
+        }
+    });
     return (
-        <div style={{
+        <div ref={outer} style={{
             ...at(box), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
-            fontFamily: FORM_FONT, fontSize: `${size}pt`, fontWeight: 700, lineHeight: 1.1, padding: "0 3pt",
+            fontFamily: FORM_FONT, fontWeight: 700, lineHeight: 1.1, padding: "0 3pt",
             overflow: "hidden", color: "#000", ...style,
-        }}>{children}</div>
+        }}><span ref={inner} style={{ fontSize: `${size}pt`, display: "block", maxWidth: "100%" }}>{children}</span></div>
     );
 }
+
+// The ministry's logo in place of the guide's running header
+const LOGO: Box = [374, 568, 8, 46];
+const Logo = () => (
+    <img src="/forms/moe-logo.png" alt="وزارة التربية والتعليم والتعليم العالي"
+        style={{ ...at(LOGO), objectFit: "contain", objectPosition: "right center" }}/>
+);
 
 const Tick = ({ box }: { box: Box }) => (
     <Cell box={box} size={12} style={{ fontFamily: `"Segoe UI Symbol", "DejaVu Sans", Arial, sans-serif`, padding: 0 }}>✓</Cell>
@@ -244,6 +265,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
             {/* Page 1 */}
             <div className="form-page">
                 <img className="form-bg" src="/forms/visit-form-p1.svg" alt=""/>
+                <Logo/>
 
                 <Cell box={INFO.school}>{form.schoolName}</Cell>
                 <Cell box={INFO.date}>
@@ -251,14 +273,14 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 </Cell>
                 <Cell box={INFO.subject}>{visit.subjectName}</Cell>
                 <Cell box={INFO.className}>{visit.className}</Cell>
-                <Cell box={INFO.topic} size={visit.lessonTopic?.length > 28 ? 11 : 13}>{visit.lessonTopic}</Cell>
+                <Cell box={INFO.topic}>{visit.lessonTopic}</Cell>
                 {role !== "deputy" && (
                     <Cell box={inside(INFO.visitorLabel)} size={14} style={{ background: "#ECE9E3", fontWeight: 400 }}>
                         {VISITOR_TITLE[role]}
                     </Cell>
                 )}
                 <Cell box={INFO.visitor}>{visitorName}</Cell>
-                <Cell box={INFO.teacher} size={visit.teacherName?.length > 24 ? 11 : 13}>{visit.teacherName}</Cell>
+                <Cell box={INFO.teacher}>{visit.teacherName}</Cell>
 
                 {delivery === "field" ? <Tick box={INFO.field}/> : <Tick box={INFO.remote}/>}
                 {visit.followUpType === "partial" ? <Tick box={INFO.partial}/> : <Tick box={INFO.full}/>}
@@ -280,6 +302,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
             {/* Page 2 */}
             <div className="form-page">
                 <img className="form-bg" src="/forms/visit-form-p2.svg" alt=""/>
+                <Logo/>
 
                 {ticks(2)}
                 <FitText box={evalBox2} text={evalTail} max={11}/>

@@ -1,14 +1,8 @@
 import { v, ConvexError } from "convex/values";
-import { internalAction, internalMutation } from "./_generated/server";
-import { internal } from "./_generated/api";
-import { sessionMutation, sessionQuery, requireVisit, digest } from "./supervisionAccess";
-import { ROLE_LABELS, formatDate } from "./visitMath";
-
-// Convex exposes the deployment's environment variables here; the app build has no Node types
-declare const process: { env: Record<string, string | undefined> };
+import { sessionMutation, sessionQuery, requireVisit } from "./supervisionAccess";
 
 // What happens to a visit around saving it: the visitor's own signature,
-// sending a draft to the deputy or a colleague for review, and e-mailing the
+// sending a draft to the deputy or a colleague for review, and sending the
 // submitted form to the visited teacher.
 
 async function schoolOf(ctx: any) {
@@ -136,11 +130,10 @@ export const returnVisit = sessionMutation({
     },
 });
 
-// ── E-mail the submitted form to the teacher ─────────────────────────────
-// Sent through Resend. It stays off until RESEND_API_KEY (and, for a verified
-// school domain, VISIT_EMAIL_FROM) is set on the Convex deployment.
-const ALLOWED_ORIGINS = /^(https:\/\/(www\.)?ibntaymia\.com|http:\/\/(localhost|127\.0\.0\.1):\d+)$/;
-
+// ── Sending the form to the teacher ──────────────────────────────────────
+// Sent from the visitor's own device — the share sheet (WhatsApp, e-mail…) or
+// their mail program — so no mail service is involved. The server only gives
+// the teacher's address and keeps a record of each send.
 export const emailStatus = sessionQuery({
     args: { visitId: v.id("supervisionVisits") },
     handler: async (ctx, args) => {
@@ -148,97 +141,27 @@ export const emailStatus = sessionQuery({
         const teacher: any = visit.teacherId ? await ctx.db.get(visit.teacherId) : null;
         const rows = await ctx.db.query("supervisionEmails").withIndex("by_visit", q => q.eq("visitId", args.visitId)).collect();
         return {
-            configured: Boolean(process.env.RESEND_API_KEY),
+            teacherName: visit.teacherName,
             teacherEmail: teacher?.email?.trim() || null,
+            teacherPhone: teacher?.phone?.trim() || null,
             sends: rows.sort((a, b) => b.createdAt - a.createdAt)
-                .map(r => ({ _id: r._id, to: r.to, status: r.status, error: r.error ?? null, createdAt: r.createdAt, byName: r.byName })),
+                .map(r => ({ _id: r._id, to: r.to, status: r.status, createdAt: r.createdAt, byName: r.byName })),
         };
     },
 });
 
-export const emailTeacher = sessionMutation({
-    args: {
-        visitId: v.id("supervisionVisits"),
-        pdfId: v.id("_storage"),
-        token: v.string(),        // the acknowledgement link's secret, already registered for this visit
-        origin: v.string(),
-    },
+export const logSend = sessionMutation({
+    args: { visitId: v.id("supervisionVisits"), via: v.string() },
     handler: async (ctx, args) => {
         const s = (ctx as any).supervisionSession;
-        if (!process.env.RESEND_API_KEY) throw new ConvexError("إرسال البريد غير مُفعّل بعد");
         const visit = await requireVisit(ctx, s, args.visitId, true);
-        if (visit.status !== "submitted" || visit.deletedAt) throw new ConvexError("تُرسل الزيارات المعتمدة فقط");
-        if (!ALLOWED_ORIGINS.test(args.origin)) throw new ConvexError("رابط غير معروف");
-        const teacher: any = visit.teacherId ? await ctx.db.get(visit.teacherId) : null;
-        const to = teacher?.email?.trim();
-        if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new ConvexError("لا يوجد بريد صحيح للمعلم — أضفه من إدارة المعلمين");
-        const hash = await digest(args.token);
-        const link = await ctx.db.query("supervisionAcknowledgements").withIndex("by_token", q => q.eq("tokenHash", hash)).first();
-        if (!link || link.visitId !== visit._id || link.revoked) throw new ConvexError("أعد المحاولة");
-
-        const emailId = await ctx.db.insert("supervisionEmails", {
-            schoolId: visit.schoolId, visitId: visit._id, to, byName: s.name, status: "queued", createdAt: Date.now(),
-        });
-        await ctx.scheduler.runAfter(0, internal.visitWorkflow.sendVisitEmail, {
-            emailId, pdfId: args.pdfId, to,
-            teacherName: visit.teacherName,
-            visitorLine: `${ROLE_LABELS[visit.visitorRole as keyof typeof ROLE_LABELS]} ${visit.visitorName}`,
-            date: formatDate(visit.visitDate),
-            lesson: visit.lessonTopic,
-            link: `${args.origin}/supervision/acknowledge#${args.token}`,
+        if (visit.status !== "submitted") throw new ConvexError("تُرسل الزيارات المعتمدة فقط");
+        await ctx.db.insert("supervisionEmails", {
+            schoolId: visit.schoolId, visitId: visit._id, to: args.via.slice(0, 200), byName: s.name, status: "sent", createdAt: Date.now(), sentAt: Date.now(),
         });
         await ctx.db.insert("supervisionAuditLog", {
-            schoolId: visit.schoolId, visitId: visit._id, action: "emailed_teacher", actorName: s.name,
-            details: `إرسال الاستمارة إلى ${visit.teacherName} (${to})`, timestamp: Date.now(),
+            schoolId: visit.schoolId, visitId: visit._id, action: "sent_to_teacher", actorName: s.name,
+            details: `إرسال الاستمارة إلى ${visit.teacherName} (${args.via.slice(0, 200)})`, timestamp: Date.now(),
         });
-    },
-});
-
-const escape = (t: string) => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-
-export const sendVisitEmail = internalAction({
-    args: {
-        emailId: v.id("supervisionEmails"), pdfId: v.id("_storage"), to: v.string(),
-        teacherName: v.string(), visitorLine: v.string(), date: v.string(), lesson: v.string(), link: v.string(),
-    },
-    handler: async (ctx, a) => {
-        let error: string | undefined;
-        try {
-            const pdf = await ctx.storage.get(a.pdfId);
-            if (!pdf) throw new Error("PDF missing");
-            const bytes = new Uint8Array(await pdf.arrayBuffer());
-            let binary = "";
-            for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-            const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;font-size:15px;line-height:1.9;color:#1e293b">
-<p>السلام عليكم ورحمة الله،</p>
-<p>الأستاذ/ ${escape(a.teacherName)}</p>
-<p>مرفق استمارة الإشراف على أداء المعلّم لزيارة يوم ${escape(a.date)} — ${escape(a.lesson)}، من ${escape(a.visitorLine)}.</p>
-<p>للاطلاع على الملاحظات وتسجيل تعليقك: <a href="${escape(a.link)}">فتح صفحة الاطلاع</a> (الرابط صالح 7 أيام).</p>
-<p style="color:#64748b;font-size:13px">تسجيل الاطلاع لا يعني الموافقة على التقييم.</p>
-</div>`;
-            const res = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    from: process.env.VISIT_EMAIL_FROM || "الإشراف الصفي <onboarding@resend.dev>",
-                    to: [a.to],
-                    subject: `استمارة الإشراف على أداء المعلّم — ${a.date}`,
-                    html,
-                    attachments: [{ filename: `استمارة الزيارة ${a.date.replace(/\//g, "-")}.pdf`, content: btoa(binary) }],
-                }),
-            });
-            if (!res.ok) error = `Resend ${res.status}: ${(await res.text()).slice(0, 300)}`;
-        } catch (e: any) {
-            error = String(e?.message ?? e).slice(0, 300);
-        }
-        await ctx.storage.delete(a.pdfId).catch(() => {});
-        await ctx.runMutation(internal.visitWorkflow.recordEmail, { emailId: a.emailId, error });
-    },
-});
-
-export const recordEmail = internalMutation({
-    args: { emailId: v.id("supervisionEmails"), error: v.optional(v.string()) },
-    handler: async (ctx, a) => {
-        await ctx.db.patch(a.emailId, a.error ? { status: "failed", error: a.error } : { status: "sent", sentAt: Date.now() });
     },
 });

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useConvex } from "convex/react";
-import { ImageUp, Loader2, Mail, PenLine, Send, Trash2, Undo2, X } from "lucide-react";
+import { FileDown, ImageUp, Loader2, Mail, MessageCircle, PenLine, Send, Trash2, Undo2, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { useSupervisionMutation, useSupervisionQuery, useSupervisionSession } from "../../lib/supervisionSession";
 import type { VisitRow } from "../../lib/visitStats";
@@ -187,44 +187,97 @@ export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (i
     );
 }
 
-// ── Send to the teacher by e-mail ────────────────────────────────────────
+// ── Send to the teacher ──────────────────────────────────────────────────
+// From the visitor's own device: the form is made into a PDF with a private
+// acknowledgement link, then handed to the share sheet (WhatsApp, Mail…), the
+// mail program, or downloaded. Preparing and sending are two taps, because a
+// browser only opens the share sheet straight after a tap.
+type Prepared = { file: File; url: string; text: string; subject: string };
+
 export function SendToTeacher({ visitId }: { visitId: string }) {
     const convex = useConvex();
     const session = useSupervisionSession();
     const status = useSupervisionQuery((api as any).visitWorkflow.emailStatus, { visitId }) as any;
-    const getUploadUrl = useSupervisionMutation((api as any).visitWorkflow.uploadUrl);
     const createLink = useSupervisionMutation((api as any).supervisionAcknowledgements.create);
-    const emailTeacher = useSupervisionMutation((api as any).visitWorkflow.emailTeacher);
+    const logSend = useSupervisionMutation((api as any).visitWorkflow.logSend);
+    const [prepared, setPrepared] = useState<Prepared | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
+    const [done, setDone] = useState("");
     if (!status) return null;
-    if (!status.configured) return <p className="text-[11px] font-bold text-slate-400">إرسال الاستمارة للمعلم بالبريد لم يُفعَّل بعد.</p>;
     const last = status.sends[0];
-    const send = async () => {
-        setBusy(true); setError("");
+
+    const prepare = async () => {
+        setBusy(true); setError(""); setDone("");
         try {
             const data = await convex.query((api as any).visits.getVisitForm, { id: visitId, sessionToken: session?.token ?? "" });
             const { createVisitPdf } = await import("../../lib/visitPdf");
-            const pdfId = await uploadFile(() => getUploadUrl({}), await createVisitPdf(data));
+            const v = data.visit;
+            const date = String(v.visitDate ?? "");
+            const file = new File([await createVisitPdf(data)], `استمارة زيارة ${v.teacherName} ${date}.pdf`, { type: "application/pdf" });
             const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
             await createLink({ visitId, token });
-            await emailTeacher({ visitId, pdfId, token, origin: window.location.origin });
-        } catch (e) { setError(errorText(e, "تعذّر الإرسال — حاول مرة أخرى")); }
+            const link = `${window.location.origin}/supervision/acknowledge#${token}`;
+            const subject = `استمارة الإشراف على أداء المعلّم — ${date}`;
+            const text = [
+                `السلام عليكم أ. ${v.teacherName}`,
+                `مرفق استمارة زيارة ${date} (${v.lessonTopic}).`,
+                "للاطلاع على الملاحظات وكتابة تعليقك (صالح 7 أيام):",
+                link,
+            ].join("\n");
+            setPrepared({ file, url: URL.createObjectURL(file), text, subject });
+        } catch (e) { setError(errorText(e, "تعذّر تجهيز الاستمارة — حاول مرة أخرى")); }
         finally { setBusy(false); }
     };
+    const sent = async (via: string) => {
+        setDone(via);
+        try { await logSend({ visitId, via }); } catch { /* the send itself already happened */ }
+    };
+    const canShareFile = !!prepared && typeof navigator.canShare === "function" && navigator.canShare({ files: [prepared.file] });
+    const phone = String(status.teacherPhone ?? "").replace(/\D/g, "");
+
     return (
-        <div className="space-y-1 text-center">
-            {status.teacherEmail ? (
-                <button onClick={send} disabled={busy}
+        <div className="space-y-2 text-center">
+            {!prepared ? (
+                <button onClick={prepare} disabled={busy}
                     className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-qatar-maroon text-qatar-maroon font-black text-sm disabled:opacity-50">
-                    {busy ? <Loader2 className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4"/>}
-                    {last ? "إعادة الإرسال للمعلم" : "إرسال الاستمارة للمعلم"}
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+                    {busy ? "جاري تجهيز الاستمارة…" : last ? "إرسال للمعلم مرة أخرى" : "إرسال الاستمارة للمعلم"}
                 </button>
-            ) : <p className="text-xs font-bold text-amber-700">لا يوجد بريد للمعلم — أضفه من «المعلمون والزائرون» لإرسال الاستمارة.</p>}
-            {status.teacherEmail && <p className="text-[11px] font-bold text-slate-400" dir="ltr">{status.teacherEmail}</p>}
-            {last && <p className={`text-xs font-bold ${last.status === "failed" ? "text-rose-700" : "text-emerald-700"}`}>
-                {last.status === "sent" ? "أُرسلت الاستمارة ورابط الاطلاع للمعلم" : last.status === "queued" ? "جاري الإرسال…" : "تعذّر الإرسال"}
-                {" · "}{new Date(last.createdAt).toLocaleString("ar-QA", { dateStyle: "short", timeStyle: "short" })}
+            ) : (
+                <div className="flex gap-2 justify-center flex-wrap">
+                    {canShareFile && (
+                        <button onClick={async () => {
+                            try { await navigator.share({ files: [prepared.file], title: prepared.subject, text: prepared.text }); await sent("مشاركة من الجهاز"); }
+                            catch (e: any) { if (e?.name !== "AbortError") setError("تعذّرت المشاركة — استخدم التنزيل أو البريد"); }
+                        }} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-qatar-maroon text-white font-black text-sm">
+                            <Send className="w-4 h-4"/>مشاركة (واتساب / بريد…)
+                        </button>
+                    )}
+                    <a href={prepared.url} download={prepared.file.name}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-black text-sm">
+                        <FileDown className="w-4 h-4"/>تنزيل PDF
+                    </a>
+                    {status.teacherEmail && (
+                        <a href={`mailto:${encodeURIComponent(status.teacherEmail)}?subject=${encodeURIComponent(prepared.subject)}&body=${encodeURIComponent(prepared.text + "\n\n(أرفق ملف الاستمارة الذي نزّلته)")}`}
+                            onClick={() => void sent(status.teacherEmail)}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-black text-sm">
+                            <Mail className="w-4 h-4"/>بريد إلكتروني
+                        </a>
+                    )}
+                    <a href={`https://wa.me/${phone}?text=${encodeURIComponent(prepared.text)}`} target="_blank" rel="noreferrer"
+                        onClick={() => void sent("واتساب")}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-black text-sm">
+                        <MessageCircle className="w-4 h-4"/>واتساب (الرابط)
+                    </a>
+                </div>
+            )}
+            {prepared && !canShareFile && <p className="text-[11px] font-bold text-slate-500">
+                على الكمبيوتر: نزّل الـPDF ثم أرفقه في البريد أو واتساب. الرابط مكتوب في الرسالة جاهزًا.
+            </p>}
+            {done && <p className="text-xs font-bold text-emerald-700">سُجّل الإرسال ({done})</p>}
+            {!done && last && <p className="text-[11px] font-bold text-slate-400">
+                آخر إرسال: {last.to} · {new Date(last.createdAt).toLocaleString("ar-QA", { dateStyle: "short", timeStyle: "short" })}
             </p>}
             {error && <p role="alert" className="text-xs font-bold text-rose-700">{error}</p>}
         </div>

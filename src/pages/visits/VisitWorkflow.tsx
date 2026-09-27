@@ -259,11 +259,16 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
                         <FileDown className="w-4 h-4"/>تنزيل PDF
                     </a>
                     {status.teacherEmail && (
-                        <a href={`mailto:${encodeURIComponent(status.teacherEmail)}?subject=${encodeURIComponent(prepared.subject)}&body=${encodeURIComponent(prepared.text + "\n\n(أرفق ملف الاستمارة الذي نزّلته)")}`}
-                            onClick={() => void sent(status.teacherEmail)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-black text-sm">
-                            <Mail className="w-4 h-4"/>بريد إلكتروني
-                        </a>
+                        <button onClick={async () => {
+                            try {
+                                const { outlookDraft, downloadBlob } = await import("../../lib/outlookDraft");
+                                const eml = await outlookDraft({ to: status.teacherEmail, subject: prepared.subject, text: prepared.text, file: prepared.file });
+                                downloadBlob(eml, `رسالة إلى ${status.teacherName}.eml`);
+                                await sent(`Outlook · ${status.teacherEmail}`);
+                            } catch { setError("تعذّر تجهيز رسالة Outlook"); }
+                        }} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0F6CBD] text-white font-black text-sm">
+                            <Mail className="w-4 h-4"/>فتح في Outlook
+                        </button>
                     )}
                     <a href={`https://wa.me/${phone}?text=${encodeURIComponent(prepared.text)}`} target="_blank" rel="noreferrer"
                         onClick={() => void sent("واتساب")}
@@ -272,8 +277,8 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
                     </a>
                 </div>
             )}
-            {prepared && !canShareFile && <p className="text-[11px] font-bold text-slate-500">
-                على الكمبيوتر: نزّل الـPDF ثم أرفقه في البريد أو واتساب. الرابط مكتوب في الرسالة جاهزًا.
+            {prepared && status.teacherEmail && <p className="text-[11px] font-bold text-slate-500">
+                «فتح في Outlook» ينزّل رسالة جاهزة — افتحها من شريط التنزيلات فتظهر في Outlook ببريد المعلم والاستمارة مرفقة، ثم اضغط «إرسال».
             </p>}
             {done && <p className="text-xs font-bold text-emerald-700">سُجّل الإرسال ({done})</p>}
             {!done && last && <p className="text-[11px] font-bold text-slate-400">

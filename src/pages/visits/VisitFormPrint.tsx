@@ -264,7 +264,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
 
             {/* Page 1 */}
             <div className="form-page">
-                <img className="form-bg" src="/forms/visit-form-p1.svg" alt=""/>
+                <img className="form-bg" src="/forms/visit-form-2-p1.svg" alt=""/>
                 <Logo/>
 
                 <Cell box={INFO.school}>{form.schoolName}</Cell>
@@ -301,7 +301,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
 
             {/* Page 2 */}
             <div className="form-page">
-                <img className="form-bg" src="/forms/visit-form-p2.svg" alt=""/>
+                <img className="form-bg" src="/forms/visit-form-2-p2.svg" alt=""/>
                 <Logo/>
 
                 {ticks(2)}

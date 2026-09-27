@@ -1,11 +1,12 @@
 import { AutoArchiveVisit } from "./VisitArchive";
+import { ReviewBanner, SendForReviewDialog, SendToTeacher, isReviewer } from "./VisitWorkflow";
 import { useUnsavedChanges } from "../../lib/useUnsavedChanges";
 import { useEffect, useMemo, useState } from "react";
 import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import {
-    AlertTriangle, CheckCircle2, FileText, Loader2, Printer, RotateCcw, Save, Send, X,
+    AlertTriangle, CheckCircle2, FileText, Loader2, Printer, RotateCcw, Save, Send, Users, X,
 } from "lucide-react";
 import {
     DOMAINS, DOMAIN_LABELS, RATING_SCALE, ROLE_LABELS,
@@ -128,7 +129,11 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const [duplicate, setDuplicate] = useState<any>(null);
     const [oldDateReason, setOldDateReason] = useState("");
     const [editReason, setEditReason] = useState("");
-    const [saved, setSaved] = useState<{ id: string; status: "draft" | "submitted"; recordNo: number | null } | null>(null);
+    const [saved, setSaved] = useState<{ id: string; status: "draft" | "submitted"; recordNo: number | null; reviewTo?: string } | null>(null);
+    const [reviewPick, setReviewPick] = useState(false);
+    // @ts-ignore
+    const requestReview = useMutation(api.visitWorkflow.requestReview);
+    const reviewing = editing ? isReviewer(editing, session) : false;
 
     // @ts-ignore
     const saveVisit = useMutation(api.visits.saveVisit);
@@ -190,7 +195,8 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             return { ...f, ratings: next };
         });
 
-    const submit = async (status: "draft" | "submitted", confirmDuplicate = false) => {
+    const submit = async (status: "draft" | "submitted", confirmDuplicate = false,
+        then?: (id: string) => Promise<string | void>) => {
         setServerError("");
         if (!editing && recordedRole === "supervisor" && !selectedSupervisor) { setServerError("اختر الموجه المسجل للقسم قبل الحفظ"); return; }
         setSaving(status);
@@ -220,10 +226,12 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             }) as any;
 
             if (!res.ok && res.duplicate) { setDuplicate(res.duplicate); return; }
+            const reviewTo = then ? await then(res.id) ?? undefined : undefined;
             try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
             setDuplicate(null);
             setReviewOpen(false);
-            setSaved({ id: res.id, status, recordNo: res.recordNo });
+            setReviewPick(false);
+            setSaved({ id: res.id, status, recordNo: res.recordNo, reviewTo });
         } catch (e: any) {
             // ConvexError carries the reason in .data; anything else is unexpected
             setServerError(typeof e?.data === "string" ? e.data : "تعذّر الحفظ — تحقّق من الاتصال وأعد المحاولة");
@@ -248,7 +256,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                 <CheckCircle2 className="w-14 h-14 mx-auto text-emerald-600"/>
                 <div>
                     <p className="text-xl font-black text-slate-800">
-                        {saved.status === "submitted" ? "اعتُمدت الزيارة" : "حُفظت المسودة"}
+                        {saved.status === "submitted" ? "اعتُمدت الزيارة" : saved.reviewTo ? `أُرسلت الزيارة إلى ${saved.reviewTo} للمراجعة` : "حُفظت المسودة"}
                     </p>
                     <p className="text-sm font-bold text-slate-500 mt-1">
                         {teacher?.fullName} · {formatDate(form.visitDate)}
@@ -257,6 +265,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                     </p>
                 </div>
                 {saved.status === "submitted" && <AutoArchiveVisit visitId={saved.id}/>}
+                {saved.status === "submitted" && <SendToTeacher visitId={saved.id}/>}
                 <div className="flex gap-2 justify-center flex-wrap">
                     {saved.status === "submitted" && (
                         <button onClick={() => window.open(`/supervision/print/${saved.id}?autoprint=1`, "_blank")}
@@ -298,6 +307,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                     {editingSubmitted ? " — الزيارة معتمدة: لا يتغير المعلم ولا التاريخ ولا المادة، وتُحفظ النسخة السابقة." : " — مسودة"}
                 </div>
             )}
+            {editing && !editingSubmitted && <ReviewBanner visit={editing} session={session} onReturned={onDone}/>}
 
             {/* ١. المعلم والحصة */}
             <Section n={1} title="المعلم والحصة">
@@ -505,6 +515,12 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                 حفظ مسودة
                             </button>
                         )}
+                        {!editingSubmitted && !reviewing && session.role !== "deputy" && (
+                            <button onClick={() => { setServerError(""); setReviewPick(true); }} disabled={!form.teacherId || saving !== null}
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-sky-200 text-sm font-black text-sky-800 disabled:opacity-50">
+                                <Users className="w-4 h-4"/>إرسال للمراجعة
+                            </button>
+                        )}
                         <button onClick={() => { setServerError(""); setDuplicate(null); setReviewOpen(true); }}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-qatar-maroon text-white text-sm font-black">
                             <Send className="w-4 h-4"/>{editingSubmitted ? "مراجعة التعديل" : "مراجعة واعتماد"}
@@ -515,6 +531,16 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                     <p className="max-w-7xl mx-auto px-4 pb-2 text-xs font-bold text-rose-700">{serverError}</p>
                 )}
             </div>
+
+            {reviewPick && (
+                <SendForReviewDialog department={teacher?.department ?? form.department} onClose={() => setReviewPick(false)}
+                    onSend={async (target, note) => {
+                        await submit("draft", false, async id => {
+                            await requestReview({ visitId: id, toRole: target.toRole, toVisitorId: target.toVisitorId, note });
+                            return target.name;
+                        });
+                    }}/>
+            )}
 
             {reviewOpen && (
                 <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">

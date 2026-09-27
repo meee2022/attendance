@@ -2,6 +2,18 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+    // Visit forms e-mailed to the visited teacher
+    supervisionEmails: defineTable({
+        schoolId: v.id("schools"),
+        visitId: v.id("supervisionVisits"),
+        to: v.string(),
+        byName: v.string(),
+        status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
+        error: v.optional(v.string()),
+        createdAt: v.number(),
+        sentAt: v.optional(v.number()),
+    }).index("by_visit", ["visitId"]),
+
     supervisionAcknowledgements: defineTable({
         schoolId: v.id("schools"), visitId: v.id("supervisionVisits"), tokenHash: v.string(),
         visitUpdatedAt: v.number(), expiresAt: v.number(), createdBy: v.string(),
@@ -195,6 +207,7 @@ export default defineSchema({
         subjects: v.array(v.string()),  // قائمة المواد التي يغطيها
         email: v.optional(v.string()),
         pin: v.optional(v.string()),    // PIN خاص بالزائر (اختياري - افتراضياً موحد لكل دور)
+        signatureId: v.optional(v.id("_storage")),  // uploaded once, printed on the visitor's submitted visits
         isActive: v.boolean(),
     }).index("by_school", ["schoolId"])
       .index("by_role", ["schoolId", "role"]),
@@ -450,6 +463,18 @@ export default defineSchema({
         evalMgmtRec: v.optional(v.string()),     // التقويم (and, in visits before the split, الإدارة الصفية too)
         managementRec: v.optional(v.string()),   // الإدارة الصفية وبيئة التعلم
         notes: v.optional(v.string()),
+        // A draft sent to the deputy or a colleague to review before it is submitted
+        reviewRequest: v.optional(v.object({
+            toRole: v.union(v.literal("deputy"), v.literal("coordinator")),
+            toVisitorId: v.optional(v.id("supervisors")),
+            toName: v.string(),
+            byName: v.string(),
+            note: v.optional(v.string()),
+            at: v.number(),
+        })),
+        // …and what the reviewer said when sending it back
+        reviewReturn: v.optional(v.object({ byName: v.string(), note: v.string(), at: v.number() })),
+        submittedByName: v.optional(v.string()),
         // «ميدانيّة / عن بُعد» and, for a remote lesson, «بث مباشر مدمج / غير مدمج»
         deliveryMode: v.optional(v.union(v.literal("field"), v.literal("remote"))),
         streamMode: v.optional(v.union(v.literal("merged"), v.literal("unmerged"))),

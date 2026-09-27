@@ -28,6 +28,7 @@ import type * as supervisionDefaults from "../supervisionDefaults.js";
 import type * as supervisionSessions from "../supervisionSessions.js";
 import type * as surveys from "../surveys.js";
 import type * as visitMath from "../visitMath.js";
+import type * as visitWorkflow from "../visitWorkflow.js";
 import type * as visits from "../visits.js";
 
 import type {
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   supervisionSessions: typeof supervisionSessions;
   surveys: typeof surveys;
   visitMath: typeof visitMath;
+  visitWorkflow: typeof visitWorkflow;
   visits: typeof visits;
 }>;
 

@@ -146,6 +146,8 @@ export const listVisits = query({
                 visitorName: x.visitorName,
                 followUpType: x.followUpType,
                 deliveryMode: x.deliveryMode ?? "field",
+                reviewRequest: x.reviewRequest ?? null,
+                reviewReturn: x.reviewReturn ?? null,
                 streamMode: x.streamMode ?? null,
                 status: x.status,
                 averageScore: x.status === "submitted" ? x.averageScore : null,
@@ -188,8 +190,11 @@ export const getVisitForm = query({
         const footerId = snapshot?.footerImageId ?? settings.footerImageId;
         // Only the deputy's own submitted visits carry the deputy's signature;
         // a visit keeps the signature it was submitted with
-        const signatureId = visit.visitorRole === "deputy" && visit.status === "submitted"
-            ? snapshot?.deputySignatureId ?? settings.deputySignatureId : null;
+        const visitor: any = visit.visitorId ? await ctx.db.get(visit.visitorId) : null;
+        const signatureId = visit.status !== "submitted" ? null
+            : visit.visitorRole === "deputy" ? snapshot?.deputySignatureId ?? settings.deputySignatureId
+            : visit.visitorRole === "coordinator" ? snapshot?.visitorSignatureId ?? visitor?.signatureId ?? null
+            : null;
 
         return {
             visit: {
@@ -354,6 +359,8 @@ export const saveVisit = mutation({
             notes: [args.notes?.trim(), args.oldDateReason?.trim() ? `(إدخال لاحق: ${args.oldDateReason.trim()})` : ""]
                 .filter(Boolean).join("\n") || undefined,
             status: args.status,
+            // submitting ends any review; the reviewer who approves is recorded
+            ...(args.status === "submitted" ? { reviewRequest: undefined, reviewReturn: undefined, submittedByName: access.name } : {}),
             updatedAt: now,
             updatedBy: args.actorName,
         };
@@ -386,6 +393,8 @@ export const saveVisit = mutation({
                     headerImageId: settings.headerImageId,
                     footerImageId: settings.footerImageId,
                     deputySignatureId: settings.deputySignatureId,
+                    visitorSignatureId: args.visitorRole === "coordinator" && args.visitorId
+                        ? ((await ctx.db.get(args.visitorId)) as any)?.signatureId ?? null : null,
                     criteria: criteria.map((c: any) => ({ _id: c._id, domain: c.domain, text: c.text, order: c.order })),
                 }),
             };

@@ -8,6 +8,7 @@ import { applyFilters, pct, scoreTone, type Filters, type VisitRow } from "../..
 import { downloadWorkbook } from "../../lib/excelExport";
 import FiltersBar, { periodPresets } from "./FiltersBar";
 import type { Session } from "./VisitsPage";
+import { isReviewer } from "./VisitWorkflow";
 
 // Every visit, filterable, with the drafts and the bin kept apart so the list
 // of record stays clean. Deleting asks for a reason and only moves the visit to
@@ -154,6 +155,8 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                                 {v.teacherName}
                                             </button>
                                             {v.visitNumber ? <span className="block text-[10px] text-slate-400">زيارة رقم {v.visitNumber}</span> : null}
+                                            {v.reviewRequest && <span className="block text-[10px] font-bold text-sky-700">للمراجعة عند {v.reviewRequest.toName}</span>}
+                                            {!v.reviewRequest && v.reviewReturn && <span className="block text-[10px] font-bold text-amber-700">أُعيدت بملاحظات</span>}
                                         </td>
                                         <td className="px-2 py-2 text-slate-600">{v.department}</td>
                                         <td className="px-2 py-2 text-slate-600">{v.className}</td>
@@ -181,7 +184,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                                                 <Printer className="w-4 h-4"/>
                                                             </IconBtn>
                                                         )}
-                                                        {(session.role === "deputy" || v.visitorId === session.visitorId || v.recordedByVisitorId === session.visitorId) && <IconBtn title={v.status === "draft" ? "إكمال المسودة" : "تعديل"} onClick={() => onEdit(v._id)}>
+                                                        {(session.role === "deputy" || v.visitorId === session.visitorId || v.recordedByVisitorId === session.visitorId || isReviewer(v, session)) && <IconBtn title={v.status === "draft" ? "إكمال المسودة" : "تعديل"} onClick={() => onEdit(v._id)}>
                                                             <Pencil className="w-4 h-4"/>
                                                         </IconBtn>}
                                                         {session.role === "deputy" && <IconBtn title="حذف" danger onClick={() => { setDeleting(v); setReason(""); }}>

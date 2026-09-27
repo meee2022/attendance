@@ -25,6 +25,35 @@ async function fixture() {
     return { t, ...ids, token, deputy };
 }
 
+describe("review before submitting", () => {
+    it("lets only the chosen colleague edit or return a draft, and only the owner send it", async () => {
+        const f = await fixture();
+        const ids = await f.t.run(async ctx => {
+            const colleague = await ctx.db.insert("supervisors", { schoolId: f.schoolId, fullName: "منسق زميل", role: "coordinator", subjects: ["العلوم"], isActive: true });
+            const outsider = await ctx.db.insert("supervisors", { schoolId: f.schoolId, fullName: "منسق آخر", role: "coordinator", subjects: ["العلوم"], isActive: true });
+            const draft = await ctx.db.insert("supervisionVisits", { schoolId: f.schoolId, visitorId: f.visitorId, visitorRole: "coordinator", visitorName: "منسق اختبار",
+                teacherId: f.teacherId, teacherName: "معلم اختبار", teacherDepartment: "العلوم", subjectName: "العلوم", className: "10", lessonTopic: "درس",
+                visitDate: "2026-09-01", followUpType: "full", visitNumber: 0, ratings: "{}", averageScore: 0, domainAverages: "{}", status: "draft", createdAt: 1, updatedAt: 1 });
+            return { colleague, outsider, draft };
+        });
+        const colleague = "e".repeat(64), outsider = "f".repeat(64);
+        await f.t.mutation(A.supervisionSessions.login, { role: "coordinator", visitorId: ids.colleague, name: "x", pin: "test-coordinator", token: colleague });
+        await f.t.mutation(A.supervisionSessions.login, { role: "coordinator", visitorId: ids.outsider, name: "x", pin: "test-coordinator", token: outsider });
+
+        // a colleague cannot send someone else's draft
+        await expect(f.t.mutation(A.visitWorkflow.requestReview, { sessionToken: colleague, visitId: ids.draft, toRole: "deputy" })).rejects.toThrow();
+        await f.t.mutation(A.visitWorkflow.requestReview, { sessionToken: f.token, visitId: ids.draft, toRole: "coordinator", toVisitorId: ids.colleague, note: "راجعها" });
+
+        await expect(f.t.mutation(A.visitWorkflow.returnVisit, { sessionToken: outsider, visitId: ids.draft, note: "x" })).rejects.toThrow();
+        await f.t.mutation(A.visitWorkflow.returnVisit, { sessionToken: colleague, visitId: ids.draft, note: "عدّل التوصيات" });
+        const back = await f.t.run(ctx => ctx.db.get(ids.draft));
+        expect(back?.reviewRequest).toBeUndefined();
+        expect(back?.reviewReturn?.note).toBe("عدّل التوصيات");
+        // once returned, the colleague has no more say
+        await expect(f.t.mutation(A.visitWorkflow.returnVisit, { sessionToken: colleague, visitId: ids.draft, note: "x" })).rejects.toThrow();
+    });
+});
+
 describe("supervision authorization and official-form preservation", () => {
     it("rejects anonymous and forged sessions; filters teacher, visit and trash reads on the server", async () => {
         const f = await fixture();

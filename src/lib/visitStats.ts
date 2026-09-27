@@ -37,6 +37,8 @@ export type VisitRow = {
     managementRec?: string;
     deliveryMode?: "field" | "remote";
     streamMode?: "merged" | "unmerged" | null;
+    reviewRequest?: { toRole: "deputy" | "coordinator"; toVisitorId?: string; toName: string; byName: string; note?: string; at: number } | null;
+    reviewReturn?: { byName: string; note: string; at: number } | null;
     notes: string;
     createdAt: number;
     updatedAt: number;

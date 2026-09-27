@@ -292,7 +292,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                     </Cell>
                 )}
 
-                {role === "deputy" && form.signatureUrl && (
+                {role !== "supervisor" && form.signatureUrl && (
                     // A signature is taller than the row: it sits centred on the
                     // cell and crosses its lines, as a pen signature would
                     <div style={{ ...at([SIGNATURE[0], SIGNATURE[1], SIGNATURE[2] - 9, SIGNATURE[3] + 9]), display: "flex", alignItems: "center", justifyContent: "center" }}>

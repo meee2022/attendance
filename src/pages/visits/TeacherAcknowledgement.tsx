@@ -4,6 +4,7 @@ import { api } from "../../../convex/_generated/api";
 import { useSupervisionMutation, useSupervisionQuery } from "../../lib/supervisionSession";
 import { formatDate } from "../../../convex/visitMath";
 import "./visits.css";
+import { SendToTeacher } from "./VisitWorkflow";
 
 export function AcknowledgementControl({ visitId, updatedAt, canManage }: { visitId: string; updatedAt: number; canManage: boolean }) {
     const [open, setOpen] = useState(false);
@@ -32,6 +33,7 @@ export function AcknowledgementControl({ visitId, updatedAt, canManage }: { visi
                 {r.comment && <p className="whitespace-pre-wrap break-words leading-7">تعليق المعلم: {r.comment}</p>}
                 {canManage && !r.revoked && !r.acknowledgedAt && <button className="text-red-700 underline py-2" disabled={busy} onClick={async () => { setBusy(true); try { await revoke({ id: r._id }); setLink(""); } catch { setError("تعذّر إلغاء الرابط؛ حاول مرة أخرى"); } finally { setBusy(false); } }}>إلغاء الرابط</button>}
             </div>)}
+            {canManage && <SendToTeacher visitId={visitId}/>}
             {canManage && <button disabled={busy} onClick={generate} className="bg-qatar-maroon text-white px-4 py-2 rounded-lg min-h-11">{busy ? "جاري التنفيذ…" : "إنشاء رابط اطلاع جديد"}</button>}
             {link && <div className="space-y-2"><label className="block">الرابط الخاص<input aria-label="رابط اطلاع المعلم" className="block w-full rounded-lg border border-slate-300 p-2 text-sm" dir="ltr" readOnly value={link} onFocus={e => e.target.select()}/></label><button className="underline text-qatar-maroon py-2" onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); } catch { setError("يمكنك تحديد الرابط ونسخه يدويًا"); } }}>{copied ? "تم نسخ الرابط" : "نسخ الرابط"}</button></div>}
             {error && <p role="alert" className="text-red-700">{error}</p>}

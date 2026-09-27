@@ -18,6 +18,7 @@ import VisitForm from "./VisitForm";
 import VisitsRegistry from "./VisitsRegistry";
 import TeacherFile from "./TeacherFile";
 import VisitsAnalysis from "./VisitsAnalysis";
+import { MySignatureButton, ReviewInbox } from "./VisitWorkflow";
 
 // One place for the whole supervision cycle. It opens on the overview — who
 // has been visited, who has not, where each department stands — because that
@@ -102,6 +103,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
                 subtitle={`استمارة الإشراف على أداء المعلم · العام الأكاديمي ${setup.settings.academicYear}`}>
                 <span className="grades-header-note flex items-center gap-2">
                     {ROLE_LABELS[session.role]} · {session.name}{scope ? ` · ${scope.join("، ")}` : ""}
+                    <MySignatureButton session={session}/>
                     <button onClick={() => { if (!dirty || window.confirm("يوجد تعديل لم يُحفظ في السجل. هل تريد تغيير المستخدم؟")) onSignOut(); }} title="تبديل المستخدم" aria-label="تبديل المستخدم"
                         className="p-1 rounded-md text-slate-400 hover:text-qatar-maroon hover:bg-qatar-cream-dark">
                         <LogOut className="w-4 h-4"/>
@@ -120,6 +122,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
                 ))}
             </div>
 
+            {tab === "dashboard" && <ReviewInbox visits={visits} onOpen={editVisit}/>}
             {tab === "dashboard" && (
                 <VisitsDashboard setup={setup} visits={visits} onOpenTeacher={openTeacher}
                     onNewVisit={() => { setEditingId(null); setTab("new"); }}

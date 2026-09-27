@@ -36,7 +36,9 @@ export function canAccess(session: any, schoolId: any, department: string) {
 export async function requireVisit(ctx: any, session: any, id: any, write = false) {
     const visit = await ctx.db.get(id);
     if (!visit || !canAccess(session, visit.schoolId, visit.teacherDepartment ?? "")) throw new ConvexError("الزيارة غير متاحة ضمن صلاحياتك");
-    if (write && session.role !== "deputy" && visit.visitorId !== session.visitorId && visit.recordedByVisitorId !== session.visitorId) throw new ConvexError("يمكنك تعديل زياراتك فقط");
+    // A colleague the visit was sent to for review may edit it until it is submitted or returned
+    const reviewer = visit.status === "draft" && visit.reviewRequest?.toVisitorId && visit.reviewRequest.toVisitorId === session.visitorId;
+    if (write && session.role !== "deputy" && !reviewer && visit.visitorId !== session.visitorId && visit.recordedByVisitorId !== session.visitorId) throw new ConvexError("يمكنك تعديل زياراتك فقط");
     return visit;
 }
 

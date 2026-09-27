@@ -85,7 +85,10 @@ export function AutoArchiveVisit({ visitId }: { visitId: string }) {
             try { const path = await job; setMessage(`حُفظ PDF في ${config.directory.name} / ${path}`); setState("saved"); }
             finally { pending.delete(jobKey); }
         } catch (e) {
-            setState("error"); setMessage(`الزيارة محفوظة في التطبيق، لكن لم تُؤرشف على الجهاز. ${e instanceof Error && /إذن|الأرشيف/.test(e.message) ? e.message : "تحقق من اتصالك وإذن المجلد والمساحة المتاحة، ثم أعد المحاولة."}`);
+            console.error("visit archive failed", e);
+            // the technical reason is shown too, so a failure can be reported and traced
+            const detail = e instanceof Error ? ` (${e.name}: ${e.message.slice(0, 160)})` : ` (${String(e).slice(0, 160)})`;
+            setState("error"); setMessage(`الزيارة محفوظة في التطبيق، لكن لم تُؤرشف على الجهاز. ${e instanceof Error && /إذن|الأرشيف/.test(e.message) ? e.message : "تحقق من اتصالك وإذن المجلد والمساحة المتاحة، ثم أعد المحاولة."}${detail}`);
         }
     };
     useEffect(() => {

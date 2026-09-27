@@ -115,7 +115,7 @@ const Tick = ({ box }: { box: Box }) => (
 
 // A cell of free text that shrinks until it fits, the way «تقليص للملاءمة»
 // does, instead of spilling over the lines of the form
-function FitText({ box, text, max = 12, min = 6 }: { box: Box; text: string; max?: number; min?: number }) {
+function FitText({ box, text, max = 15, min = 6 }: { box: Box; text: string; max?: number; min?: number }) {
     const ref = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
         const el = ref.current;
@@ -139,7 +139,7 @@ function FitText({ box, text, max = 12, min = 6 }: { box: Box; text: string; max
 // The recommendation of التقويم sits in a cell the page break cuts in two, as
 // in the Word document: what does not fit in the part on page 1 carries on in
 // the part on page 2, at the same size.
-function useSplit(text: string, first: Box, size = 11) {
+function useSplit(text: string, first: Box, size = 14) {
     const words = text.trim().split(/\s+/).filter(Boolean);
     const [cut, setCut] = useState(words.length);
     useLayoutEffect(() => {
@@ -267,7 +267,8 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 <img className="form-bg" src="/forms/visit-form-2-p1.svg" alt=""/>
                 <Logo/>
 
-                <Cell box={INFO.school}>{form.schoolName}</Cell>
+                {/* the cell is already labelled «المدرسة» */}
+                <Cell box={INFO.school}>{String(form.schoolName ?? "").replace(/^\s*مدرسة\s+/, "")}</Cell>
                 <Cell box={INFO.date}>
                     <span>{dayName(visit.visitDate)}</span>&nbsp;&nbsp;<bdi dir="ltr">{formatDate(visit.visitDate)}</bdi>
                 </Cell>
@@ -293,7 +294,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 <FitText box={[...REC_X, P1_ROWS[0], P1_ROWS[3]]} text={recs.planning}/>
                 <FitText box={[...REC_X, P1_ROWS[3], P1_ROWS[16]]} text={recs.execution}/>
                 {evalTail
-                    ? <FitText box={evalBox1} text={evalHead} max={11}/>
+                    ? <FitText box={evalBox1} text={evalHead} max={14}/>
                     : <FitText box={evalBox1} text={recs.evaluation}/>}
 
                 <Cell box={PAGE_NO} size={12}>1</Cell>
@@ -305,9 +306,9 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 <Logo/>
 
                 {ticks(2)}
-                <FitText box={evalBox2} text={evalTail} max={11}/>
+                <FitText box={evalBox2} text={evalTail} max={14}/>
                 <FitText box={[...REC_X, P2_ROWS[1], P2_ROWS[5]]} text={recs.management}/>
-                <FitText box={NOTES} text={String(visit.notes ?? "")} max={13}/>
+                <FitText box={NOTES} text={String(visit.notes ?? "")} max={15}/>
 
                 {role !== "deputy" && (
                     <Cell box={inside(SIGN_LABEL)} size={14} style={{ background: "#DDDDDD", fontWeight: 400 }}>

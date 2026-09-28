@@ -4,6 +4,7 @@ import { FileDown, ImageUp, Loader2, Mail, MessageCircle, PenLine, Send, Trash2,
 import { api } from "../../../convex/_generated/api";
 import { useSupervisionMutation, useSupervisionQuery, useSupervisionSession } from "../../lib/supervisionSession";
 import type { VisitRow } from "../../lib/visitStats";
+import { formatDate } from "../../../convex/visitMath";
 import type { Session } from "./VisitsPage";
 
 // The steps around a visit that are not the form itself: the visitor's
@@ -213,12 +214,14 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
             const { createVisitPdf } = await import("../../lib/visitPdf");
             const v = data.visit;
             const date = String(v.visitDate ?? "");
+            const shown = formatDate(date);                     // 28/09/2026, as on the form
             const file = new File([await createVisitPdf(data)], `استمارة زيارة ${v.teacherName} ${date}.pdf`, { type: "application/pdf" });
-            const subject = `استمارة الإشراف على أداء المعلّم — ${date}`;
+            const subject = `استمارة الإشراف على أداء المعلّم — ${shown}`;
             const text = [
                 `السلام عليكم أ. ${v.teacherName}`,
-                `مرفق استمارة زيارة ${date} (${v.lessonTopic}).`,
+                `مرفق استمارة زيارة ${shown} (${v.lessonTopic}).`,
                 "يرجى الاطلاع على التوصيات وتوقيع الاستمارة وإعادة إرسالها.",
+                "ولكم جزيل الشكر",
             ].join("\n");
             setPrepared({ file, url: URL.createObjectURL(file), text, subject });
         } catch (e) { setError(errorText(e, "تعذّر تجهيز الاستمارة — حاول مرة أخرى")); }

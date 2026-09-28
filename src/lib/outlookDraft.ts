@@ -17,8 +17,15 @@ const escapeHtml = (t: string) => t.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<"
 
 export async function outlookDraft({ to, subject, text, file }: { to: string; subject: string; text: string; file: File }) {
     const boundary = `----=_visit_${crypto.getRandomValues(new Uint32Array(2)).join("")}`;
-    const html = `<div dir="rtl" style="font-family:Tahoma,Arial,sans-serif;font-size:14px;line-height:1.8">${
-        escapeHtml(text).replace(/(https?:\/\/\S+)/g, '<a href="$1">$1</a>').replace(/\n/g, "<br>")}</div>`;
+    // Centred, one paragraph per line, in an Arabic face Outlook has on Windows;
+    // a table because Outlook lays mail out with Word's engine
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    const paragraphs = lines.map((line, i) => {
+        const first = i === 0, last = i === lines.length - 1, request = /^يرجى/.test(line);
+        const style = `margin:0 0 10px;${first || last || request ? "font-weight:bold;" : ""}${request ? "color:#8A1538;" : ""}`;
+        return `<p align="center" style="${style}">${escapeHtml(line)}</p>`;
+    }).join("");
+    const html = `<table width="100%" dir="rtl" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" dir="rtl" style="padding:16px 8px;font-family:'Sakkal Majalla','Traditional Arabic','Segoe UI',Tahoma,Arial,sans-serif;font-size:22px;line-height:1.7;color:#1e293b">${paragraphs}</td></tr></table>`;
     const pdf = new Uint8Array(await file.arrayBuffer());
     const eml = [
         `To: ${to}`,

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/supervisionSession";
@@ -6,18 +6,21 @@ import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/
 import { api } from "../../../convex/_generated/api";
 import { DOMAINS, dayName, formatDate, type Domain, type Rating, type VisitorRole } from "../../../convex/visitMath";
 
-// «استمارة الإشراف على أداء المعلّم» exactly as the ministry prints it in
-// «النماذج المعتمدة للنائب 2026-2027» (pages 10 and 11). The two pages are the
-// document itself, exported from Word as vector drawings with the text turned
-// into outlines — so the lines, shading, fonts and wording are the ministry's
-// own and do not depend on what is installed on the printing machine. The
-// visit's details are written into the cells on top of them.
+// «استمارة الإشراف على أداء المعلّم» as the ministry prints it in
+// «النماذج المعتمدة للنائب 2026-2027» (pages 10 and 11), on one sheet. The two
+// pages are the document itself, exported from Word as vector drawings with
+// the text turned into outlines — so the lines, shading, fonts and wording are
+// the ministry's own and do not depend on what is installed on the printing
+// machine. Page 2's rows are joined under page 1's table, the whole is scaled
+// to fit one A4 page, and the visit's details are written into the cells.
 //
-// Every position below is in PDF points on an A4 page (595.32 × 841.92), read
-// from the document's own table borders.
+// Every position below is in PDF points, read from the document's own table
+// borders: page 1 as is, page 2 moved down by P2_SHIFT.
 
 const PAGE_W = 595.32;
 const PAGE_H = 841.92;
+const P1_SRC = "/forms/visit-form-2-p1.svg";
+const P2_SRC = "/forms/visit-form-3-p2.svg";
 const FORM_FONT = `"Sakkal Majalla", "Traditional Arabic", "Amiri", "Noto Naskh Arabic", serif`;
 
 type Box = [x0: number, x1: number, y0: number, y1: number];
@@ -52,19 +55,27 @@ const REC_X: [number, number] = [24.7, 218.2];
 const P1_ROWS = [352.4, 386.3, 407.2, 428.0, 449.0, 469.7, 490.5, 511.4, 545.3, 566.1, 587.0, 607.8, 628.5,
     649.4, 670.2, 690.9, 711.8, 732.7, 753.6];
 const P2_ROWS = [153.3, 174.0, 195.0, 215.8, 236.7, 257.4];
+// page 2's first criterion row starts where page 1's table ends
+const P2_SHIFT = P1_ROWS[P1_ROWS.length - 1] - P2_ROWS[0];
+const p2 = (y: number) => y + P2_SHIFT;
 const EXPECTED: Record<Domain, number> = { planning: 3, execution: 13, evaluation: 3, management: 4 };
 
-const NOTES: Box = [24.7, 569.9, 277.5, 325.1];
-const SIGN_LABEL: Box = [130.3, 290.0, 325.1, 345.2];
-const SIGNATURE: Box = [24.7, 130.3, 325.1, 345.2];
-const PAGE_NO: Box = [50, 68, 756, 775];
+// The end of page 2 — general notes, the signature row, the note in red — is
+// drawn here rather than taken from the page, so the notes grow with their
+// text as the Word table row does, and everything below moves down with them.
+const TABLE_X: [number, number] = [24.5, 570.1];
+const NOTES_TOP = 277.7;
+const NOTES_MIN = 47.2;
+// the vision and mission lines at the foot of the page
+const FOOTER: [number, number] = [770, 810];
+const SHEET_MARGIN = 10;
 
 type Row = { page: 1 | 2; y0: number; y1: number };
 
 function criterionRows(): Row[] {
     const rows: Row[] = [];
     for (let i = 0; i + 1 < P1_ROWS.length; i++) rows.push({ page: 1, y0: P1_ROWS[i], y1: P1_ROWS[i + 1] });
-    for (let i = 0; i + 1 < P2_ROWS.length; i++) rows.push({ page: 2, y0: P2_ROWS[i], y1: P2_ROWS[i + 1] });
+    for (let i = 0; i + 1 < P2_ROWS.length; i++) rows.push({ page: 2, y0: p2(P2_ROWS[i]), y1: p2(P2_ROWS[i + 1]) });
     return rows;
 }
 
@@ -72,12 +83,18 @@ function criterionRows(): Row[] {
 const inside = ([x0, x1, y0, y1]: Box, d = 0.8): Box => [x0 + d, x1 - d, y0 + d, y1 - d];
 
 const at = ([x0, x1, y0, y1]: Box): CSSProperties => ({
-    position: "absolute",
-    left: `${(x0 / PAGE_W) * 100}%`, width: `${((x1 - x0) / PAGE_W) * 100}%`,
-    top: `${(y0 / PAGE_H) * 100}%`, height: `${((y1 - y0) / PAGE_H) * 100}%`,
+    position: "absolute", left: `${x0}pt`, width: `${x1 - x0}pt`, top: `${y0}pt`, height: `${y1 - y0}pt`,
 });
 
-// Text centred in a cell, as the form's own labels are
+// A slice [y0, y1] of one of the two Word pages, shown at `top` on the sheet
+function PageSlice({ src, y0, y1, top }: { src: string; y0: number; y1: number; top: number }) {
+    return (
+        <div style={{ position: "absolute", left: 0, top: `${top}pt`, width: `${PAGE_W}pt`, height: `${y1 - y0}pt`, overflow: "hidden" }}>
+            <img src={src} alt="" style={{ position: "absolute", left: 0, top: `${-y0}pt`, width: `${PAGE_W}pt`, height: `${PAGE_H}pt`, display: "block" }}/>
+        </div>
+    );
+}
+
 // Text centred in a cell, as the form's own labels are; a long name or lesson
 // title steps down in size until it fits inside the cell's lines
 function Cell({ box, size = 13, children, style }: { box: Box; size?: number; children: ReactNode; style?: CSSProperties }) {
@@ -136,33 +153,42 @@ function FitText({ box, text, max = 15, min = 6 }: { box: Box; text: string; max
     );
 }
 
-// The recommendation of التقويم sits in a cell the page break cuts in two, as
-// in the Word document: what does not fit in the part on page 1 carries on in
-// the part on page 2, at the same size.
-function useSplit(text: string, first: Box, size = 14) {
-    const words = text.trim().split(/\s+/).filter(Boolean);
-    const [cut, setCut] = useState(words.length);
+function FormEnd({ role, notes, signatureUrl }: { role: VisitorRole; notes: string; signatureUrl: string | null }) {
+    const line = "0.5pt solid #000";
+    const label: CSSProperties = { background: "#DDDDDD", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FORM_FONT, fontSize: "14pt", color: "#000" };
+    const notesRef = useRef<HTMLDivElement>(null);
+    // a very long note grows the box up to a point, then shrinks
     useLayoutEffect(() => {
-        const probe = document.createElement("div");
-        const [x0, x1, y0, y1] = first;
-        // measured at print size: 1pt = 96/72 px
-        Object.assign(probe.style, {
-            position: "fixed", left: "-9999px", top: "0", visibility: "hidden", boxSizing: "border-box",
-            width: `${(x1 - x0) * 96 / 72}px`, fontFamily: FORM_FONT, fontSize: `${size}pt`, lineHeight: "1.15",
-            padding: "2pt 4pt", whiteSpace: "pre-line", direction: "rtl",
-        });
-        document.body.appendChild(probe);
-        const room = (y1 - y0) * 96 / 72;
-        let lo = 0, hi = words.length;
-        while (lo < hi) {
-            const mid = Math.ceil((lo + hi) / 2);
-            probe.textContent = words.slice(0, mid).join(" ");
-            if (probe.scrollHeight <= room + 1) lo = mid; else hi = mid - 1;
-        }
-        probe.remove();
-        setCut(lo);
-    }, [text]);
-    return [words.slice(0, cut).join(" "), words.slice(cut).join(" ")] as const;
+        const el = notesRef.current;
+        if (!el) return;
+        let size = 13;
+        el.style.fontSize = `${size}pt`;
+        while (size > 8 && el.scrollHeight > el.clientHeight + 1) { size -= 0.5; el.style.fontSize = `${size}pt`; }
+    }, [notes]);
+    return (
+        <div style={{ position: "relative", marginRight: `${PAGE_W - TABLE_X[1]}pt`, width: `${TABLE_X[1] - TABLE_X[0]}pt`, direction: "rtl" }}>
+            <div ref={notesRef} style={{
+                borderInline: line, borderBottom: line, minHeight: `${NOTES_MIN}pt`, maxHeight: "220pt", overflow: "hidden",
+                padding: "3pt 6pt", fontFamily: FORM_FONT, fontSize: "13pt", lineHeight: 1.25, whiteSpace: "pre-line", textAlign: "right", color: "#000",
+            }}>{notes}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "119.7fr 159.5fr 159.1fr 105.6fr", height: "20pt", borderInline: line, borderBottom: line }}>
+                <div style={label}>توقيع المعلم</div>
+                <div style={{ borderInlineStart: line }}/>
+                <div style={{ ...label, borderInlineStart: line }}>توقيع {VISITOR_TITLE[role]}</div>
+                <div style={{ borderInlineStart: line, position: "relative" }}>
+                    {signatureUrl && (
+                        // a signature is taller than the row: centred on the cell, it crosses its lines as a pen would
+                        <div style={{ position: "absolute", inset: "-9pt 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <img src={signatureUrl} alt="" style={{ maxWidth: "88%", maxHeight: "100%", objectFit: "contain", display: "block" }}/>
+                        </div>
+                    )}
+                </div>
+            </div>
+            <p style={{ margin: 0, paddingInlineStart: "28.6pt", fontFamily: FORM_FONT, fontSize: "11.04pt", lineHeight: 1.3, color: "#C00000", textAlign: "right" }}>
+                يستخدم هذا النموذج من قبل نائب المدير للشؤون الأكاديمية مرة واحدة على الأقل لكل معلم خلال العام الدراسي.
+            </p>
+        </div>
+    );
 }
 
 const VISITOR_TITLE: Record<VisitorRole, string> = {
@@ -217,17 +243,24 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
         evaluation: String(visit.evalMgmtRec ?? ""),
         management: String(visit.managementRec ?? ""),
     };
-    const ticks = (page: 1 | 2) => placed.filter(p => p.row.page === page).flatMap(({ c, row }) => {
+    const ticks = placed.flatMap(({ c, row }) => {
         const r = visit.ratings[c._id];
         const col = RATING_X.find(([v]) => v === r);
         return col ? [<Tick key={c._id} box={[col[1], col[2], row.y0, row.y1]}/>] : [];
     });
 
     const delivery = visit.deliveryMode ?? "field";
-    const evalBox1: Box = [...REC_X, P1_ROWS[16], P1_ROWS[18]];
-    const evalBox2: Box = [...REC_X, P2_ROWS[0], P2_ROWS[1]];
-    // Line breaks typed by the visitor are kept only when it all fits on page 1
-    const [evalHead, evalTail] = useSplit(recs.evaluation, evalBox1);
+    const tableEnd = P1_ROWS[P1_ROWS.length - 1];
+
+    // The joined sheet is taller than A4; it is scaled down to fit one page
+    const sheet = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const el = sheet.current;
+        if (!el) return;
+        const height = el.scrollHeight * 72 / 96;          // px → pt
+        const k = Math.min(1, (PAGE_H - 2 * SHEET_MARGIN) / height);
+        el.style.transform = `translateX(-50%) scale(${k})`;
+    });
 
     return (
         <div dir="rtl" className="vfp">
@@ -245,7 +278,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 .vfp { background: #e2e8f0; min-height: 100vh; padding-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; }
                 .form-page:last-child { break-after: auto; page-break-after: auto; }
-                .form-page > img.form-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+                .form-sheet { position: absolute; left: 50%; top: ${SHEET_MARGIN}pt; width: ${PAGE_W}pt; transform-origin: top center; }
             `}</style>
 
             {toolbar && <div className="no-print p-3 flex gap-2 items-center justify-center flex-wrap">
@@ -262,70 +295,53 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 )}
             </div>}
 
-            {/* Page 1 */}
             <div className="form-page">
-                <img className="form-bg" src="/forms/visit-form-2-p1.svg" alt=""/>
-                <Logo/>
+                <div className="form-sheet" ref={sheet}>
+                    <PageSlice src={P1_SRC} y0={0} y1={tableEnd + 0.5} top={0}/>
+                    <PageSlice src={P2_SRC} y0={P2_ROWS[0] - 0.5} y1={NOTES_TOP + 0.2} top={tableEnd - 0.5}/>
+                    {/* page 1's closing line and page 2's opening line inside the merged
+                        cells of التقويم — the domain and its recommendation — make them one cell again */}
+                    <div style={{ ...at([REC_X[0] + 0.4, REC_X[1] - 0.4, tableEnd - 1.2, tableEnd + 1.2]), background: "#fff", zIndex: 1 }}/>
+                    <div style={{ ...at([533.5, 569.5, tableEnd - 1.2, tableEnd + 1.2]), background: "#DDDDDD", zIndex: 1 }}/>
+                    {/* the booklet's section tab at the page edge is not part of the form */}
+                    <div style={{ ...at([570.4, 582, 574, 602]), background: "#fff" }}/>
+                    <Logo/>
 
-                {/* the cell is already labelled «المدرسة» */}
-                <Cell box={INFO.school}>{String(form.schoolName ?? "").replace(/^\s*مدرسة\s+/, "")}</Cell>
-                <Cell box={INFO.date}>
-                    <span>{dayName(visit.visitDate)}</span>&nbsp;&nbsp;<bdi dir="ltr">{formatDate(visit.visitDate)}</bdi>
-                </Cell>
-                <Cell box={INFO.subject}>{visit.subjectName}</Cell>
-                <Cell box={INFO.className}>{visit.className}</Cell>
-                <Cell box={INFO.topic}>{visit.lessonTopic}</Cell>
-                {role !== "deputy" && (
-                    <Cell box={inside(INFO.visitorLabel)} size={14} style={{ background: "#ECE9E3", fontWeight: 400 }}>
-                        {VISITOR_TITLE[role]}
+                    {/* the cell is already labelled «المدرسة» */}
+                    <Cell box={INFO.school}>{String(form.schoolName ?? "").replace(/^\s*مدرسة\s+/, "")}</Cell>
+                    <Cell box={INFO.date}>
+                        <span>{dayName(visit.visitDate)}</span>&nbsp;&nbsp;<bdi dir="ltr">{formatDate(visit.visitDate)}</bdi>
                     </Cell>
-                )}
-                <Cell box={INFO.visitor}>{visitorName}</Cell>
-                <Cell box={INFO.teacher}>{visit.teacherName}</Cell>
+                    <Cell box={INFO.subject}>{visit.subjectName}</Cell>
+                    <Cell box={INFO.className}>{visit.className}</Cell>
+                    <Cell box={INFO.topic}>{visit.lessonTopic}</Cell>
+                    {role !== "deputy" && (
+                        <Cell box={inside(INFO.visitorLabel)} size={14} style={{ background: "#ECE9E3", fontWeight: 400 }}>
+                            {VISITOR_TITLE[role]}
+                        </Cell>
+                    )}
+                    <Cell box={INFO.visitor}>{visitorName}</Cell>
+                    <Cell box={INFO.teacher}>{visit.teacherName}</Cell>
 
-                {delivery === "field" ? <Tick box={INFO.field}/> : <Tick box={INFO.remote}/>}
-                {visit.followUpType === "partial" ? <Tick box={INFO.partial}/> : <Tick box={INFO.full}/>}
-                {delivery === "remote" && visit.streamMode === "merged" && <Tick box={INFO.merged}/>}
-                {delivery === "remote" && visit.streamMode === "unmerged" && <Tick box={INFO.unmerged}/>}
+                    {delivery === "field" ? <Tick box={INFO.field}/> : <Tick box={INFO.remote}/>}
+                    {visit.followUpType === "partial" ? <Tick box={INFO.partial}/> : <Tick box={INFO.full}/>}
+                    {delivery === "remote" && visit.streamMode === "merged" && <Tick box={INFO.merged}/>}
+                    {delivery === "remote" && visit.streamMode === "unmerged" && <Tick box={INFO.unmerged}/>}
 
-                {ticks(1)}
+                    {ticks}
 
-                {/* التخطيط · تنفيذ الدرس · التقويم (its first two rows) */}
-                <FitText box={[...REC_X, P1_ROWS[0], P1_ROWS[3]]} text={recs.planning}/>
-                <FitText box={[...REC_X, P1_ROWS[3], P1_ROWS[16]]} text={recs.execution}/>
-                {evalTail
-                    ? <FitText box={evalBox1} text={evalHead} max={14}/>
-                    : <FitText box={evalBox1} text={recs.evaluation}/>}
+                    <FitText box={[...REC_X, P1_ROWS[0], P1_ROWS[3]]} text={recs.planning}/>
+                    <FitText box={[...REC_X, P1_ROWS[3], P1_ROWS[16]]} text={recs.execution}/>
+                    <FitText box={[...REC_X, P1_ROWS[16], p2(P2_ROWS[1])]} text={recs.evaluation}/>
+                    <FitText box={[...REC_X, p2(P2_ROWS[1]), p2(P2_ROWS[5])]} text={recs.management}/>
 
-                <Cell box={PAGE_NO} size={12}>1</Cell>
-            </div>
-
-            {/* Page 2 */}
-            <div className="form-page">
-                <img className="form-bg" src="/forms/visit-form-2-p2.svg" alt=""/>
-                <Logo/>
-
-                {ticks(2)}
-                <FitText box={evalBox2} text={evalTail} max={14}/>
-                <FitText box={[...REC_X, P2_ROWS[1], P2_ROWS[5]]} text={recs.management}/>
-                <FitText box={NOTES} text={String(visit.notes ?? "")} max={15}/>
-
-                {role !== "deputy" && (
-                    <Cell box={inside(SIGN_LABEL)} size={14} style={{ background: "#DDDDDD", fontWeight: 400 }}>
-                        توقيع {VISITOR_TITLE[role]}
-                    </Cell>
-                )}
-
-                {role !== "supervisor" && form.signatureUrl && (
-                    // A signature is taller than the row: it sits centred on the
-                    // cell and crosses its lines, as a pen signature would
-                    <div style={{ ...at([SIGNATURE[0], SIGNATURE[1], SIGNATURE[2] - 9, SIGNATURE[3] + 9]), display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <img src={form.signatureUrl} alt=""
-                            style={{ maxWidth: "88%", maxHeight: "100%", objectFit: "contain", display: "block" }}/>
+                    {/* in the flow from here, so the notes can grow */}
+                    <div style={{ height: `${p2(NOTES_TOP)}pt` }}/>
+                    <FormEnd role={role} notes={String(visit.notes ?? "")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null}/>
+                    <div style={{ position: "relative", height: `${FOOTER[1] - FOOTER[0]}pt`, marginTop: "14pt" }}>
+                        <PageSlice src={P1_SRC} y0={FOOTER[0]} y1={FOOTER[1]} top={0}/>
                     </div>
-                )}
-
-                <Cell box={PAGE_NO} size={12}>2</Cell>
+                </div>
             </div>
         </div>
     );

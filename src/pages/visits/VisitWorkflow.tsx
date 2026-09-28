@@ -188,9 +188,9 @@ export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (i
 }
 
 // ── Send to the teacher ──────────────────────────────────────────────────
-// From the visitor's own device: the form is made into a PDF with a private
-// acknowledgement link, then handed to the share sheet (WhatsApp, Mail…), the
-// mail program, or downloaded. Preparing and sending are two taps, because a
+// From the visitor's own device: the form is made into a PDF, then handed to
+// the share sheet (WhatsApp, Mail…), Outlook, or downloaded; the teacher signs
+// it and sends it back. Preparing and sending are two taps, because a
 // browser only opens the share sheet straight after a tap.
 type Prepared = { file: File; url: string; text: string; subject: string };
 
@@ -198,7 +198,6 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
     const convex = useConvex();
     const session = useSupervisionSession();
     const status = useSupervisionQuery((api as any).visitWorkflow.emailStatus, { visitId }) as any;
-    const createLink = useSupervisionMutation((api as any).supervisionAcknowledgements.create);
     const logSend = useSupervisionMutation((api as any).visitWorkflow.logSend);
     const [prepared, setPrepared] = useState<Prepared | null>(null);
     const [busy, setBusy] = useState(false);
@@ -215,15 +214,11 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
             const v = data.visit;
             const date = String(v.visitDate ?? "");
             const file = new File([await createVisitPdf(data)], `استمارة زيارة ${v.teacherName} ${date}.pdf`, { type: "application/pdf" });
-            const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
-            await createLink({ visitId, token });
-            const link = `${window.location.origin}/supervision/acknowledge#${token}`;
             const subject = `استمارة الإشراف على أداء المعلّم — ${date}`;
             const text = [
                 `السلام عليكم أ. ${v.teacherName}`,
                 `مرفق استمارة زيارة ${date} (${v.lessonTopic}).`,
-                "للاطلاع على الملاحظات وكتابة تعليقك (صالح 7 أيام):",
-                link,
+                "يرجى الاطلاع على التوصيات وتوقيع الاستمارة وإعادة إرسالها.",
             ].join("\n");
             setPrepared({ file, url: URL.createObjectURL(file), text, subject });
         } catch (e) { setError(errorText(e, "تعذّر تجهيز الاستمارة — حاول مرة أخرى")); }
@@ -273,7 +268,7 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
                     <a href={`https://wa.me/${phone}?text=${encodeURIComponent(prepared.text)}`} target="_blank" rel="noreferrer"
                         onClick={() => void sent("واتساب")}
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-700 font-black text-sm">
-                        <MessageCircle className="w-4 h-4"/>واتساب (الرابط)
+                        <MessageCircle className="w-4 h-4"/>واتساب (الرسالة فقط)
                     </a>
                 </div>
             )}

@@ -8,12 +8,14 @@ export async function digest(value: string) {
 }
 
 export function rolePin(school: any, role: string, visitor?: any) {
-    return visitor?.pin || (role === "deputy" ? school.deputyPin ?? "3333"
-        : role === "supervisor" ? school.supervisorPin ?? "2222" : school.coordinatorPin ?? "1111");
+    if (role === "teacher") return school.teacherPin || "";
+    if (role === "admin") return school.adminPin || "";
+    return visitor?.pin || (role === "deputy" ? school.deputyPin || ""
+        : role === "supervisor" ? school.supervisorPin || "" : school.coordinatorPin || "");
 }
 
 export async function requireSession(ctx: any, token?: string, deputy = false) {
-    if (!token) throw new ConvexError("سجّل الدخول للإشراف أولاً");
+    if (!token) throw new ConvexError("سجّل الدخول للمنصة أولاً");
     const hash = await digest(token);
     const session = await ctx.db.query("supervisionSessions")
         .withIndex("by_token", (q: any) => q.eq("tokenHash", hash)).first();
@@ -21,12 +23,12 @@ export async function requireSession(ctx: any, token?: string, deputy = false) {
     const school = await ctx.db.get(session.schoolId);
     const visitor = session.visitorId ? await ctx.db.get(session.visitorId) : null;
     if (session.role === "supervisor" || !school || (session.visitorId && (!visitor || visitor.isActive === false || visitor.role !== session.role))
-        || session.credentialHash !== await digest(rolePin(school, session.role, visitor))) {
+        || !rolePin(school, session.role, visitor) || session.credentialHash !== await digest(rolePin(school, session.role, visitor))) {
         throw new ConvexError("تغيّرت صلاحيات الدخول؛ سجّل الدخول مرة أخرى");
     }
-    if (deputy && session.role !== "deputy") throw new ConvexError("هذه العملية متاحة للنائب الأكاديمي فقط");
+    if (deputy && session.role !== "deputy" && session.role !== "admin") throw new ConvexError("هذه العملية متاحة للنائب الأكاديمي أو مسؤول المنصة");
     const settings = session.role === "deputy" ? await ctx.db.query("supervisionSettings").withIndex("by_school", (q: any) => q.eq("schoolId", school._id)).first() : null;
-    return { ...session, name: session.role === "deputy" ? deputyNameOf(settings) : session.name, departments: session.role === "deputy" ? null : (visitor?.subjects ?? []).map((s: string) => s.trim()) };
+    return { ...session, name: session.role === "deputy" ? deputyNameOf(settings) : session.name, departments: (session.role === "deputy" || session.role === "admin") ? null : (visitor?.subjects ?? []).map((s: string) => s.trim()) };
 }
 
 export function canAccess(session: any, schoolId: any, department: string) {
@@ -38,7 +40,7 @@ export async function requireVisit(ctx: any, session: any, id: any, write = fals
     if (!visit || !canAccess(session, visit.schoolId, visit.teacherDepartment ?? "")) throw new ConvexError("الزيارة غير متاحة ضمن صلاحياتك");
     // A colleague the visit was sent to for review may edit it until it is submitted or returned
     const reviewer = visit.status === "draft" && visit.reviewRequest?.toVisitorId && visit.reviewRequest.toVisitorId === session.visitorId;
-    if (write && session.role !== "deputy" && !reviewer && visit.visitorId !== session.visitorId && visit.recordedByVisitorId !== session.visitorId) throw new ConvexError("يمكنك تعديل زياراتك فقط");
+    if (write && session.role !== "deputy" && session.role !== "admin" && !reviewer && visit.visitorId !== session.visitorId && visit.recordedByVisitorId !== session.visitorId) throw new ConvexError("يمكنك تعديل زياراتك فقط");
     return visit;
 }
 
@@ -50,6 +52,7 @@ function secured(builder: any, deputy: boolean) {
         handler: async (ctx: any, raw: any) => {
             const { sessionToken, ...args } = raw;
             const session = await requireSession(ctx, sessionToken, deputy);
+            if (session.role === "teacher") throw new ConvexError("الإشراف متاح للمنسق والنائب ومسؤول المنصة");
             return config.handler({ ...ctx, supervisionSession: session }, args);
         },
     });
@@ -60,6 +63,6 @@ export const deputyQuery: typeof query = secured(query, true);
 export const deputyMutation: typeof mutation = secured(mutation, true);
 
 export function publicSchool(school: any) {
-    const { adminPin, coordinatorPin, supervisorPin, deputyPin, ...safe } = school;
+    const { teacherPin, adminPin, coordinatorPin, supervisorPin, deputyPin, ...safe } = school;
     return safe;
 }

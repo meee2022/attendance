@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useConvex } from "convex/react";
+import { useConvex } from "../lib/platformSession";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";

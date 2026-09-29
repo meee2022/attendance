@@ -1,7 +1,7 @@
-import { mutation, query } from "./_generated/server";
+import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
 import { v } from "convex/values";
 
-export const deletePeriodData = mutation({
+export const deletePeriodData = adminMutation({
     args: {
         classId: v.id("classes"),
         date: v.string(),

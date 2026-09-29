@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import {
     ClipboardList, Users, BarChart3, Plus, Trash2, ChevronDown, ChevronUp,
-    CheckCircle2, Clock, Shield, Eye, EyeOff, Send, RotateCcw, BookOpen,
+    CheckCircle2, Clock, Shield, Send, RotateCcw, BookOpen,
     Pencil, X, Download, Check, UserCheck, UserX,
 } from "lucide-react";
 
@@ -462,44 +462,9 @@ function RespondentForm({ survey, respondentId, onBack }: { survey: Survey; resp
 
 // ── Manage Tab ─────────────────────────────────────────────────────────────
 export function ManageTab({ survey }: { survey: Survey }) {
-    const [authed, setAuthed] = useState(sessionStorage.getItem("qatar_admin_auth") === "true");
-    const [pin, setPin] = useState("");
-    const [showPin, setShowPin] = useState(false);
-    const [pinError, setPinError] = useState("");
+    const session = usePlatformSession();
     const [subTab, setSubTab] = useState<ManageSubTab>("teachers");
-
-    if (!authed) {
-        return (
-            <div className="max-w-sm mx-auto pt-8 space-y-4 animate-in fade-in duration-300">
-                <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
-                    <div className="bg-slate-700 px-5 py-4 flex items-center gap-3">
-                        <Shield className="w-5 h-5 text-white/70"/>
-                        <span className="font-black text-white">صفحة المسؤول</span>
-                    </div>
-                    <div className="p-5 space-y-4">
-                        <p className="text-sm text-slate-400 font-bold text-center">أدخل رمز PIN للمتابعة</p>
-                        <div className="relative">
-                            <input type={showPin ? "text" : "password"} value={pin}
-                                onChange={e => { setPin(e.target.value); setPinError(""); }}
-                                onKeyDown={e => { if (e.key === "Enter") { if (pin === "1234") setAuthed(true); else setPinError("رمز PIN غير صحيح"); } }}
-                                placeholder="• • • •"
-                                className={`w-full border-2 rounded-xl px-4 py-3 text-center text-2xl tracking-widest font-black focus:outline-none ${pinError ? "border-red-400" : "border-qatar-gray-border focus:border-qatar-maroon"}`} />
-                            <button type="button" onClick={() => setShowPin(v=>!v)}
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                {showPin ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
-                            </button>
-                        </div>
-                        {pinError && <p className="text-red-500 text-sm text-center font-bold">{pinError}</p>}
-                        <button onClick={() => { if (pin === "1234") setAuthed(true); else setPinError("رمز PIN غير صحيح"); }}
-                            className="w-full py-3 rounded-xl font-black text-white text-sm transition-all hover:opacity-90"
-                            style={{ background: "linear-gradient(135deg, #5C1523, #7A1E30)" }}>
-                            دخول
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    if (session?.role !== "admin" && session?.role !== "deputy") return <p>هذا القسم متاح للإدارة فقط.</p>;
 
     return (
         <div className="space-y-5 animate-in fade-in duration-300">

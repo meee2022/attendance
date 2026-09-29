@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { staffMutation as mutation, memberQuery as query, adminMutation } from "./platformAccess";
 import { v } from "convex/values";
 
 // ── Feature toggle (hidden pages/sections) ────────────────────────────────
@@ -6,7 +6,30 @@ export const getHiddenFeatures = query({
     args: {},
     handler: async (ctx) => {
         const school = await ctx.db.query("schools").first();
-        return school?.hiddenFeatures ?? [];
+        const role = (ctx as any).platformSession.role;
+        const restricted = role === "admin" || role === "deputy" ? [] : ["/messages", "/surveys", ...(role === "teacher" ? ["/supervision"] : [])];
+        return [...new Set([...(school?.hiddenFeatures ?? []), ...restricted])];
+    },
+});
+
+export const teacherAccessStatus = query({
+    args: {}, handler: async ctx => {
+        if ((ctx as any).platformSession.role !== "admin") throw new Error("متاح لمسؤول المنصة فقط");
+        const school = await ctx.db.query("schools").first();
+        return { enabled: !!school?.teacherPin };
+    },
+});
+export const setTeacherAccess = adminMutation({
+    args: { enabled: v.boolean(), newPin: v.optional(v.string()) },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) throw new Error("المدرسة غير مهيأة");
+        if (args.enabled && (!args.newPin || !/^\d{6,12}$/.test(args.newPin))) throw new Error("اختر رمزًا من 6 إلى 12 رقمًا");
+        if (args.enabled && [school.adminPin, school.deputyPin, school.coordinatorPin].includes(args.newPin!)) throw new Error("اختر رمزًا مختلفًا عن رموز الإدارة والإشراف");
+        await ctx.db.patch(school._id, { teacherPin: args.enabled ? args.newPin : undefined });
+        const sessions = await ctx.db.query("supervisionSessions").collect();
+        for (const session of sessions) if (session.schoolId === school._id && session.role === "teacher") await ctx.db.delete(session._id);
+        return null;
     },
 });
 
@@ -27,12 +50,12 @@ export const toggleFeature = mutation({
     },
 });
 
-export const updateAdminPin = mutation({
+export const updateAdminPin = adminMutation({
     args: { currentPin: v.string(), newPin: v.string() },
     handler: async (ctx, args) => {
         const school = await ctx.db.query("schools").first();
         if (!school) throw new Error("لا توجد مدرسة.");
-        const stored = school.adminPin ?? "1234";
+        const stored = school.adminPin;
         if (args.currentPin !== stored) throw new Error("الرمز الحالي غير صحيح.");
         if (args.newPin.length < 4) throw new Error("يجب أن يكون الرمز 4 أرقام على الأقل.");
         await ctx.db.patch(school._id, { adminPin: args.newPin });
@@ -40,11 +63,11 @@ export const updateAdminPin = mutation({
     },
 });
 
-export const verifyAdminPin = mutation({
+export const verifyAdminPin = adminMutation({
     args: { pin: v.string() },
     handler: async (ctx, args) => {
         const school = await ctx.db.query("schools").first();
-        const stored = school?.adminPin ?? "1234";
+        const stored = school?.adminPin;
         return args.pin === stored;
     },
 });
@@ -193,9 +216,9 @@ export const toggleSubjectTarget = mutation({
     handler: async (ctx, args) => {
         const subject = await ctx.db.get(args.subjectId);
         if (!subject) throw new Error("المادة غير موجودة.");
-        
+
         let currentTargets = subject.targetClasses || [];
-        
+
         if (currentTargets.includes(args.targetString)) {
             // Remove it
             currentTargets = currentTargets.filter(t => t !== args.targetString);
@@ -203,11 +226,11 @@ export const toggleSubjectTarget = mutation({
             // Add it
             currentTargets = [...currentTargets, args.targetString];
         }
-        
+
         await ctx.db.patch(args.subjectId, {
             targetClasses: currentTargets,
         });
-        
+
         return "تم التحديث.";
     }
 });

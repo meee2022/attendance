@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { useQuery } from "../lib/platformSession";
 import { computeFinalScore } from "../lib/gradeMath";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";

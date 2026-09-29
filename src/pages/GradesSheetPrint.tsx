@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { useQuery } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { printableSchoolName } from "../lib/brand";

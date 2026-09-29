@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { staffMutation as mutation, staffQuery as query } from "./platformAccess";
 import { v } from "convex/values";
 
 const DEFAULT_ABSENT_BODY =

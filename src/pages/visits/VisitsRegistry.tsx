@@ -105,7 +105,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                     {([
                         ["submitted", `المعتمدة (${counts.submitted})`],
                         ["draft", `المسودات (${counts.draft})`],
-                        ...(session.role === "deputy" ? [["deleted", "سلة المحذوفات"]] : []),
+                        ...((session.role === "deputy" || session.role === "admin") ? [["deleted", "سلة المحذوفات"]] : []),
                     ] as [View, string][]).map(([k, label]) => (
                         <button key={k} onClick={() => setView(k)} aria-pressed={view === k}
                             className={`px-3 py-1.5 rounded-lg text-xs font-black border ${
@@ -184,10 +184,10 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                                                 <Printer className="w-4 h-4"/>
                                                             </IconBtn>
                                                         )}
-                                                        {(session.role === "deputy" || v.visitorId === session.visitorId || v.recordedByVisitorId === session.visitorId || isReviewer(v, session)) && <IconBtn title={v.status === "draft" ? "إكمال المسودة" : "تعديل"} onClick={() => onEdit(v._id)}>
+                                                        {((session.role === "deputy" || session.role === "admin") || v.visitorId === session.visitorId || v.recordedByVisitorId === session.visitorId || isReviewer(v, session)) && <IconBtn title={v.status === "draft" ? "إكمال المسودة" : "تعديل"} onClick={() => onEdit(v._id)}>
                                                             <Pencil className="w-4 h-4"/>
                                                         </IconBtn>}
-                                                        {session.role === "deputy" && <IconBtn title="حذف" danger onClick={() => { setDeleting(v); setReason(""); }}>
+                                                        {(session.role === "deputy" || session.role === "admin") && <IconBtn title="حذف" danger onClick={() => { setDeleting(v); setReason(""); }}>
                                                             <Trash2 className="w-4 h-4"/>
                                                         </IconBtn>}
                                                     </>

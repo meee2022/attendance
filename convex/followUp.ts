@@ -1,5 +1,5 @@
 import { publicSchool } from "./supervisionAccess";
-import { mutation, query } from "./_generated/server";
+import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
 import { v } from "convex/values";
 
 // ── المتابعة اليومية (كشف تقييم يومي للطلاب) ──────────────────────────────
@@ -56,7 +56,7 @@ export const getCriteria = query({
     },
 });
 
-export const updateCriteria = mutation({
+export const updateCriteria = adminMutation({
     args: {
         criteria: v.array(v.object({ id: v.string(), label: v.string() })),
     },
@@ -372,7 +372,7 @@ export const deleteSheet = mutation({
 
 // One-off: the scale used to have a middle state. Rewrite those marks as
 // "not met" so the stored rows match what the sheet now shows.
-export const convertPartialMarks = mutation({
+export const convertPartialMarks = adminMutation({
     args: {},
     handler: async (ctx) => {
         const school = await getSchool(ctx);

@@ -158,10 +158,10 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const teachersInDept = form.department ? teachers.filter(t => t.department === form.department) : teachers;
     const teacher = teachers.find(t => t._id === form.teacherId);
     // after submitting, only the academic deputy may correct the teacher
-    const teacherLocked = editingSubmitted && session.role !== "deputy";
+    const teacherLocked = editingSubmitted && session.role !== "deputy" && session.role !== "admin";
     const teacherChanged = editingSubmitted && !!editing && (editing.teacherId ?? "") !== form.teacherId;
 
-    const recordedRole = editing?.visitorRole ?? (session.role === "coordinator" ? form.recordedRole ?? "coordinator" : session.role);
+    const recordedRole = editing?.visitorRole ?? (session.role === "coordinator" ? form.recordedRole ?? "coordinator" : session.role === "admin" ? "supervisor" : session.role);
     const availableSupervisors = setup.visitors.filter((v: any) => v.role === "supervisor" && (!form.department || v.subjects.includes(form.department)));
     const selectedSupervisor = availableSupervisors.find((v: any) => v._id === form.supervisorId);
     const recordedName = editing?.visitorName ?? (recordedRole === "supervisor" ? selectedSupervisor?.fullName ?? "اختر الموجه" : session.name);
@@ -529,7 +529,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                 حفظ مسودة
                             </button>
                         )}
-                        {!editingSubmitted && !reviewing && session.role !== "deputy" && (
+                        {!editingSubmitted && !reviewing && session.role !== "deputy" && session.role !== "admin" && (
                             <button onClick={() => { setServerError(""); setReviewPick(true); }} disabled={!form.teacherId || saving !== null}
                                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-sky-200 text-sm font-black text-sky-800 disabled:opacity-50">
                                 <Users className="w-4 h-4"/>إرسال للمراجعة

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 import { Trash2, AlertTriangle, X, Check } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";

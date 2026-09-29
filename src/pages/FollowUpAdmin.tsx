@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Plus, Trash2, Save, CheckCircle2, GripVertical, RotateCcw } from "lucide-react";

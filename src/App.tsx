@@ -1,3 +1,5 @@
+import PlatformBoundary, { usePlatformSession } from "./lib/platformSession";
+import { clearStoredRole } from "./components/SupervisionPinGate";
 import TeacherAcknowledgement from "./pages/visits/TeacherAcknowledgement";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 import { LayoutGrid, LayoutDashboard, Database, Settings, BarChart3, Upload, Shield, X, MessageSquare, Users, ClipboardCheck, GraduationCap, ChevronDown, MoreHorizontal, LogOut, BookOpen, Lock, FlaskConical } from "lucide-react";
@@ -108,13 +110,15 @@ function useHomePath(): string {
   return firstVisibleFeature(NAV_ORDER, hidden) ?? "/";
 }
 
-function App() {
+function ProtectedApp() {
+  const platformUser = usePlatformSession();
   const { pathname } = useLocation();
   const isPrintPage = pathname.includes("/print/") || pathname === "/supervision/acknowledge";
   return (
     <div className={`${isPrintPage ? "" : "app-shell"} min-h-screen bg-qatar-gray-bg text-slate-900 font-sans`} dir="rtl">
       <a href="#main-content" className="skip-link">انتقل إلى المحتوى</a>
       <Navbar />
+      <div className="max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-600 py-2"><span>{platformUser?.name}</span><button className="text-qatar-maroon px-3 py-2 underline" onClick={clearStoredRole}>تسجيل الخروج</button></div>
       <main id="main-content" className={`${isPrintPage ? "" : "workspace"} max-w-7xl mx-auto py-4 lg:py-6 px-3 sm:px-6 lg:px-8 pb-28 lg:pb-10`}>
         <Routes>
           <Route path="/"                    element={<FeatureRoute featureKey="/"><AdminDashboard /></FeatureRoute>} />
@@ -153,7 +157,8 @@ function App() {
 function Navbar() {
   const { pathname } = useLocation();
   const isActive = (to: string) => to === "/" ? pathname === "/" : pathname.startsWith(to);
-  const isAdminAuthed = sessionStorage.getItem("qatar_admin_auth") === "true";
+  const platformUser = usePlatformSession();
+  const isAdminAuthed = (platformUser?.role === "admin" || platformUser?.role === "deputy");
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   const hiddenFeatures = useHiddenFeatures();
@@ -286,13 +291,13 @@ function Navbar() {
                 className="hidden sm:flex items-center gap-2 pr-1 pl-3 py-1 rounded-full bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-qatar-maroon transition-colors group">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] text-white"
                      style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>AD</div>
-                <span className="text-xs font-medium">المسؤول</span>
+                <span className="text-xs font-medium">{platformUser?.role === "deputy" ? "النائب الأكاديمي" : "مسؤول المنصة"}</span>
                 <LogOut className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity"/>
               </button>
             ) : (
               <div className="hidden sm:flex items-center gap-2 pr-1 pl-3 py-1 rounded-full bg-slate-100">
                 <Users className="w-4 h-4 text-slate-500"/>
-                <span className="text-xs font-bold text-slate-600">زائر</span>
+                <span className="text-xs font-bold text-slate-600">{platformUser?.role === "teacher" ? "معلم" : "منسق"}</span>
               </div>
             )}
           </div>
@@ -305,7 +310,8 @@ function Navbar() {
 function BottomNav() {
   const { pathname } = useLocation();
   const isActive = (to: string) => to === "/" ? pathname === "/" : pathname.startsWith(to);
-  const isAdminAuthed = sessionStorage.getItem("qatar_admin_auth") === "true";
+  const platformUser = usePlatformSession();
+  const isAdminAuthed = (platformUser?.role === "admin" || platformUser?.role === "deputy");
   const [showAdminDrawer, setShowAdminDrawer] = useState(false);
 
   const handleLogout = () => {
@@ -424,4 +430,9 @@ function BottomNav() {
   );
 }
 
+function App() {
+  const { pathname } = useLocation();
+  if (pathname === "/supervision/acknowledge") return <TeacherAcknowledgement/>;
+  return <PlatformBoundary><ProtectedApp/></PlatformBoundary>;
+}
 export default App;

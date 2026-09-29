@@ -1,5 +1,6 @@
+import { usePlatformSession } from "../lib/platformSession";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import {
@@ -758,7 +759,8 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
 function StudentView({ allGrades, settings }: any) {
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState<string>("");
-    const guardianPhone = useQuery(api.grades.getGuardianPhone, selected ? { studentName: selected } : "skip" as any);
+    const platformRole = usePlatformSession()?.role;
+    const guardianPhone = useQuery(api.grades.getGuardianPhone, selected && (platformRole === "admin" || platformRole === "deputy") ? { studentName: selected } : "skip" as any);
 
     const students = useMemo(() => {
         const set = new Set<string>();

@@ -27,7 +27,7 @@ export default defineSchema({
     }).index("by_token", ["tokenHash"]).index("by_visit", ["visitId"]),
     supervisionSessions: defineTable({
         schoolId: v.id("schools"), tokenHash: v.string(), credentialHash: v.string(),
-        role: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy")),
+        role: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy"), v.literal("admin"), v.literal("teacher")),
         visitorId: v.optional(v.id("supervisors")), name: v.string(), expiresAt: v.number(),
     }).index("by_token", ["tokenHash"]),
     supervisionLoginAttempts: defineTable({
@@ -48,6 +48,7 @@ export default defineSchema({
         createdAt: v.string(),
         periodsPerDay: v.optional(v.number()),
         currentDate: v.optional(v.string()),
+        teacherPin: v.optional(v.string()),
         adminPin: v.optional(v.string()), // default "1234"
         dailyAbsenceThreshold: v.optional(v.number()), // max absent periods still = present
         // Supervision role PINs

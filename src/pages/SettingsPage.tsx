@@ -1,6 +1,8 @@
+import { usePlatformSession } from "../lib/platformSession";
+import TeacherAccessSettings from "../components/TeacherAccessSettings";
 import { PageHeader } from "../components/ui";
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Settings, BookOpen, Layers, Plus, Trash2, Pencil, Check, X, Hash, CalendarDays, Lock, KeyRound, Eye, EyeOff, ShieldAlert, Users, Database, MessagesSquare, ClipboardList, BarChart3, ClipboardCheck, GraduationCap, ToggleRight, FlaskConical } from "lucide-react";
@@ -28,6 +30,7 @@ const TRACK_COLORS: Record<string, string> = {
 type MainTab = "follow-up" | "student-management" | "security" | "classes" | "subjects" | "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
 
 export default function SettingsPage() {
+    const platformSession = usePlatformSession();
     const [mainTab, setMainTab] = useState<MainTab>("settings");
 
 
@@ -45,7 +48,7 @@ export default function SettingsPage() {
         { id: "seed",      label: "تهيئة البيانات",    icon: <Database className="w-4 h-4" />, group: "إدارة النظام", description: "أدوات تهيئة البيانات وإعادة تنظيم هيكل المدرسة.", },
         { id: "classes", label: "الصفوف الدراسية", icon: <Layers className="w-4 h-4"/>, group: "المدرسة", description: "تنظيم الصفوف والمسارات وإدارة الفصول." },
         { id: "subjects", label: "المواد والخطة الدراسية", icon: <BookOpen className="w-4 h-4"/>, group: "المدرسة", description: "إدارة المواد وتوزيعها على الصفوف والمسارات." },
-        { id: "security", label: "رمز الدخول", icon: <Lock className="w-4 h-4"/>, group: "إدارة النظام", description: "تحديث رمز دخول المسؤول إلى الصفحات المحمية." },
+        { id: "security", label: "الدخول والصلاحيات", icon: <Lock className="w-4 h-4"/>, group: "إدارة النظام", description: "إدارة رمز المسؤول ورمز المعلمين المشترك." },
     ];
 
     const groups = ["المدرسة", "التقييم والمتابعة", "إدارة النظام"];
@@ -58,7 +61,7 @@ export default function SettingsPage() {
                 <nav className="settings-sidebar" aria-label="أقسام الإعدادات">
                     {groups.map(group => <div key={group} className="settings-nav-group">
                         <p>{group}</p>
-                        {MAIN_TABS.filter(item => item.group === group).map(item =>
+                        {MAIN_TABS.filter(item => item.group === group && (item.id !== "security" || platformSession?.role === "admin")).map(item =>
                             <button key={item.id} onClick={() => setMainTab(item.id)} aria-pressed={mainTab === item.id}
                                 className={mainTab === item.id ? "is-active" : ""}>
                                 {item.icon}<span>{item.label}</span>
@@ -69,7 +72,7 @@ export default function SettingsPage() {
                     <label htmlFor="settings-section">القسم</label>
                     <select id="settings-section" value={mainTab} onChange={e => setMainTab(e.target.value as MainTab)}>
                         {groups.map(group => <optgroup key={group} label={group}>
-                            {MAIN_TABS.filter(item => item.group === group).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+                            {MAIN_TABS.filter(item => item.group === group && (item.id !== "security" || platformSession?.role === "admin")).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
                         </optgroup>)}
                     </select>
                 </div>
@@ -79,7 +82,7 @@ export default function SettingsPage() {
                         <p>{selected.description}</p>
                     </header>
                     {mainTab === "settings" && <GeneralSettings/>}
-                    {mainTab === "security" && <PinSettings/>}
+                    {mainTab === "security" && <><TeacherAccessSettings/><PinSettings/></>}
                     {mainTab === "classes" && <ClassesSection/>}
                     {mainTab === "subjects" && <SubjectsSection/>}
                     {mainTab === "features" && <FeatureToggleSection/>}
@@ -334,7 +337,7 @@ function PinSettings() {
                     </span>
                 )}
             </div>
-            <p className="mt-2 text-[11px] text-slate-400 font-bold">الرمز الافتراضي هو: 1234 — يُنصح بتغييره فور تفعيل النظام</p>
+            <p className="mt-2 text-[11px] text-slate-400 font-bold">تغيير الرمز ينهي جلسات المسؤول السابقة، ويلزم تسجيل الدخول بالرمز الجديد.</p>
         </div>
     );
 }

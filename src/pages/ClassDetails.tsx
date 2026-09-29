@@ -1,4 +1,4 @@
-import { useQuery } from "convex/react";
+import { useQuery } from "../lib/platformSession";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ArrowRight, AlertTriangle, Check, UserMinus } from "lucide-react";

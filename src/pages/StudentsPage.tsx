@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 import { Users, UserPlus, Edit, Trash2, ArrowRightLeft, Search, X } from "lucide-react";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";

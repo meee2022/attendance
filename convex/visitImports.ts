@@ -6,13 +6,14 @@ import { requireSession, requireVisit, sessionQuery } from "./supervisionAccess"
 const I = internal as any;
 export const authorize = internalQuery({
     args: { sessionToken: v.string() },
-    handler: async (ctx, args) => { await requireSession(ctx, args.sessionToken); return null; },
+    handler: async (ctx, args) => { const session = await requireSession(ctx, args.sessionToken); if (session.role === "teacher") throw new ConvexError("رفع زيارات الإشراف غير متاح للمعلم"); return null; },
 });
 export const retain = internalMutation({
     args: { sessionToken: v.string(), storageId: v.id("_storage"), filename: v.string(), sha256: v.string() },
     handler: async (ctx, args) => {
         const session = await requireSession(ctx, args.sessionToken);
-        const ownerId = session.visitorId ?? "deputy";
+        if (session.role === "teacher") throw new ConvexError("رفع زيارات الإشراف غير متاح للمعلم");
+        const ownerId = session.visitorId ?? session.role;
         const previous = await ctx.db.query("supervisionImports").withIndex("by_hash", q => q.eq("schoolId", session.schoolId).eq("sha256", args.sha256)).first();
         if (previous) {
             if (previous.visitId) throw new ConvexError("هذا الملف مرتبط بزيارة بالفعل؛ افتحها من سجل الزيارات بدلاً من استيرادها مرة أخرى");

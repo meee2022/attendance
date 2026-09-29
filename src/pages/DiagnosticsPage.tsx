@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import {
@@ -32,6 +32,8 @@ function bandColor(p: number, threshold: number) {
 }
 
 export default function DiagnosticsPage() {
+    const session = usePlatformSession();
+    const canManage = session?.role === "admin" || session?.role === "deputy";
     const [testId, setTestId] = useState<string | null>(null);
     const [view, setView] = useState<"build" | "entry" | "analysis" | "compare" | "export">("entry");
 
@@ -47,15 +49,15 @@ export default function DiagnosticsPage() {
                     { key: "compare" as const, label: "المقارنة", icon: <TrendingUp className="w-4 h-4"/> },
                     { key: "export" as const, label: "تصدير وحفظ", icon: <Download className="w-4 h-4"/> },
                     { key: "build" as const, label: "إعداد الاختبار", icon: <Settings2 className="w-4 h-4"/> },
-                ]).map(({ key, label, icon }) => (
+                ]).filter(item => item.key !== "build" || canManage).map(({ key, label, icon }) => (
                     <button key={key} onClick={() => setView(key)} aria-pressed={view === key}
                         className={`grades-tab ${view === key ? "is-active" : ""}`}>
                         {icon}{label}
                     </button>
                 ))}
             </div>
-            {view === "build" && <TestBuilder testId={testId}/>}
-            {view === "entry" && <ScoreEntry testId={testId} onGoBuild={() => setView("build")}/>}
+            {view === "build" && canManage && <TestBuilder testId={testId}/>}
+            {view === "entry" && <ScoreEntry testId={testId} onGoBuild={canManage ? () => setView("build") : undefined}/>}
             {view === "analysis" && <AnalysisView testId={testId}/>}
             {view === "compare" && <CompareView testId={testId}/>}
             {view === "export" && <DiagnosticsExport testId={testId}/>}
@@ -78,6 +80,8 @@ function TestHeader({ testId, onBack }: { testId: string; onBack: () => void }) 
 
 // ── Test list ─────────────────────────────────────────────────────────────
 function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") => void }) {
+    const session = usePlatformSession();
+    const canManage = session?.role === "admin" || session?.role === "deputy";
     const tests = useQuery(api.diagnostics.listTests) as any[] | undefined;
     const data = useQuery(api.setup.getInitialData) as any;
     const createTest = useMutation(api.diagnostics.createTest);
@@ -128,14 +132,14 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
                 <span className="grades-header-note">{tests.length} اختبار</span>
             </PageHeader>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end" hidden={!canManage}>
                 <button onClick={() => setShowForm(v => !v)}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-qatar-maroon text-white font-black text-sm hover:opacity-90">
                     <Plus className="w-4 h-4"/>اختبار جديد
                 </button>
             </div>
 
-            {showForm && (
+            {canManage && showForm && (
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
@@ -213,7 +217,7 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
                                         {" · "}الصف {GRADE_LABELS[t.grade] ?? t.grade} · {t.classNames.length} شعبة
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1" hidden={!canManage}>
                                     <button title="نسخة جديدة (لاختبار بعدي)"
                                         onClick={async () => {
                                             const name = window.prompt("اسم النسخة الجديدة:", `${t.title} — بعدي`);
@@ -251,7 +255,7 @@ function TestList({ onOpen }: { onOpen: (id: string, view: "build" | "entry") =>
                                     className="flex-1 py-2 rounded-xl bg-qatar-maroon text-white font-black text-xs hover:opacity-90">
                                     فتح الاختبار
                                 </button>
-                                <button onClick={() => onOpen(t._id, "build")}
+                                <button hidden={!canManage} onClick={() => onOpen(t._id, "build")}
                                     className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-black text-xs hover:border-qatar-maroon hover:text-qatar-maroon">
                                     الإعداد
                                 </button>
@@ -556,7 +560,7 @@ function TestBuilder({ testId }: { testId: string }) {
 }
 
 // ── Score entry ───────────────────────────────────────────────────────────
-function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => void }) {
+function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild?: () => void }) {
     const test = useQuery(api.diagnostics.getTest, { testId: testId as any }) as any;
     const [className, setClassName] = useState("");
     const [search, setSearch] = useState("");
@@ -625,7 +629,7 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild: () => vo
     if (test.questions.length === 0) {
         return <EmptyState icon={<Settings2 className="w-6 h-6"/>} title="لم تُعرَّف أسئلة الاختبار بعد"
             description="حدّد عدد الأسئلة ودرجة كل سؤال والمهارة التي يقيسها من تبويب «إعداد الاختبار»."
-            action={<button onClick={onGoBuild} className="px-5 py-2.5 rounded-xl bg-qatar-maroon text-white font-black text-sm">الذهاب للإعداد</button>}/>;
+            action={onGoBuild && <button onClick={onGoBuild} className="px-5 py-2.5 rounded-xl bg-qatar-maroon text-white font-black text-sm">الذهاب للإعداد</button>}/>;
     }
 
     const flash = (t: string) => { setMsg(t); setTimeout(() => setMsg(""), 3500); };
@@ -1212,6 +1216,8 @@ function RemediationList({ testId, skillId, onClose }: { testId: string; skillId
 
 // ── Pre/post comparison ───────────────────────────────────────────────────
 function CompareView({ testId }: { testId: string }) {
+    const session = usePlatformSession();
+    const canManage = session?.role === "admin" || session?.role === "deputy";
     const tests = useQuery(api.diagnostics.listTests) as any[] | undefined;
     const [beforeId, setBeforeId] = useState<string>("");
 

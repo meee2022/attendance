@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
 import { v } from "convex/values";
 
 // ── الاختبارات التشخيصية ──────────────────────────────────────────────────
@@ -96,7 +96,7 @@ export const getTest = query({
     },
 });
 
-export const createTest = mutation({
+export const createTest = adminMutation({
     args: {
         title: v.string(),
         subjectName: v.string(),
@@ -131,7 +131,7 @@ export const createTest = mutation({
     },
 });
 
-export const updateTest = mutation({
+export const updateTest = adminMutation({
     args: {
         testId: v.id("diagnosticTests"),
         title: v.optional(v.string()),
@@ -163,7 +163,7 @@ export const updateTest = mutation({
 
 // Copying a test keeps the skills and questions but drops the marks — this is
 // how a pre-test becomes a post-test that is actually comparable.
-export const duplicateTest = mutation({
+export const duplicateTest = adminMutation({
     args: { testId: v.id("diagnosticTests"), title: v.string() },
     handler: async (ctx, args) => {
         const test = await ctx.db.get(args.testId);
@@ -187,7 +187,7 @@ export const duplicateTest = mutation({
     },
 });
 
-export const deleteTest = mutation({
+export const deleteTest = adminMutation({
     args: { testId: v.id("diagnosticTests") },
     handler: async (ctx, args) => {
         const scores = await ctx.db.query("diagnosticScores")
@@ -450,7 +450,7 @@ export const clearClassScores = mutation({
 
 // Wipe the whole test in one action — clearing a column at a time only ever
 // touches the class on screen, which is how marks get left behind elsewhere.
-export const clearAllScores = mutation({
+export const clearAllScores = adminMutation({
     args: { testId: v.id("diagnosticTests") },
     handler: async (ctx, args) => {
         const rows = await ctx.db.query("diagnosticScores")

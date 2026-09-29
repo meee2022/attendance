@@ -1,5 +1,5 @@
 import { publicSchool } from "./supervisionAccess";
-import { mutation, query } from "./_generated/server";
+import { staffMutation as mutation, memberQuery as query } from "./platformAccess";
 
 export const seedDatabase = mutation({
     args: {},

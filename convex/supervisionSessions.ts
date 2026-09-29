@@ -14,31 +14,32 @@ export const directory = query({
 });
 
 export const login = mutation({
-    args: { role: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy")),
+    args: { role: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy"), v.literal("admin"), v.literal("teacher")),
         visitorId: v.optional(v.id("supervisors")), name: v.string(), pin: v.string(), token: v.string() },
     handler: async (ctx, args) => {
         if (args.role === "supervisor") return { error: "يسجل المنسق زيارات الموجه من حسابه." };
         const school = await ctx.db.query("schools").first();
         if (!school || !/^[a-f0-9]{64}$/.test(args.token)) return { error: "تعذّر تسجيل الدخول" };
-        const key = `${school._id}:${args.role}:${args.visitorId ?? "deputy"}`;
+        if (args.role === "teacher" && !school.teacherPin) return { error: "دخول المعلمين غير مفعّل؛ يضبط مسؤول المنصة الرمز من الإعدادات" };
+        const key = `${school._id}:${args.role}:${args.visitorId ?? args.role}`;
         const attempt = await ctx.db.query("supervisionLoginAttempts").withIndex("by_key", q => q.eq("key", key)).first();
         if (attempt && attempt.resetAt > Date.now() && attempt.failures >= 8) return { error: "محاولات كثيرة؛ أعد المحاولة بعد عشر دقائق" };
         const person = args.visitorId ? await ctx.db.get(args.visitorId) : null;
         const validPerson = person ? person.schoolId === school._id && person.role === args.role && person.isActive
-            : args.role === "deputy" && !args.visitorId;
-        if (!validPerson || args.pin !== rolePin(school, args.role, person)) {
+            : (args.role === "deputy" || args.role === "admin" || args.role === "teacher") && !args.visitorId;
+        if (!validPerson || !rolePin(school, args.role, person) || args.pin !== rolePin(school, args.role, person)) {
             const fresh = !attempt || attempt.resetAt <= Date.now();
             const data = { key, failures: fresh ? 1 : attempt.failures + 1, resetAt: fresh ? Date.now() + 600000 : attempt.resetAt };
             if (attempt) await ctx.db.patch(attempt._id, data); else await ctx.db.insert("supervisionLoginAttempts", data);
             return { error: "الاسم أو رمز الدخول غير صحيح" };
         }
-        if (args.role !== "deputy" && !person?.subjects.some(s => s.trim())) return { error: "لم تُحدد أقسامك بعد؛ راجع النائب الأكاديمي" };
+        if (args.role !== "deputy" && args.role !== "admin" && args.role !== "teacher" && !person?.subjects.some(s => s.trim())) return { error: "لم تُحدد أقسامك بعد؛ راجع النائب الأكاديمي" };
         if (attempt) await ctx.db.delete(attempt._id);
         const tokenHash = await digest(args.token);
         const used = await ctx.db.query("supervisionSessions").withIndex("by_token", q => q.eq("tokenHash", tokenHash)).first();
         if (used) return { error: "أعد محاولة تسجيل الدخول" };
         const settings = await ctx.db.query("supervisionSettings").withIndex("by_school", q => q.eq("schoolId", school._id)).first();
-        const name = person?.fullName ?? deputyNameOf(settings);
+        const name = args.role === "teacher" ? "المعلمون (رمز مشترك)" : args.role === "admin" ? "مسؤول المنصة" : person?.fullName ?? deputyNameOf(settings);
         if (!name) return { error: "لم يُضبط اسم النائب الأكاديمي في إعدادات الإشراف بعد." };
         const expiresAt = Date.now() + 8 * 3600000;
         await ctx.db.insert("supervisionSessions", { schoolId: school._id, tokenHash,

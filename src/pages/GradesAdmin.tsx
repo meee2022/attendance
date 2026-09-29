@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 import * as XLSX from "xlsx";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";

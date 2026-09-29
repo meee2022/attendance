@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Download, FileSpreadsheet, Printer, AlertCircle } from "lucide-react";

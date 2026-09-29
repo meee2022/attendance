@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 import * as xlsx from "xlsx";
 import {
     UserPlus, FileSpreadsheet, CheckCircle2, AlertCircle,

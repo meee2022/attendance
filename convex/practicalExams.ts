@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
 import { v } from "convex/values";
 
 async function getSchool(ctx: any) {
@@ -41,7 +41,7 @@ export const getSettings = query({
     },
 });
 
-export const updateSubjects = mutation({
+export const updateSubjects = adminMutation({
     args: { subjects: v.array(v.object({ subject: v.string(), category: v.string() })) },
     handler: async (ctx, args) => {
         const school = await getSchool(ctx);
@@ -50,7 +50,7 @@ export const updateSubjects = mutation({
 });
 
 // Add a single subject if not already present
-export const addSubjectIfMissing = mutation({
+export const addSubjectIfMissing = adminMutation({
     args: { subject: v.string(), category: v.string() },
     handler: async (ctx, args) => {
         const school = await getSchool(ctx);
@@ -64,7 +64,7 @@ export const addSubjectIfMissing = mutation({
     },
 });
 
-export const updateTemplate = mutation({
+export const updateTemplate = adminMutation({
     args: { template: v.string() },
     handler: async (ctx, args) => {
         const school = await getSchool(ctx);
@@ -218,7 +218,7 @@ export const deleteAbsence = mutation({
 });
 
 // Delete all legacy records (those without subject)
-export const deleteLegacyAbsences = mutation({
+export const deleteLegacyAbsences = adminMutation({
     args: {},
     handler: async (ctx) => {
         const school = await getSchool(ctx);
@@ -237,7 +237,7 @@ export const deleteLegacyAbsences = mutation({
 });
 
 // ── Maintenance: normalize whitespace in existing records ────────────────
-export const normalizeAllRecords = mutation({
+export const normalizeAllRecords = adminMutation({
     args: {},
     handler: async (ctx) => {
         const school = await getSchool(ctx);

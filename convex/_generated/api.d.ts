@@ -16,6 +16,7 @@ import type * as diagnostics from "../diagnostics.js";
 import type * as followUp from "../followUp.js";
 import type * as grades from "../grades.js";
 import type * as messages from "../messages.js";
+import type * as platformAccess from "../platformAccess.js";
 import type * as practicalExams from "../practicalExams.js";
 import type * as settings from "../settings.js";
 import type * as setup from "../setup.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   followUp: typeof followUp;
   grades: typeof grades;
   messages: typeof messages;
+  platformAccess: typeof platformAccess;
   practicalExams: typeof practicalExams;
   settings: typeof settings;
   setup: typeof setup;

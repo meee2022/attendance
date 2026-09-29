@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "../lib/platformSession";
 import { format } from "date-fns";
 import * as XLSX from "xlsx";
 import {

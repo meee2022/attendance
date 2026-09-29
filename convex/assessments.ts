@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
 import { v } from "convex/values";
 
 // Get assessments matrix for a specific class
@@ -253,7 +253,7 @@ export const getGradeAssessmentsSummary = query({
 });
 
 // Toggle exemption for a student (exclude from assessments entirely)
-export const toggleExemption = mutation({
+export const toggleExemption = adminMutation({
     args: { studentId: v.id("students") },
     handler: async (ctx, args) => {
         const student = await ctx.db.get(args.studentId);

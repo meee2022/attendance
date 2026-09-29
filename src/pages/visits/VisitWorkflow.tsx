@@ -23,7 +23,7 @@ async function uploadFile(getUrl: () => Promise<string>, file: Blob) {
 // ── توقيعي ────────────────────────────────────────────────────────────────
 export function MySignatureButton({ session }: { session: Session }) {
     const [open, setOpen] = useState(false);
-    if (session.role === "supervisor") return null;
+    if (session.role === "supervisor" || session.role === "admin") return null;
     return <>
         <button onClick={() => setOpen(true)} title="توقيعي" aria-label="توقيعي"
             className="p-1 rounded-md text-slate-400 hover:text-qatar-maroon hover:bg-qatar-cream-dark">

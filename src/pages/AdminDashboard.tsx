@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "../lib/platformSession";
 import { format } from "date-fns";
 import { Calendar, Users, UserCheck, UserX, Activity, BarChart3, Sigma, Check, X } from "lucide-react";
 // @ts-ignore

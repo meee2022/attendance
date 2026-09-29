@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 import { api } from "../../convex/_generated/api";
 import { Check, Info, LoaderCircle, AlertCircle } from "lucide-react";
 import { FEATURES } from "../lib/featureFlags";

@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { staffMutation as mutation, memberQuery as query } from "./platformAccess";
 import { v } from "convex/values";
 
 // The school publishes one grid for the whole term: subjects down the side,

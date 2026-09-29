@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import { Save, FlaskConical, MessageSquare, CheckCircle2, Info, Plus, Trash2, Mic, Headphones, Activity, Sparkles, BookOpen } from "lucide-react";

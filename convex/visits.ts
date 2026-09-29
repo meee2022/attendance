@@ -91,7 +91,7 @@ export const getSetup = query({
         const visitors = (await ctx.db.query("supervisors")
             .withIndex("by_school", (q: any) => q.eq("schoolId", school._id))
             .collect())
-            .filter((s: any) => s.isActive !== false && (access.role === "deputy" || s._id === access.visitorId || (s.role === "supervisor" && (s.subjects ?? []).some((d: string) => access.departments?.includes(d.trim())))))
+            .filter((s: any) => s.isActive !== false && (access.role === "deputy" || access.role === "admin" || s._id === access.visitorId || (s.role === "supervisor" && (s.subjects ?? []).some((d: string) => access.departments?.includes(d.trim())))))
             .map((s: any) => ({ _id: s._id, fullName: s.fullName, role: s.role, subjects: s.subjects ?? [] }));
 
         const classes = (await ctx.db.query("classes")
@@ -288,13 +288,14 @@ export const saveVisit = mutation({
         const sourceImportId = existing?.sourceImportId ?? args.sourceImportId;
         if (sourceImportId) {
             const source = await ctx.db.get(sourceImportId as import("./_generated/dataModel").Id<"supervisionImports">);
-            if (!source || source.schoolId !== access.schoolId || (!existing && source.ownerId !== (access.visitorId ?? "deputy"))) throw new ConvexError("ملف الاستيراد غير متاح");
+            if (!source || source.schoolId !== access.schoolId || (!existing && source.ownerId !== (access.visitorId ?? access.role))) throw new ConvexError("ملف الاستيراد غير متاح");
             if (source.visitId && source.visitId !== args.id) throw new ConvexError("هذا الملف مرتبط بزيارة أخرى");
             if (args.status === "submitted" && !args.importReviewed) throw new ConvexError("راجع البنود والتوصيات مع ملف الموجه الأصلي قبل الاعتماد");
         }
 
         if (args.sourceImportId && existing && args.sourceImportId !== existing.sourceImportId) throw new ConvexError("لا يمكن استبدال أصل الزيارة");
-        const delegated = !existing && (access.role === "coordinator" || access.role === "deputy") && args.visitorRole === "supervisor";
+        if (!existing && access.role === "admin" && args.visitorRole !== "supervisor") throw new ConvexError("المسؤول يدير السجلات؛ سجّل الزيارة باسم الزائر الفعلي عبر استيراد زيارة الموجه");
+        const delegated = !existing && (access.role === "coordinator" || access.role === "deputy" || access.role === "admin") && args.visitorRole === "supervisor";
         const supervisor = delegated && args.visitorId ? await ctx.db.get(args.visitorId) : null;
         if (delegated && (!supervisor || supervisor.schoolId !== school._id || supervisor.role !== "supervisor" || !supervisor.isActive)) throw new ConvexError("اختر الموجه المسجل للقسم");
         args.visitorRole = existing?.visitorRole ?? (delegated ? "supervisor" : access.role);
@@ -322,7 +323,7 @@ export const saveVisit = mutation({
             if (existing.visitDate !== args.visitDate) locked.push("التاريخ");
             if (locked.length) throw new ConvexError(`لا يمكن تغيير ${locked.join(" و")} بعد اعتماد الزيارة`);
             if (args.status === "draft") throw new ConvexError("الزيارة المعتمدة لا تعود مسودة");
-            if (teacherChanged && access.role !== "deputy") throw new ConvexError("تغيير معلم زيارة معتمدة متاح للنائب الأكاديمي فقط");
+            if (teacherChanged && access.role !== "deputy" && access.role !== "admin") throw new ConvexError("تغيير معلم زيارة معتمدة متاح للنائب الأكاديمي فقط");
             if (teacherChanged && !args.editReason?.trim()) throw new ConvexError("اكتب سبب تغيير المعلم");
         }
 

@@ -11,6 +11,7 @@
     "migrate-convex": "tsx scripts/migrateConvexData.ts",
     "import-registry": "tsx --env-file=.env.local scripts/importRegistry.ts",
     "import-plan": "tsx --env-file=.env.local scripts/importAssessmentPlan.ts",
+    "test:access": "vitest run tests/platformAccess.test.ts",
     "test:supervision": "vitest run tests/supervision.test.ts tests/visitArchive.test.ts tests/visitImport.test.ts"
   },
   "dependencies": {

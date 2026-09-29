@@ -28,7 +28,7 @@ import { MySignatureButton, ReviewInbox } from "./VisitWorkflow";
 
 type Tab = "import" | "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
 
-export type Session = { role: VisitorRole; name: string; visitorId?: string };
+export type Session = { role: VisitorRole | "admin"; name: string; visitorId?: string };
 
 export default function VisitsPage() {
     return <SupervisionBoundary><AuthenticatedVisits/></SupervisionBoundary>;
@@ -37,15 +37,16 @@ function AuthenticatedVisits() {
     const session = useSupervisionSession()!;
     const setup = useQuery(api.visits.getSetup) as any;
     const visits = useQuery(api.visits.listVisits, {}) as VisitRow[] | undefined;
+    if (session.role === "teacher") return null;
     if (!setup || !visits) return <LoadingSpinner label="جاري تحميل الإشراف الصفي…"/>;
-    return <VisitsWorkspace setup={setup} visits={visits} session={session}
+    return <VisitsWorkspace setup={setup} visits={visits} session={{ ...session, role: session.role }}
         onSignOut={() => { clearStoredRole(); }}/ >;
 }
 
 // The departments a visitor works in: a coordinator or a supervisor sees the
 // teachers and visits of their own department(s); the academic deputy sees all.
 export function scopeOf(setup: any, session: Session): string[] | null {
-    if (session.role === "deputy") return null;
+    if ((session.role === "deputy" || session.role === "admin")) return null;
     const me = setup.visitors.find((v: any) => v._id === session.visitorId);
     const mine = (me?.subjects ?? []).map((s: string) => s.trim()).filter((s: string) => setup.departments.includes(s));
     return mine;
@@ -87,14 +88,14 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
 
     const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
         { key: "dashboard", label: "لوحة المتابعة", icon: <LayoutDashboard className="w-4 h-4"/> },
-        { key: "new", label: editingId ? "تعديل زيارة" : "زيارة جديدة", icon: <Plus className="w-4 h-4"/> },
+        ...(session.role !== "admin" || editingId ? [{ key: "new" as Tab, label: editingId ? "تعديل زيارة" : "زيارة جديدة", icon: <Plus className="w-4 h-4"/> }] : []),
         { key: "import", label: "استيراد PDF", icon: <Plus className="w-4 h-4"/> },
         { key: "registry", label: "سجل الزيارات", icon: <Layers className="w-4 h-4"/> },
         { key: "teacher", label: "ملف المعلم", icon: <User className="w-4 h-4"/> },
         { key: "analysis", label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
         { key: "followup", label: "المتابعة والخطة", icon: <ClipboardCheck className="w-4 h-4"/> },
         // Managing the staff list is the deputy's job, not each department's
-        ...(session.role === "deputy"
+        ...((session.role === "deputy" || session.role === "admin")
             ? [{ key: "people" as Tab, label: "المعلمون والزائرون", icon: <Users className="w-4 h-4"/> }]
             : []),
     ];
@@ -104,7 +105,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
             <PageHeader icon={<ClipboardCheck className="w-5 h-5"/>} title="الإشراف الصفي"
                 subtitle={`استمارة الإشراف على أداء المعلم · العام الأكاديمي ${setup.settings.academicYear}`}>
                 <span className="grades-header-note flex items-center gap-2">
-                    {ROLE_LABELS[session.role]} · {session.name}{scope ? ` · ${scope.join("، ")}` : ""}
+                    {session.role === "admin" ? "مسؤول المنصة" : ROLE_LABELS[session.role]} · {session.name}{scope ? ` · ${scope.join("، ")}` : ""}
                     <MySignatureButton session={session}/>
                     <button onClick={() => { if (!dirty || window.confirm("يوجد تعديل لم يُحفظ في السجل. هل تريد تغيير المستخدم؟")) onSignOut(); }} title="تبديل المستخدم" aria-label="تبديل المستخدم"
                         className="p-1 rounded-md text-slate-400 hover:text-qatar-maroon hover:bg-qatar-cream-dark">
@@ -127,7 +128,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
             {tab === "dashboard" && <ReviewInbox visits={visits} onOpen={editVisit}/>}
             {tab === "dashboard" && (
                 <VisitsDashboard setup={setup} visits={visits} onOpenTeacher={openTeacher}
-                    onNewVisit={() => { setEditingId(null); setTab("new"); }}
+                    onNewVisit={() => { setEditingId(null); setTab(session.role === "admin" ? "import" : "new"); }}
                     onOpenFollowUp={() => openFollowUp()}
                     onOpenDrafts={() => { setRegistryView("draft"); setTab("registry"); }}/>
             )}
@@ -148,7 +149,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
             )}
             {tab === "followup" && <VisitFollowUp onDirtyChange={setDirty} setup={setup} visits={visits} teacherId={followupTeacher} onOpenTeacher={openTeacher}/>}
             {tab === "analysis" && <VisitsAnalysis setup={setup} visits={visits}/>}
-            {tab === "people" && session.role === "deputy" && <SupervisionTeachers/>}
+            {tab === "people" && (session.role === "deputy" || session.role === "admin") && <SupervisionTeachers/>}
         </div>
     );
 }

@@ -1,6 +1,6 @@
 import { PageTabs } from "../components/ui";
 import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
 import {

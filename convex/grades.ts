@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
 import { v } from "convex/values";
 import { dueByNow, planContext } from "./assessmentPlan";
 
@@ -169,7 +169,7 @@ export const getSettings = query({
     },
 });
 
-export const updateSettings = mutation({
+export const updateSettings = adminMutation({
     args: {
         maxPerAssessment: v.optional(v.number()),
         finalScoreOutOf: v.optional(v.number()),
@@ -763,7 +763,7 @@ export const deleteGrade = mutation({
 });
 
 // ── Bulk import from Excel ────────────────────────────────────────────────
-export const bulkImportGrades = mutation({
+export const bulkImportGrades = adminMutation({
     args: {
         records: v.array(v.object({
             studentName: v.string(),
@@ -833,7 +833,7 @@ export const bulkImportGrades = mutation({
 });
 
 // ── Get guardian phone for student (via name match) ───────────────────────
-export const getGuardianPhone = query({
+export const getGuardianPhone = staffQuery({
     args: { studentName: v.string() },
     handler: async (ctx, args) => {
         const allStudents = await ctx.db.query("students").collect();

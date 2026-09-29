@@ -51,7 +51,8 @@ function SupervisionSessionContent({ children, deputy = false }: { children: Rea
     }, [session, logout]);
     if (!session) return <SupervisionPinGate onAuthed={() => setSession(getStoredRole())}/>;
     if (!current) return <p className="p-8 text-center text-slate-600">جاري التحقق من جلسة الإشراف…</p>;
-    if (deputy && current.role !== "deputy") return <div dir="rtl" className="p-6 space-y-3"><p>إدارة الإشراف متاحة للنائب الأكاديمي.</p><button className="text-qatar-maroon underline" onClick={() => { clearStoredRole(); setSession(null); }}>تغيير المستخدم</button></div>;
+    if (current.role === "teacher") return <p className="p-8 text-center">قسم الإشراف متاح للمنسق والنائب ومسؤول المنصة.</p>;
+    if (deputy && current.role !== "deputy" && current.role !== "admin") return <div dir="rtl" className="p-6 space-y-3"><p>إدارة الإشراف متاحة للنائب الأكاديمي.</p><button className="text-qatar-maroon underline" onClick={() => { clearStoredRole(); setSession(null); }}>تغيير المستخدم</button></div>;
     return <SessionContext.Provider value={{ ...session, ...current }}><SupervisionErrorBoundary key={session.token}>{children}</SupervisionErrorBoundary></SessionContext.Provider>;
 }
 

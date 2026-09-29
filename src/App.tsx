@@ -1,4 +1,5 @@
 import PlatformBoundary, { usePlatformSession } from "./lib/platformSession";
+import TeacherTasks from "./pages/TeacherTasks";
 import { clearStoredRole } from "./components/SupervisionPinGate";
 import TeacherAcknowledgement from "./pages/visits/TeacherAcknowledgement";
 import { Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
@@ -43,6 +44,7 @@ const PRIMARY_NAV = [
 
 // Secondary nav: in dropdown menu
 const SECONDARY_NAV = [
+    { to: "/teacher-tasks", icon: <ClipboardList className="w-4 h-4" />, label: "مهام المعلمين" },
     { to: "/assessments",icon: <FileCheck className="w-4 h-4" />,       label: "التطبيقات" },
     { to: "/practical-exams", icon: <FlaskConical className="w-4 h-4" />, label: "الاختبارات العملية" },
     { to: "/diagnostics", icon: <Stethoscope className="w-4 h-4" />,    label: "الاختبارات التشخيصية" },
@@ -121,6 +123,7 @@ function ProtectedApp() {
       <div className="max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-600 py-2"><span>{platformUser?.name}</span><button className="text-qatar-maroon px-3 py-2 underline" onClick={clearStoredRole}>تسجيل الخروج</button></div>
       <main id="main-content" className={`${isPrintPage ? "" : "workspace"} max-w-7xl mx-auto py-4 lg:py-6 px-3 sm:px-6 lg:px-8 pb-28 lg:pb-10`}>
         <Routes>
+          <Route path="/teacher-tasks" element={<FeatureRoute featureKey="/teacher-tasks"><TeacherTasks/></FeatureRoute>} />
           <Route path="/"                    element={<FeatureRoute featureKey="/"><AdminDashboard /></FeatureRoute>} />
           <Route path="/upload"              element={<FeatureRoute featureKey="/upload"><TeacherUpload /></FeatureRoute>} />
           <Route path="/assessments"         element={<FeatureRoute featureKey="/assessments"><AssessmentsPage /></FeatureRoute>} />

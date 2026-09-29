@@ -257,7 +257,8 @@ function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any
                     </div>
                     <div className="divide-y divide-slate-100 bg-white">
                         {byRole[r].map(s => (
-                            <div key={s._id} className="p-3 flex items-center justify-between">
+                            <div key={s._id} className="p-3 space-y-3">
+                              <div className="flex items-center justify-between gap-3">
                                 <button onClick={async () => { if (confirm(`حذف ${s.fullName}؟`)) await onDelete({ id: s._id }); }}
                                     className="p-1.5 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500">
                                     <Trash2 className="w-3.5 h-3.5"/>
@@ -266,6 +267,8 @@ function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any
                                     <p className="text-sm font-bold text-slate-700 truncate">{s.fullName}</p>
                                     <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate">{s.subjects.join(" · ")}</p>
                                 </div>
+                              </div>
+                              {s.role === "coordinator" && <CoordinatorPin person={s}/>}
                             </div>
                         ))}
                     </div>
@@ -273,4 +276,56 @@ function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any
             ))}
         </div>
     );
+}
+
+function CoordinatorPin({ person }: { person: any }) {
+    const update = useMutation(api.supervision.updateSupervisor);
+    const [open, setOpen] = useState(false);
+    const [pin, setPin] = useState("");
+    const [confirmation, setConfirmation] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const [saved, setSaved] = useState(false);
+    const clear = () => { setPin(""); setConfirmation(""); setError(""); };
+    async function save(e: React.FormEvent) {
+        e.preventDefault();
+        if (busy || !/^\d{6,12}$/.test(pin) || pin !== confirmation) return;
+        setBusy(true); setError(""); setSaved(false);
+        try {
+            await update({ id: person._id, pin });
+            clear(); setOpen(false); setSaved(true);
+        } catch (e: any) {
+            setError(typeof e?.data === "string" ? e.data : "تعذّر حفظ الرمز. تحقق من الاتصال وحاول مجددًا.");
+        } finally { setBusy(false); }
+    }
+    return <div className="border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="text-slate-600">{person.hasPrivatePin ? "رمز خاص مفعّل" : "لم يُعيّن رمز خاص؛ يستخدم رمز المنسقين العام إن كان مفعّلًا"}</span>
+            <button type="button" disabled={!person.isActive || busy} aria-expanded={open} aria-controls={`pin-form-${person._id}`}
+                className="rounded-lg border border-qatar-maroon px-3 py-2 text-qatar-maroon hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-qatar-maroon disabled:opacity-50"
+                onClick={() => { clear(); setSaved(false); setOpen(v => !v); }}>
+                {open ? "إغلاق" : person.hasPrivatePin ? "تغيير رمز الدخول" : "تعيين رمز دخول"}
+            </button>
+        </div>
+        {open && <form id={`pin-form-${person._id}`} onSubmit={save} aria-label={`رمز دخول ${person.fullName}`} className="mt-3 space-y-3">
+            <p className="text-sm text-slate-600">عيّن رمزًا خاصًا بالمنسق وبلّغه به على انفراد. الحفظ ينهي جلساته السابقة، ويصبح الرمز الجديد هو المعتمد لدخوله.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-sm text-slate-700">الرمز الجديد (6–12 رقمًا)
+                    <input type="password" inputMode="numeric" autoComplete="new-password" required minLength={6} maxLength={12} pattern="[0-9]{6,12}" dir="ltr" disabled={busy} value={pin}
+                        onChange={e => setPin(e.target.value.replace(/\D/g, ""))} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-qatar-maroon"/>
+                </label>
+                <label className="text-sm text-slate-700">تأكيد الرمز
+                    <input type="password" inputMode="numeric" autoComplete="new-password" required maxLength={12} dir="ltr" disabled={busy} value={confirmation}
+                        onChange={e => setConfirmation(e.target.value.replace(/\D/g, ""))} className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-qatar-maroon"/>
+                </label>
+            </div>
+            {confirmation && pin !== confirmation && <p className="text-sm text-rose-700">الرمزان غير متطابقين.</p>}
+            {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
+            <div className="flex gap-2">
+                <button disabled={busy || pin.length < 6 || pin !== confirmation} className="rounded-lg bg-qatar-maroon text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "جاري الحفظ…" : "حفظ رمز الدخول"}</button>
+                <button type="button" disabled={busy} onClick={() => { clear(); setOpen(false); }} className="rounded-lg border border-slate-300 px-4 py-2 text-sm">إلغاء</button>
+            </div>
+        </form>}
+        {saved && <p role="status" className="mt-2 text-sm text-emerald-800">تم حفظ رمز {person.fullName} وإنهاء جلساته السابقة.</p>}
+    </div>;
 }

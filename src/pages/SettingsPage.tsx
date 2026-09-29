@@ -1,5 +1,7 @@
 import { usePlatformSession } from "../lib/platformSession";
 import TeacherAccessSettings from "../components/TeacherAccessSettings";
+import { TeacherTasksAdmin } from "./TeacherTasks";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/ui";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "../lib/platformSession";
@@ -27,14 +29,16 @@ const TRACK_COLORS: Record<string, string> = {
     "عام": "bg-slate-100 text-slate-700 border-slate-200",
 };
 
-type MainTab = "follow-up" | "student-management" | "security" | "classes" | "subjects" | "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
+type MainTab = "tasks" | "follow-up" | "student-management" | "security" | "classes" | "subjects" | "settings" | "features" | "students" | "messages" | "seed" | "surveys" | "supervision" | "grades" | "practical";
 
 export default function SettingsPage() {
     const platformSession = usePlatformSession();
-    const [mainTab, setMainTab] = useState<MainTab>("settings");
+    const [params] = useSearchParams();
+    const [mainTab, setMainTab] = useState<MainTab>(params.get("section") === "tasks" ? "tasks" : "settings");
 
 
     const MAIN_TABS: { id: MainTab; label: string; icon: React.ReactNode; group: string; description: string }[] = [
+        { id: "tasks", label: "مهام المعلمين", icon: <ClipboardList className="w-4 h-4"/>, group: "المدرسة", description: "إضافة المهام وتحديث الروابط وتحديد الفئات المستهدفة وترتيب العرض." },
         { id: "settings",  label: "اليوم الدراسي",  icon: <Settings className="w-4 h-4" />, group: "المدرسة", description: "تاريخ الرصد وعدد الحصص وقاعدة احتساب الغياب.", },
         { id: "features",  label: "إتاحة أقسام التطبيق", icon: <ToggleRight className="w-4 h-4" />, group: "إدارة النظام", description: "تفعيل أقسام التطبيق أو تعطيلها لجميع المستخدمين.", },
         { id: "student-management", label: "إدارة الطلاب", icon: <Users className="w-4 h-4"/>, group: "المدرسة", description: "إضافة الطلاب وتعديل بياناتهم ونقلهم بين الصفوف." },
@@ -82,6 +86,7 @@ export default function SettingsPage() {
                         <p>{selected.description}</p>
                     </header>
                     {mainTab === "settings" && <GeneralSettings/>}
+                    {mainTab === "tasks" && <TeacherTasksAdmin/>}
                     {mainTab === "security" && <><TeacherAccessSettings/><PinSettings/></>}
                     {mainTab === "classes" && <ClassesSection/>}
                     {mainTab === "subjects" && <SubjectsSection/>}

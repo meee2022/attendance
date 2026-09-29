@@ -20,6 +20,47 @@ async function fixture() {
     return { t, ...ids, admin, teacher, deputy };
 }
 describe("platform data protection", () => {
+    it("protects task links by audience and visibility and restricts editing to staff", async () => {
+        const f = await fixture();
+        const task = { title: "مهمة اختبار", url: "https://example.com/task", description: "", audience: ["teacher"], audienceLabel: "", category: "عام", academicYear: "2026-2027", order: 2, isActive: true };
+        await expect(f.t.query(A.teacherTasks.list, {})).rejects.toThrow();
+        await expect(f.t.mutation(A.teacherTasks.save, { ...task, sessionToken: f.teacher })).rejects.toThrow();
+        await expect(f.t.query(A.teacherTasks.manage, { sessionToken: f.teacher })).rejects.toThrow();
+        for (const url of ["javascript:alert(1)", "//evil.example", "http://example.com", "https://user:pass@example.com", "/settings"]) {
+            await expect(f.t.mutation(A.teacherTasks.save, { ...task, url, sessionToken: f.admin })).rejects.toThrow();
+        }
+        const id = await f.t.mutation(A.teacherTasks.save, { ...task, sessionToken: f.admin });
+        await f.t.mutation(A.teacherTasks.save, { ...task, title: "للمنسق فقط", audience: ["coordinator"], order: 1, sessionToken: f.deputy });
+        expect((await f.t.query(A.teacherTasks.list, { sessionToken: f.teacher })).map((t: any) => t.title)).toEqual([task.title]);
+        expect((await f.t.query(A.teacherTasks.list, { sessionToken: f.deputy })).length).toBe(2);
+        await f.t.mutation(A.teacherTasks.save, { ...task, id, url: "/grades", sessionToken: f.deputy });
+        expect((await f.t.query(A.teacherTasks.list, { sessionToken: f.teacher }))[0].url).toBe("/grades");
+        await f.t.mutation(A.teacherTasks.setVisible, { id, isActive: false, sessionToken: f.admin });
+        expect(await f.t.query(A.teacherTasks.list, { sessionToken: f.teacher })).toEqual([]);
+        expect((await f.t.query(A.teacherTasks.manage, { sessionToken: f.admin })).length).toBe(2);
+    });
+    it("lets admin and deputy reset private coordinator codes, revoking old sessions without exposing codes", async () => {
+        const f = await fixture();
+        const id = await f.t.run(ctx => ctx.db.insert("supervisors", { schoolId: f.schoolId, fullName: "منسق اختبار", role: "coordinator", subjects: ["العلوم"], isActive: true }));
+        await expect(f.t.mutation(A.supervision.updateSupervisor, { sessionToken: f.teacher, id, pin: "654321" })).rejects.toThrow();
+        await expect(f.t.mutation(A.supervision.updateSupervisor, { sessionToken: f.admin, id, pin: "123" })).rejects.toThrow();
+        await f.t.mutation(A.supervision.updateSupervisor, { sessionToken: f.admin, id, pin: "654321" });
+        const people = await f.t.query(A.supervision.getSupervisors, { sessionToken: f.deputy });
+        expect(people[0].hasPrivatePin).toBe(true);
+        expect(people[0].pin).toBeUndefined();
+        const token = "d".repeat(64);
+        const args = { role: "coordinator", visitorId: id, name: "x", pin: "654321", token };
+        expect((await f.t.mutation(A.supervisionSessions.login, args)).session.role).toBe("coordinator");
+        await expect(f.t.mutation(A.supervision.updateSupervisor, { sessionToken: token, id, pin: "987654" })).rejects.toThrow();
+        await f.t.mutation(A.supervision.updateSupervisor, { sessionToken: f.deputy, id, pin: "987654" });
+        expect(await f.t.query(A.supervisionSessions.current, { token })).toBeNull();
+        expect((await f.t.mutation(A.supervisionSessions.login, { ...args, token: "e".repeat(64) })).error).toBeTruthy();
+        expect((await f.t.mutation(A.supervisionSessions.login, { ...args, pin: "987654", token: "f".repeat(64) })).session).toBeTruthy();
+        await f.t.mutation(A.supervision.updateSupervisor, { sessionToken: f.admin, id, pin: "654321" });
+        expect(await f.t.query(A.supervisionSessions.current, { token })).toBeNull();
+        const other = await f.t.run(ctx => ctx.db.insert("supervisors", { schoolId: f.schoolId, fullName: "منسق آخر", role: "coordinator", subjects: ["العلوم"], isActive: true }));
+        await expect(f.t.mutation(A.supervision.updateSupervisor, { sessionToken: f.admin, id: other, pin: "654321" })).rejects.toThrow();
+    });
     it("rejects anonymous and forged direct API reads, including school configuration and student data", async () => {
         const f = await fixture();
         for (const query of [A.setup.getInitialData, A.setup.getStudentCounts, A.grades.getClassesAndSubjects, A.settings.getHiddenFeatures, A.diagnostics.listTests]) {

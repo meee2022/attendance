@@ -1,5 +1,5 @@
 import { deputyMutation as mutation, deputyQuery as query, sessionQuery } from "./supervisionAccess";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 
 // ── Default 24 criteria from the original Excel form ───────────────────────
 const DEFAULT_CRITERIA: { domain: "planning" | "execution" | "evaluation" | "management"; text: string }[] = [
@@ -139,7 +139,7 @@ export const getSupervisors = query({
         const people = await ctx.db.query("supervisors")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
-        return people.map(({ pin, ...person }) => person);
+        return people.map(({ pin, ...person }) => ({ ...person, hasPrivatePin: !!pin }));
     },
 });
 
@@ -173,6 +173,17 @@ export const updateSupervisor = mutation({
         isActive: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
+        const person = await ctx.db.get(args.id);
+        const session = (ctx as any).supervisionSession;
+        if (!person || person.schoolId !== session.schoolId) throw new ConvexError("المنسق غير متاح ضمن المدرسة");
+        if (args.pin !== undefined) {
+            if (person.role !== "coordinator" || !person.isActive) throw new ConvexError("تعيين الرمز متاح للمنسقين النشطين فقط");
+            if (!/^\d{6,12}$/.test(args.pin)) throw new ConvexError("اختر رمزًا من 6 إلى 12 رقمًا");
+            const school = await ctx.db.get(person.schoolId);
+            if ([school?.teacherPin, school?.adminPin, school?.deputyPin, school?.coordinatorPin].includes(args.pin)) throw new ConvexError("اختر رمزًا خاصًا مختلفًا عن الرموز العامة ورموز الإدارة");
+            const colleagues = await ctx.db.query("supervisors").withIndex("by_school", q => q.eq("schoolId", person.schoolId)).collect();
+            if (colleagues.some(p => p._id !== person._id && p.pin === args.pin)) throw new ConvexError("الرمز مستخدم بالفعل؛ اختر رمزًا مختلفًا");
+        }
         const patch: any = {};
         if (args.fullName !== undefined) patch.fullName = args.fullName.trim();
         if (args.subjects !== undefined) patch.subjects = args.subjects;
@@ -180,6 +191,13 @@ export const updateSupervisor = mutation({
         if (args.pin !== undefined) patch.pin = args.pin;
         if (args.isActive !== undefined) patch.isActive = args.isActive;
         await ctx.db.patch(args.id, patch);
+        if (args.pin !== undefined) {
+            const sessions = await ctx.db.query("supervisionSessions").collect();
+            for (const row of sessions) if (row.visitorId === person._id) await ctx.db.delete(row._id);
+            const key = `${person.schoolId}:coordinator:${person._id}`;
+            const attempt = await ctx.db.query("supervisionLoginAttempts").withIndex("by_key", q => q.eq("key", key)).first();
+            if (attempt) await ctx.db.delete(attempt._id);
+        }
     },
 });
 

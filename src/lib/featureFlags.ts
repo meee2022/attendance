@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 
 // Feature keys — must match nav `to` paths
 export const FEATURES: { key: string; label: string; description: string }[] = [
+    { key: "/teacher-tasks", label: "مهام المعلمين", description: "روابط المهام والنماذج المدرسية" },
     { key: "/",            label: "الرئيسية",          description: "لوحة المتابعة اليومية للحضور والغياب" },
     { key: "/upload",      label: "رصد الغياب",         description: "رفع ملفات Teams/Excel للحضور" },
     { key: "/grades",      label: "التقييمات القصيرة",        description: "إدخال درجات التقييمات" },

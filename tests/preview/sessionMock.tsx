@@ -19,6 +19,8 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
     useEffect(() => { const changed = () => update(n => n + 1); window.addEventListener("preview-data", changed); return () => window.removeEventListener("preview-data", changed); }, []);
     if (args === "skip") return undefined;
     const name = getFunctionName(ref);
+    if (name === "supervision:getSchoolTeachers") return setup.teachers;
+    if (name === "supervision:getSupervisors") return [{ _id: "vc1", fullName: "منسق تجريبي", role: "coordinator", subjects: ["العلوم"], isActive: true, hasPrivatePin: false }];
     if (name === "supervisionActions:list") return actions;
     if (name === "visits:getSetup") return setup;
     if (name === "visits:listVisits") return visits;

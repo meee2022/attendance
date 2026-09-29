@@ -2,6 +2,11 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+    teacherTasks: defineTable({
+        schoolId: v.id("schools"), title: v.string(), url: v.string(), description: v.string(),
+        audience: v.array(v.string()), audienceLabel: v.string(), category: v.string(), academicYear: v.string(),
+        order: v.number(), isActive: v.boolean(), updatedAt: v.number(),
+    }).index("by_school", ["schoolId"]),
     supervisionImports: defineTable({
         schoolId: v.id("schools"), ownerId: v.string(), storageId: v.id("_storage"),
         filename: v.string(), sha256: v.string(), createdAt: v.number(),

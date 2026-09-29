@@ -192,3 +192,25 @@ describe("coordinator records the supervisor visit", () => {
         expect(result.session.name).toBe("نائب جديد");
     });
 });
+
+
+describe("PDF visit imports", () => {
+    it("validates files, stores originals, blocks reuse and requires review before submission", async () => {
+        const f = await fixture();
+        const bytes = new TextEncoder().encode("%PDF-1.7\nfixture").buffer;
+        await expect(f.t.action(A.visitImports.upload, { sessionToken: "forged", bytes, filename: "visit.pdf" })).rejects.toThrow();
+        await expect(f.t.action(A.visitImports.upload, { sessionToken: f.token, bytes: new TextEncoder().encode("not a pdf").buffer, filename: "visit.pdf" })).rejects.toThrow();
+        const sourceImportId = await f.t.action(A.visitImports.upload, { sessionToken: f.token, bytes, filename: "visit.pdf" });
+        expect(await f.t.action(A.visitImports.upload, { sessionToken: f.token, bytes, filename: "visit.pdf" })).toBe(sourceImportId);
+        const supervisor = await f.t.run(ctx => ctx.db.insert("supervisors", { schoolId: f.schoolId, fullName: "موجه", role: "supervisor", subjects: ["العلوم"], isActive: true }));
+        const args = { sessionToken: f.token, sourceImportId, visitorRole: "supervisor", visitorId: supervisor, visitorName: "", teacherId: f.teacherId, subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-29", ratings: "{}", status: "draft" };
+        const result = await f.t.mutation(A.visits.saveVisit, args);
+        const saved = await f.t.run(ctx => ctx.db.get(result.id));
+        expect(saved?.sourceImportId).toBe(sourceImportId);
+        expect((await f.t.query(A.visitImports.original, { sessionToken: f.token, visitId: result.id })).filename).toBe("visit.pdf");
+        await expect(f.t.mutation(A.visits.saveVisit, args)).rejects.toThrow("مرتبط");
+        await expect(f.t.action(A.visitImports.upload, { sessionToken: f.token, bytes, filename: "again.pdf" })).rejects.toThrow("مرتبط");
+        await expect(f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: saved?.updatedAt, status: "submitted" })).rejects.toThrow("راجع");
+        await expect(f.t.query(A.visitImports.original, { sessionToken: f.token, visitId: f.otherVisit })).rejects.toThrow();
+    });
+});

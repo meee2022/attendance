@@ -60,6 +60,13 @@ async function imageUrl(ctx: any, id: any) {
     return id ? await ctx.storage.getUrl(id) : null;
 }
 
+function snapshotCriteria(snapshot?: string) {
+    try {
+        const criteria = snapshot ? JSON.parse(snapshot).criteria : null;
+        return Array.isArray(criteria) ? criteria : null;
+    } catch { return null; }
+}
+
 // ── Reference data for the form ──────────────────────────────────────────
 export const getSetup = query({
     args: {},
@@ -128,6 +135,8 @@ export const listVisits = query({
             .filter((x: any) => Boolean(x.deletedAt) === Boolean(args.deleted))
             .map((x: any) => ({
                 _id: x._id,
+                sourceImportId: x.sourceImportId ?? null,
+                criteriaSnapshot: snapshotCriteria(x.snapshot),
                 recordNo: x.recordNo ?? null,
                 visitorId: x.visitorId ?? null,
                 recordedByVisitorId: x.recordedByVisitorId ?? null,
@@ -235,6 +244,8 @@ async function audit(ctx: any, schoolId: any, visitId: any, action: string, acto
 }
 
 const visitArgs = {
+    sourceImportId: v.optional(v.id("supervisionImports")),
+    importReviewed: v.optional(v.boolean()),
     id: v.optional(v.id("supervisionVisits")),
     visitorRole: roleV,
     visitorId: v.optional(v.id("supervisors")),
@@ -274,10 +285,20 @@ export const saveVisit = mutation({
         const access = (ctx as any).supervisionSession;
         const existing = args.id ? await requireVisit(ctx, access, args.id, true) : null;
         args.actorName = access.name;
-        const delegated = !existing && access.role === "coordinator" && args.visitorRole === "supervisor";
+        const sourceImportId = existing?.sourceImportId ?? args.sourceImportId;
+        if (sourceImportId) {
+            const source = await ctx.db.get(sourceImportId as import("./_generated/dataModel").Id<"supervisionImports">);
+            if (!source || source.schoolId !== access.schoolId || (!existing && source.ownerId !== (access.visitorId ?? "deputy"))) throw new ConvexError("ملف الاستيراد غير متاح");
+            if (source.visitId && source.visitId !== args.id) throw new ConvexError("هذا الملف مرتبط بزيارة أخرى");
+            if (args.status === "submitted" && !args.importReviewed) throw new ConvexError("راجع البنود والتوصيات مع ملف الموجه الأصلي قبل الاعتماد");
+        }
+
+        if (args.sourceImportId && existing && args.sourceImportId !== existing.sourceImportId) throw new ConvexError("لا يمكن استبدال أصل الزيارة");
+        const delegated = !existing && (access.role === "coordinator" || access.role === "deputy") && args.visitorRole === "supervisor";
         const supervisor = delegated && args.visitorId ? await ctx.db.get(args.visitorId) : null;
         if (delegated && (!supervisor || supervisor.schoolId !== school._id || supervisor.role !== "supervisor" || !supervisor.isActive)) throw new ConvexError("اختر الموجه المسجل للقسم");
         args.visitorRole = existing?.visitorRole ?? (delegated ? "supervisor" : access.role);
+        if (sourceImportId && args.visitorRole !== "supervisor") throw new ConvexError("استيراد PDF مخصص لزيارات الموجه");
         args.visitorName = existing?.visitorName ?? (delegated ? supervisor!.fullName : access.role === "deputy" ? settings.deputyName : access.name);
         args.visitorId = existing ? existing.visitorId : delegated ? supervisor!._id : access.visitorId;
         if (existing && args.expectedUpdatedAt !== (existing.updatedAt ?? existing.createdAt)) throw new ConvexError("تم تعديل الزيارة في جلسة أخرى؛ أعد فتحها قبل الحفظ");
@@ -338,6 +359,7 @@ export const saveVisit = mutation({
         const common = {
             visitorRole: args.visitorRole,
             visitorId: args.visitorId,
+            sourceImportId,
             visitorName: args.visitorName.trim(),
             recordedByVisitorId: existing ? existing.recordedByVisitorId : access.visitorId,
             recordedByName: existing ? existing.recordedByName : access.name,
@@ -445,6 +467,7 @@ export const saveVisit = mutation({
             createdAt: now,
             ...numbering,
         });
+        if (sourceImportId) await ctx.db.patch(sourceImportId, { visitId: id });
         await audit(ctx, school._id, id, becomingSubmitted ? "submitted" : "created", args.actorName,
             `${becomingSubmitted ? "اعتماد" : "مسودة"} زيارة ${teacherName}`);
         return { ok: true as const, id, recordNo: numbering.recordNo ?? null };

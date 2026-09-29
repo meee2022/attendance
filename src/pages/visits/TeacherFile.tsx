@@ -1,3 +1,5 @@
+import TeacherComparisons from "./TeacherComparisons";
+import { OriginalVisitPdf } from "./VisitImport";
 import { AcknowledgementControl } from "./TeacherAcknowledgement";
 import { useSupervisionSession } from "../../lib/supervisionSession";
 import FiltersBar, { periodPresets } from "./FiltersBar";
@@ -28,7 +30,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
         .sort((a, b) => a.visitDate.localeCompare(b.visitDate)), [visits, teacherId, filters]);
 
     const stats = criterionAverages(mine, setup.criteria);
-    const measured = stats.criteria.filter(c => c.average !== null);
+    const measured = stats.criteria.filter(c => c.average !== null && c.n >= 2);
     const strongest = [...measured].sort((a, b) => b.average! - a.average!).slice(0, 3);
     const weakest = [...measured].sort((a, b) => a.average! - b.average!).slice(0, 3);
     const annualVisits = submittedOnly(visits).filter(v => v.teacherId === teacherId && v.visitDate >= year.from && v.visitDate <= year.to);
@@ -77,6 +79,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                                 <p className="text-xs font-bold text-slate-500">{teacher.department}{teacher.email ? ` · ${teacher.email}` : ""}</p>
                             </div>
                             <p className="text-4xl font-black" style={{ color: scoreTone(stats.overall) }}>{pct(stats.overall, 1)}</p>
+                            <p className="text-xs text-slate-600">متوسط وصفي لجميع البنود المقاسة</p>
                             <p className="text-sm text-slate-600">{mine.length} زيارة في الفترة المحددة</p>
                             <div className="space-y-1.5">
                                 <p className="text-xs text-slate-600">استيفاء الزيارات للعام الحالي {setup.settings.academicYear}</p>
@@ -109,7 +112,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                         </div>
 
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
-                            <p className="font-bold text-slate-700 text-sm">تطور المعدل</p>
+                            <p className="font-bold text-slate-700 text-sm">نتائج الزيارات حسب التاريخ</p>
                             {mine.length === 0 ? (
                                 <p className="text-xs font-bold text-slate-400">لا توجد زيارات معتمدة بعد.</p>
                             ) : (
@@ -129,6 +132,8 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                         </div>
                     </div>
 
+                    <TeacherComparisons visits={mine} criteria={setup.criteria}/>
+                    <p className="text-xs text-slate-600">القوة وأولويات التحسين أدناه مؤشرات للبنود المقاسة مرتين على الأقل، وليست حكمًا نهائيًا على أداء المعلم.</p>
                     {measured.length > 0 && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <CriteriaList title="نقاط القوة" icon={<TrendingUp className="w-4 h-4 text-emerald-600"/>}
@@ -159,6 +164,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                                                 <Printer className="w-4 h-4"/>
                                             </button>
                                         </div>
+                                        {v.sourceImportId && <OriginalVisitPdf visitId={v._id}/>}
                                         <AcknowledgementControl visitId={v._id} updatedAt={v.updatedAt} canManage={session?.role === "deputy" || session?.visitorId === v.visitorId}/>
                                         {[["التخطيط", v.planningRec], ["تنفيذ الدرس", v.executionRec],
                                           [v.managementRec ? "التقويم" : "التقويم والإدارة الصفية", v.evalMgmtRec], ["الإدارة الصفية وبيئة التعلم", v.managementRec ?? ""], ["عامة", v.notes]]
@@ -186,7 +192,7 @@ function CriteriaList({ title, icon, items, visits, criteria, showTrail }: {
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
             <p className="font-bold text-slate-700 text-sm flex items-center gap-2">{icon}{title}</p>
             {items.map(c => {
-                const trail = visits.map(v => parseRatings(v.ratings)[c._id]).filter(r => r !== undefined && r !== "not_measured") as number[];
+                const trail = visits.map(v => ({ v, rating: parseRatings(v.ratings)[c._id] })).filter(x => typeof x.rating === "number");
                 return (
                     <div key={c._id} className="text-xs">
                         <div className="flex justify-between gap-3">
@@ -195,10 +201,10 @@ function CriteriaList({ title, icon, items, visits, criteria, showTrail }: {
                             </span>
                             <span className="font-black shrink-0" style={{ color: scoreTone(c.average) }}>{pct(c.average)}</span>
                         </div>
+                        <p className="text-xs text-slate-500 mt-1">{c.n} قياسات</p>
                         {showTrail && trail.length > 1 && (
                             <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                التقدير عبر الزيارات: {trail.join(" ← ")}
-                                {trail[trail.length - 1] > trail[0] ? " · تحسّن" : trail[trail.length - 1] < trail[0] ? " · تراجع" : " · ثابت"}
+                                {trail.map(x => `${formatDate(x.v.visitDate)} · ${ROLE_LABELS[x.v.visitorRole]}: ${x.rating}/3`).join(" | ")}
                             </p>
                         )}
                     </div>

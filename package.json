@@ -11,7 +11,7 @@
     "migrate-convex": "tsx scripts/migrateConvexData.ts",
     "import-registry": "tsx --env-file=.env.local scripts/importRegistry.ts",
     "import-plan": "tsx --env-file=.env.local scripts/importAssessmentPlan.ts",
-    "test:supervision": "vitest run tests/supervision.test.ts tests/visitArchive.test.ts"
+    "test:supervision": "vitest run tests/supervision.test.ts tests/visitArchive.test.ts tests/visitImport.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -21,6 +21,7 @@
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.576.0",
+    "pdfjs-dist": "6.3.289",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",

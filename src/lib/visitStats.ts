@@ -10,6 +10,8 @@ import {
 } from "../../convex/visitMath";
 
 export type VisitRow = {
+    sourceImportId?: string | null;
+    criteriaSnapshot?: Criterion[] | null;
     _id: string;
     visitorId?: string | null;
     recordedByVisitorId?: string | null;
@@ -70,6 +72,27 @@ export function applyFilters(visits: VisitRow[], f: Filters): VisitRow[] {
 
 export const submittedOnly = (visits: VisitRow[]) => visits.filter(x => x.status === "submitted");
 
+// Compare two dates from the same role and named visitor, on unchanged criteria
+// measured in both visits. Missing evidence is not evidence of decline.
+export function roleComparisons(visits: VisitRow[], criteria: Criterion[]) {
+    const valid = submittedOnly(visits).filter(v => !v.deletedAt);
+    return (["coordinator", "deputy", "supervisor"] as VisitorRole[]).map(role => {
+        const rows = valid.filter(v => v.visitorRole === role).sort((a,b) => a.visitDate.localeCompare(b.visitDate) || a.createdAt - b.createdAt);
+        const last = rows.at(-1);
+        const sameVisitor = (v: VisitRow) => last && (last.visitorId ? v.visitorId === last.visitorId : v.visitorName === last.visitorName);
+        const first = last ? rows.find(v => sameVisitor(v) && v.visitDate < last.visitDate) : undefined;
+        const a = first ? parseRatings(first.ratings) : {}, b = last ? parseRatings(last.ratings) : {};
+        const common = first && last ? criteria.filter(c => {
+            const ca = first.criteriaSnapshot?.find(x => x._id === c._id), cb = last.criteriaSnapshot?.find(x => x._id === c._id);
+            return ca && cb && ca.text === cb.text && ca.domain === cb.domain && cb.text === c.text && cb.domain === c.domain && typeof a[c._id] === "number" && typeof b[c._id] === "number";
+        }) : [];
+        const mean = (r: Record<string, Rating>) => common.reduce((sum,c) => sum + (r[c._id] as number), 0) / (3 * common.length);
+        return { role, count: rows.length, stats: criterionAverages(rows, criteria), first, last, commonCount: common.length,
+            before: common.length ? mean(a) : null, after: common.length ? mean(b) : null,
+            delta: common.length ? mean(b) - mean(a) : null };
+    });
+}
+
 type Acc = { sum: number; n: number };
 const ratio = (a: Acc) => (a.n ? a.sum / (3 * a.n) : null);
 
@@ -82,6 +105,8 @@ export function criterionAverages(visits: VisitRow[], criteria: Criterion[]) {
     for (const visit of visits) {
         const ratings = parseRatings(visit.ratings);
         for (const c of criteria) {
+            const frozen = visit.criteriaSnapshot?.find(x => x._id === c._id);
+            if (visit.criteriaSnapshot && (!frozen || frozen.text !== c.text || frozen.domain !== c.domain)) continue;
             const r: Rating | undefined = ratings[c._id];
             if (r === undefined || r === "not_measured") continue;
             byCriterion.get(c._id)!.sum += r; byCriterion.get(c._id)!.n++;

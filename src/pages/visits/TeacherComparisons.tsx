@@ -1,0 +1,11 @@
+import { roleComparisons, pct, type VisitRow, type Criterion } from "../../lib/visitStats";
+import { ROLE_LABELS, DOMAIN_LABELS, DOMAINS, formatDate } from "../../../convex/visitMath";
+
+export default function TeacherComparisons({ visits, criteria }: { visits: VisitRow[]; criteria: Criterion[] }) {
+    const rows = roleComparisons(visits, criteria);
+    return <section className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="p-5 space-y-2"><h2 className="font-bold text-qatar-maroon">مقارنة مصادر التقييم</h2><p className="text-sm text-slate-600 leading-7">المتوسطات تصف الزيارات في الفترة المختارة. التغيّر يقارن أول وآخر زيارة في تاريخين مختلفين للزائر نفسه، وعلى البنود المشتركة المقاسة فقط.</p></div>
+        <div className="overflow-x-auto"><table className="w-full text-sm text-right whitespace-nowrap"><thead className="bg-rose-50 text-qatar-maroon"><tr>{["الزائر", "الزيارات", ...DOMAINS.map(d => DOMAIN_LABELS[d]), "المتوسط", "التغيّر المقارن"].map(x => <th key={x} className="p-3 font-bold">{x}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map(r => <tr key={r.role}><th scope="row" className="p-3 font-bold">{ROLE_LABELS[r.role]}</th><td className="p-3 tabular-nums">{r.count}</td>{DOMAINS.map(d => <td key={d} className="p-3 tabular-nums">{pct(r.stats.domains[d])}</td>)}<td className="p-3 font-bold tabular-nums">{pct(r.stats.overall,1)}</td><td className="p-3">{r.delta === null ? <span className="text-slate-500">لا تكفي بيانات المقارنة</span> : <><span className={r.delta > 0 ? "text-emerald-700" : r.delta < 0 ? "text-rose-700" : "text-slate-600"}>{r.delta > 0 ? "+" : ""}{(r.delta * 100).toFixed(1)} نقطة مئوية</span><span className="block text-xs text-slate-600 mt-1">{pct(r.before,1)} ← {pct(r.after,1)} · {r.commonCount} بند</span><span className="block text-xs text-slate-500 mt-1">{formatDate(r.first!.visitDate)} — {formatDate(r.last!.visitDate)}</span></>}</td></tr>)}</tbody></table></div>
+        <p className="p-4 text-xs text-slate-600 leading-6">الزيارة غير المعتمدة والبند غير المقاس خارج الحساب. اختلاف الزائر أو غياب نسخة البنود الأصلية يمنع حساب التغيّر؛ وتغيّر النسبة وحده لا يثبت سبب التحسّن أو التراجع.</p>
+    </section>;
+}

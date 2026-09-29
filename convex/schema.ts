@@ -2,6 +2,11 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+    supervisionImports: defineTable({
+        schoolId: v.id("schools"), ownerId: v.string(), storageId: v.id("_storage"),
+        filename: v.string(), sha256: v.string(), createdAt: v.number(),
+        visitId: v.optional(v.id("supervisionVisits")),
+    }).index("by_hash", ["schoolId", "sha256"]),
     // Visit forms e-mailed to the visited teacher
     supervisionEmails: defineTable({
         schoolId: v.id("schools"),
@@ -435,6 +440,7 @@ export default defineSchema({
       .index("by_school", ["schoolId"]),
 
     supervisionVisits: defineTable({
+        sourceImportId: v.optional(v.id("supervisionImports")),
         schoolId: v.id("schools"),
         // الزائر
         visitorRole: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy")),

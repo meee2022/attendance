@@ -1,3 +1,4 @@
+import { OriginalVisitPdf } from "./VisitImport";
 import { AutoArchiveVisit } from "./VisitArchive";
 import { ReviewBanner, SendForReviewDialog, SendToTeacher, isReviewer } from "./VisitWorkflow";
 import { useUnsavedChanges } from "../../lib/useUnsavedChanges";
@@ -123,6 +124,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const [restored, setRestored] = useState(initial.restored);
     const [baseline, setBaseline] = useState(() => editing ? fromVisit(editing) : emptyForm(setup.today, soleDepartment));
 
+    const [importReviewed, setImportReviewed] = useState(false);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [saving, setSaving] = useState<"draft" | "submitted" | null>(null);
     const [serverError, setServerError] = useState("");
@@ -202,11 +204,13 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
         then?: (id: string) => Promise<string | void>) => {
         setServerError("");
         if (!editing && recordedRole === "supervisor" && !selectedSupervisor) { setServerError("اختر الموجه المسجل للقسم قبل الحفظ"); return; }
+        if (status === "submitted" && editing?.sourceImportId && !importReviewed) { setServerError("راجع ملف الموجه وأكد المطابقة قبل الاعتماد"); return; }
         setSaving(status);
         try {
             const res = await saveVisit({
                 id: (editingId ?? undefined) as any,
                 expectedUpdatedAt: baseUpdatedAt,
+                importReviewed,
                 visitorRole: recordedRole,
                 visitorId: (recordedRole === "supervisor" ? form.supervisorId : session.visitorId) as any || undefined,
                 visitorName: recordedName,
@@ -293,6 +297,11 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
 
     return (
         <div className="space-y-4 pb-56 lg:pb-28">
+            {editing?.sourceImportId && <div className="bg-amber-50 rounded-xl p-4 text-sm space-y-3">
+                <OriginalVisitPdf visitId={editing._id}/>
+                <p>زيارة مستوردة: راجع بيانات الحصة وجميع التقديرات والتوصيات مع الأصل قبل الاعتماد.</p>
+                <label className="flex gap-2 items-center"><input type="checkbox" checked={importReviewed} onChange={e => setImportReviewed(e.target.checked)}/>راجعت البيانات والبنود والتوصيات وطابقتها مع ملف الموجّه.</label>
+            </div>}
             {editing && baseUpdatedAt !== editing.updatedAt && <p role="alert" className="rounded-xl p-3 bg-amber-50 text-amber-900 text-sm">توجد نسخة أحدث من الزيارة في السجل. احتفظ بملاحظاتك قبل البدء من جديد؛ لن تُستبدل النسخة الأحدث بتعديلك القديم.</p>}
             {storageError && <p role="alert" className="p-3 bg-amber-50 text-amber-900 rounded-xl">الحفظ على الجهاز غير متاح؛ احفظ المسودة قبل المغادرة.</p>}
             {restored && (

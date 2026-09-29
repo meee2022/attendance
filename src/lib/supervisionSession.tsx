@@ -1,5 +1,5 @@
 import { Component, createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import SupervisionPinGate, { getStoredRole, clearStoredRole } from "../components/SupervisionPinGate";
 
@@ -53,4 +53,10 @@ function SupervisionSessionContent({ children, deputy = false }: { children: Rea
     if (!current) return <p className="p-8 text-center text-slate-600">جاري التحقق من جلسة الإشراف…</p>;
     if (deputy && current.role !== "deputy") return <div dir="rtl" className="p-6 space-y-3"><p>إدارة الإشراف متاحة للنائب الأكاديمي.</p><button className="text-qatar-maroon underline" onClick={() => { clearStoredRole(); setSession(null); }}>تغيير المستخدم</button></div>;
     return <SessionContext.Provider value={{ ...session, ...current }}><SupervisionErrorBoundary key={session.token}>{children}</SupervisionErrorBoundary></SessionContext.Provider>;
+}
+
+export function useSupervisionAction(apiRef: any) {
+    const session = useSupervisionSession();
+    const run = useAction(apiRef);
+    return (args: any = {}) => run({ ...args, sessionToken: session?.token ?? "" });
 }

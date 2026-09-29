@@ -1,3 +1,4 @@
+import VisitImport from "./VisitImport";
 import { VisitArchiveSettings } from "./VisitArchive";
 import VisitFollowUp from "./VisitFollowUp";
 import "./visits.css";
@@ -25,7 +26,7 @@ import { MySignatureButton, ReviewInbox } from "./VisitWorkflow";
 // is the question the academic deputy comes with; recording a visit is one
 // tab away.
 
-type Tab = "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
+type Tab = "import" | "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
 
 export type Session = { role: VisitorRole; name: string; visitorId?: string };
 
@@ -87,6 +88,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
     const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
         { key: "dashboard", label: "لوحة المتابعة", icon: <LayoutDashboard className="w-4 h-4"/> },
         { key: "new", label: editingId ? "تعديل زيارة" : "زيارة جديدة", icon: <Plus className="w-4 h-4"/> },
+        { key: "import", label: "استيراد PDF", icon: <Plus className="w-4 h-4"/> },
         { key: "registry", label: "سجل الزيارات", icon: <Layers className="w-4 h-4"/> },
         { key: "teacher", label: "ملف المعلم", icon: <User className="w-4 h-4"/> },
         { key: "analysis", label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
@@ -129,8 +131,9 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
                     onOpenFollowUp={() => openFollowUp()}
                     onOpenDrafts={() => { setRegistryView("draft"); setTab("registry"); }}/>
             )}
+            {tab === "import" && <VisitImport setup={setup} onDirtyChange={setDirty} onOpen={editVisit}/>}
             {tab === "new" && (
-                <VisitForm key={editingId ?? "new"} setup={setup} session={session} editingId={editingId}
+                editingId && !visits.some(v => v._id === editingId) ? <LoadingSpinner label="جاري فتح مسودة الزيارة…"/> : <VisitForm key={editingId ?? "new"} setup={setup} session={session} editingId={editingId}
                     onNewVisit={() => { setDirty(false); setEditingId(null); }}
                     visits={visits} onDirtyChange={setDirty}
                     onDone={() => { setDirty(false); setEditingId(null); setRegistryView("submitted"); setTab("registry"); }}/>

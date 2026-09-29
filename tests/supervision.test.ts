@@ -25,6 +25,30 @@ async function fixture() {
     return { t, ...ids, token, deputy };
 }
 
+describe("correcting the teacher of a submitted visit", () => {
+    it("is the deputy's alone, needs a reason, and renumbers the visit under the new teacher", async () => {
+        const f = await fixture();
+        const { newTeacher, classId } = await f.t.run(async ctx => ({
+            newTeacher: await ctx.db.insert("schoolTeachers", { schoolId: f.schoolId, fullName: "المعلم الصحيح", department: "العلوم", isActive: true }),
+            classId: await ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true }),
+        }));
+        const edit = (sessionToken: string, teacherId: any, editReason?: string) => f.t.mutation(A.visits.saveVisit, {
+            sessionToken, id: f.visitId, expectedUpdatedAt: 1, visitorRole: "coordinator", visitorName: "منسق اختبار",
+            teacherId, classId, subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-01", followUpType: "full",
+            ratings: "{}", planningRec: "توصية اختبار", status: "submitted", editReason, confirmDuplicate: true,
+        });
+        await expect(edit(f.token, newTeacher, "اختيار خاطئ")).rejects.toThrow();
+        await expect(edit(f.deputy, newTeacher)).rejects.toThrow();
+        await edit(f.deputy, newTeacher, "اختيار خاطئ");
+        const moved = await f.t.run(ctx => ctx.db.get(f.visitId));
+        expect(moved?.teacherId).toBe(newTeacher);
+        expect(moved?.teacherName).toBe("المعلم الصحيح");
+        expect(moved?.visitNumber).toBe(1);
+        const versions = await f.t.run(ctx => ctx.db.query("supervisionVisitVersions").collect());
+        expect(versions.map(v => v.reason)).toEqual(["اختيار خاطئ"]);
+    });
+});
+
 describe("review before submitting", () => {
     it("lets only the chosen colleague edit or return a draft, and only the owner send it", async () => {
         const f = await fixture();

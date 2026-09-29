@@ -155,6 +155,9 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const teachers: any[] = setup.teachers;
     const teachersInDept = form.department ? teachers.filter(t => t.department === form.department) : teachers;
     const teacher = teachers.find(t => t._id === form.teacherId);
+    // after submitting, only the academic deputy may correct the teacher
+    const teacherLocked = editingSubmitted && session.role !== "deputy";
+    const teacherChanged = editingSubmitted && !!editing && (editing.teacherId ?? "") !== form.teacherId;
 
     const recordedRole = editing?.visitorRole ?? (session.role === "coordinator" ? form.recordedRole ?? "coordinator" : session.role);
     const availableSupervisors = setup.visitors.filter((v: any) => v.role === "supervisor" && (!form.department || v.subjects.includes(form.department)));
@@ -304,7 +307,9 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-600">
                     تعديل زيارة {editing.teacherName}
                     {editing.recordNo ? ` · رقم السجل ${editing.recordNo}` : ""}
-                    {editingSubmitted ? " — الزيارة معتمدة: لا يتغير المعلم ولا التاريخ ولا المادة، وتُحفظ النسخة السابقة." : " — مسودة"}
+                    {editingSubmitted ? (teacherLocked
+                        ? " — الزيارة معتمدة: لا يتغير المعلم ولا التاريخ ولا المادة (تصحيح المعلم عند النائب الأكاديمي)، وتُحفظ النسخة السابقة."
+                        : " — الزيارة معتمدة: لا يتغير التاريخ، ويمكنك تصحيح المعلم مع ذكر السبب، وتُحفظ النسخة السابقة.") : " — مسودة"}
                 </div>
             )}
             {editing && !editingSubmitted && <ReviewBanner visit={editing} session={session} onReturned={onDone}/>}
@@ -313,7 +318,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             <Section n={1} title="المعلم والحصة">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <Field label="القسم">
-                        <select value={form.department} disabled={editingSubmitted || Boolean(soleDepartment)}
+                        <select value={form.department} disabled={teacherLocked || Boolean(soleDepartment)}
                             onChange={e => setForm(f => ({ ...f, department: e.target.value, teacherId: "" }))}
                             className={inputCls}>
                             {!soleDepartment && <option value="">كل الأقسام</option>}
@@ -321,7 +326,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                         </select>
                     </Field>
                     <Field label="المعلم" error={!form.teacherId}>
-                        <select value={form.teacherId} disabled={editingSubmitted}
+                        <select value={form.teacherId} disabled={teacherLocked}
                             onChange={e => pickTeacher(e.target.value)} className={inputCls}>
                             <option value="">— اختر المعلم —</option>
                             {teachersInDept.map((t: any) => (
@@ -332,7 +337,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                         </select>
                     </Field>
                     <Field label="المادة">
-                        <input value={form.subjectName} disabled={editingSubmitted}
+                        <input value={form.subjectName} disabled={teacherLocked}
                             onChange={e => set("subjectName", e.target.value)}
                             list="visit-subjects" className={inputCls} placeholder="تُعبأ من قسم المعلم"/>
                         <datalist id="visit-subjects">
@@ -577,8 +582,13 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                 </div>
                             )}
 
+                            {teacherChanged && (
+                                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+                                    سيُنقل هذا السجل من «{editing?.teacherName}» إلى «{teacher?.fullName}»، ويأخذ رقم الزيارة التالي للمعلم الجديد.
+                                </p>
+                            )}
                             {editingSubmitted && (
-                                <Field label="سبب التعديل (يُحفظ مع النسخة السابقة)">
+                                <Field label={teacherChanged ? "سبب تغيير المعلم (مطلوب)" : "سبب التعديل (يُحفظ مع النسخة السابقة)"} error={teacherChanged && !editReason.trim()}>
                                     <input value={editReason} onChange={e => setEditReason(e.target.value)} className={inputCls}/>
                                 </Field>
                             )}
@@ -596,7 +606,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
 
                             {serverError && <p className="text-xs font-bold text-rose-700">{serverError}</p>}
 
-                            <button onClick={() => submit("submitted")} disabled={issues.length > 0 || saving !== null}
+                            <button onClick={() => submit("submitted")} disabled={issues.length > 0 || saving !== null || (teacherChanged && !editReason.trim())}
                                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-qatar-maroon text-white font-black disabled:opacity-40">
                                 {saving === "submitted" ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckCircle2 className="w-4 h-4"/>}
                                 {editingSubmitted ? "حفظ التعديل" : "اعتماد الزيارة"}

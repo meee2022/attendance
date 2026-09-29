@@ -290,15 +290,19 @@ export const saveVisit = mutation({
         if (delegated && !supervisor!.subjects.map((d: string) => d.trim()).includes((teacher.department ?? "").trim())) throw new ConvexError("الموجه غير مسجل لهذا القسم");
         if (cls && cls.schoolId !== school._id) throw new ConvexError("الصف غير متاح");
 
-        // A submitted visit keeps who, by whom, what and when — as in the workbook
+        // A submitted visit keeps by whom and when. The teacher (and with it the
+        // subject) may be corrected when the wrong one was picked — with a
+        // reason, and the earlier version kept like any other edit.
+        const teacherChanged = !!existing && existing.status === "submitted"
+            && (existing.teacherId ? existing.teacherId !== args.teacherId : nameKey(existing.teacherName) !== nameKey(teacher.fullName));
         if (existing && existing.status === "submitted") {
             const locked: string[] = [];
-            if (existing.teacherId && existing.teacherId !== args.teacherId) locked.push("المعلم");
             if (existing.visitorRole !== args.visitorRole) locked.push("نوع الزائر");
             if (existing.visitDate !== args.visitDate) locked.push("التاريخ");
-            if ((existing.subjectName ?? "").trim() !== args.subjectName.trim()) locked.push("المادة");
             if (locked.length) throw new ConvexError(`لا يمكن تغيير ${locked.join(" و")} بعد اعتماد الزيارة`);
             if (args.status === "draft") throw new ConvexError("الزيارة المعتمدة لا تعود مسودة");
+            if (teacherChanged && access.role !== "deputy") throw new ConvexError("تغيير معلم زيارة معتمدة متاح للنائب الأكاديمي فقط");
+            if (teacherChanged && !args.editReason?.trim()) throw new ConvexError("اكتب سبب تغيير المعلم");
         }
 
         if (args.status === "submitted") {
@@ -400,6 +404,15 @@ export const saveVisit = mutation({
             };
         }
 
+        // Under the corrected teacher the visit takes that teacher's next number
+        if (teacherChanged) {
+            const theirs = await ctx.db.query("supervisionVisits")
+                .withIndex("by_teacher_id", (q: any) => q.eq("schoolId", school._id).eq("teacherId", args.teacherId))
+                .collect();
+            numbering.visitNumber = theirs.filter((x: any) =>
+                x._id !== args.id && !x.deletedAt && x.status === "submitted" && x.visitorRole === args.visitorRole).length + 1;
+        }
+
         if (existing) {
             if (existing.status === "submitted") {
                 const versions = await ctx.db.query("supervisionVisitVersions")
@@ -418,8 +431,10 @@ export const saveVisit = mutation({
             }
             await ctx.db.patch(existing._id, { ...common, ...numbering });
             await audit(ctx, school._id, existing._id,
-                becomingSubmitted ? "submitted" : "updated", args.actorName,
-                `${becomingSubmitted ? "اعتماد" : "تعديل"} زيارة ${teacherName}`);
+                becomingSubmitted ? "submitted" : teacherChanged ? "teacher_changed" : "updated", args.actorName,
+                teacherChanged
+                    ? `تغيير معلم الزيارة من ${existing.teacherName} إلى ${teacherName}: ${args.editReason?.trim()}`
+                    : `${becomingSubmitted ? "اعتماد" : "تعديل"} زيارة ${teacherName}`);
             return { ok: true as const, id: existing._id, recordNo: numbering.recordNo ?? existing.recordNo ?? null };
         }
 

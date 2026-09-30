@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/supervisionSession";
@@ -223,7 +223,27 @@ function VisitFormPrintContent() {
 }
 
 export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar?: boolean }) {
+    const [downloading, setDownloading] = useState(false);
+    const [downloadError, setDownloadError] = useState("");
     const { visit, criteria, form } = data;
+    const downloadPdf = async () => {
+        if (downloading) return;
+        setDownloading(true);
+        setDownloadError("");
+        try {
+            const { createVisitPdf } = await import("../../lib/visitPdf");
+            const url = URL.createObjectURL(await createVisitPdf(data));
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `استمارة زيارة ${visit.teacherName} ${visit.visitDate}.pdf`.replace(/[<>:"/\\|?*]/g, "-");
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } catch {
+            setDownloadError("تعذّر تجهيز ملف PDF. تأكد من الاتصال ثم حاول مرة أخرى.");
+        } finally {
+            setDownloading(false);
+        }
+    };
     const role: VisitorRole = visit.visitorRole;
     const visitorName = role === "deputy" ? (form.deputyName || visit.visitorName) : visit.visitorName;
 
@@ -257,9 +277,25 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
     useLayoutEffect(() => {
         const el = sheet.current;
         if (!el) return;
-        const height = el.scrollHeight * 72 / 96;          // px → pt
-        const k = Math.min(1, (PAGE_H - 2 * SHEET_MARGIN) / height);
-        el.style.transform = `translateX(-50%) scale(${k})`;
+        const fit = () => {
+            const height = el.scrollHeight * 72 / 96; // px → pt
+            const k = Math.min(1, (PAGE_H - 2 * SHEET_MARGIN) / height);
+            // Keep centering independent of percentage translations in RTL
+            // print layout and in the cloned DOM used for PDF generation.
+            el.style.left = `${(PAGE_W * (1 - k)) / 2}pt`;
+            el.style.transform = `scale(${k})`;
+        };
+        fit();
+        const observer = new ResizeObserver(fit);
+        observer.observe(el);
+        let active = true;
+        void document.fonts.ready.then(() => { if (active) fit(); });
+        window.addEventListener("beforeprint", fit);
+        return () => {
+            active = false;
+            observer.disconnect();
+            window.removeEventListener("beforeprint", fit);
+        };
     });
 
     return (
@@ -278,13 +314,17 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 .vfp { background: #e2e8f0; min-height: 100vh; padding-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; }
                 .form-page:last-child { break-after: auto; page-break-after: auto; }
-                .form-sheet { position: absolute; left: 50%; top: ${SHEET_MARGIN}pt; width: ${PAGE_W}pt; transform-origin: top center; }
+                .form-sheet { position: absolute; left: 0; right: auto; top: ${SHEET_MARGIN}pt; width: ${PAGE_W}pt; transform-origin: top left; }
             `}</style>
 
             {toolbar && <div className="no-print p-3 flex gap-2 items-center justify-center flex-wrap">
-                <button onClick={() => window.print()} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm">
-                    طباعة / حفظ PDF
+                <button onClick={downloadPdf} disabled={downloading} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm disabled:opacity-60">
+                    {downloading ? "جاري تجهيز PDF…" : "تنزيل PDF"}
                 </button>
+                <button onClick={() => window.print()} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm">
+                    طباعة
+                </button>
+                {downloadError && <p role="alert" className="w-full text-center text-sm text-red-700">{downloadError}</p>}
                 {visit.status !== "submitted" && (
                     <span className="text-xs font-bold text-amber-700">مسودة — لم تُعتمد بعد</span>
                 )}

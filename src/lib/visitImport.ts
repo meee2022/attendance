@@ -1,4 +1,5 @@
 import type { Rating } from "../../convex/visitMath";
+import type { PdfPage, VisitPdfDocument } from "./visitPdfLayout";
 
 export const normalizePdfText = (text: string) => text.normalize("NFKC").replace(/[\u064B-\u065F\u0670\u0640\u200e\u200f]/g, "")
     .replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/[إأآ]/g, "ا").replace(/\s+/g, " ").trim();
@@ -31,6 +32,10 @@ export function proposeVisit(text: string, setup: { teachers: { _id: string; ful
 }
 
 export async function readVisitPdf(file: File) {
+    return (await readVisitPdfDocument(file)).text;
+}
+
+export async function readVisitPdfDocument(file: File): Promise<VisitPdfDocument> {
     if (file.size > 6 * 1024 * 1024) throw new Error("حجم الملف يتجاوز 6 ميجابايت. صدّره من Word بحجم أصغر.");
     const bytes = await file.arrayBuffer();
     if (new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") throw new Error("اختر ملف PDF صحيحاً.");
@@ -42,17 +47,22 @@ export async function readVisitPdf(file: File) {
         const doc = await task.promise;
         if (doc.numPages > 20) throw new Error("اختر ملف زيارة واحدة بحد أقصى 20 صفحة.");
         const pages: string[] = [];
+        const layout: PdfPage[] = [];
         for (let n = 1; n <= doc.numPages; n++) {
             const page = await doc.getPage(n), content = await page.getTextContent();
+            const viewport = page.getViewport({scale:1});
+            const pieces: PdfPage["pieces"] = [];
             const lines: { y: number; pieces: { x: number; str: string }[] }[] = [];
             for (const item of content.items) {
                 if (!("str" in item)) continue;
+                pieces.push({text:item.str,x:item.transform[4],y:viewport.height-item.transform[5]-item.height/2,width:item.width,height:item.height,rotated:Math.abs(item.transform[1])>Math.abs(item.transform[0])});
                 let line = lines.find(l => Math.abs(l.y - item.transform[5]) < 3);
                 if (!line) { line = { y: item.transform[5], pieces: [] }; lines.push(line); }
                 line.pieces.push({ x: item.transform[4], str: item.str });
             }
             pages.push(lines.sort((a,b) => b.y-a.y).map(l => l.pieces.sort((a,b) => b.x-a.x).map(p => p.str).join(" ")).join("\n"));
+            layout.push({width:viewport.width,height:viewport.height,pieces});
         }
-        return pages.join("\n\n");
+        return { text: pages.join("\n\n"), pages: layout };
     } finally { await task.destroy(); }
 }

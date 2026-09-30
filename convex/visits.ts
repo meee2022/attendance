@@ -157,6 +157,8 @@ export const listVisits = query({
                 deliveryMode: x.deliveryMode ?? "field",
                 reviewRequest: x.reviewRequest ?? null,
                 reviewReturn: x.reviewReturn ?? null,
+                coordinatorApproval: x.coordinatorApproval ? { name: x.coordinatorApproval.name, at: x.coordinatorApproval.at } : null,
+                deputyApproval: x.deputyApproval ? { name: x.deputyApproval.name, at: x.deputyApproval.at } : null,
                 streamMode: x.streamMode ?? null,
                 status: x.status,
                 averageScore: x.status === "submitted" ? x.averageScore : null,
@@ -200,7 +202,8 @@ export const getVisitForm = query({
         // Only the deputy's own submitted visits carry the deputy's signature;
         // a visit keeps the signature it was submitted with
         const visitor: any = visit.visitorId ? await ctx.db.get(visit.visitorId) : null;
-        const signatureId = visit.status !== "submitted" ? null
+        const signatureId = visit.visitorRole === "coordinator" && visit.coordinatorApproval ? visit.coordinatorApproval.signatureId ?? null
+            : visit.status !== "submitted" ? null
             : visit.visitorRole === "deputy" ? snapshot?.deputySignatureId ?? settings.deputySignatureId
             : visit.visitorRole === "coordinator" ? snapshot?.visitorSignatureId ?? visitor?.signatureId ?? null
             : null;
@@ -219,6 +222,7 @@ export const getVisitForm = query({
                 headerUrl: await imageUrl(ctx, headerId),
                 footerUrl: await imageUrl(ctx, footerId),
                 signatureUrl: await imageUrl(ctx, signatureId),
+                deputyApprovalSignatureUrl: await imageUrl(ctx, visit.deputyApproval?.signatureId),
             },
         };
     },
@@ -357,6 +361,26 @@ export const saveVisit = mutation({
         const scores = computeScores(ratings, criteriaRefs);
         const now = Date.now();
         const teacherName = teacher.fullName.replace(/\s+/g, " ").trim();
+        const coordinatorVisit = args.visitorRole === "coordinator";
+        const coordinatorSubmitting = coordinatorVisit && args.status === "submitted" && access.role === "coordinator";
+        if (coordinatorSubmitting && args.visitorId !== access.visitorId) throw new ConvexError("اعتماد المنسق متاح لصاحب الزيارة فقط");
+        if (coordinatorVisit && args.status === "submitted" && !coordinatorSubmitting) {
+            if (access.role !== "deputy") throw new ConvexError("الاعتماد النهائي لزيارة المنسق متاح للنائب الأكاديمي فقط");
+            if (!existing?.coordinatorApproval && existing?.status !== "submitted") throw new ConvexError("يجب اعتماد الزيارة من المنسق أولاً");
+            if (!settings.deputySignatureId || !await imageUrl(ctx, settings.deputySignatureId)) throw new ConvexError("ارفع توقيع النائب من «توقيعي» قبل الاعتماد النهائي ليظهر في الاستمارة");
+        }
+        const finalStatus = coordinatorSubmitting ? "draft" as const : args.status;
+        const approvalFields = !coordinatorVisit ? {} : coordinatorSubmitting ? {
+            coordinatorApproval: { name: access.name, at: now, signatureId: ((await ctx.db.get(args.visitorId!)) as any)?.signatureId },
+            deputyApproval: undefined,
+            reviewRequest: { toRole: "deputy" as const, toName: settings.deputyName, byName: access.name, at: now },
+            reviewReturn: undefined,
+        } : args.status === "submitted" ? {
+            deputyApproval: { name: access.name, at: now, signatureId: settings.deputySignatureId ?? undefined },
+        } : {
+            coordinatorApproval: undefined, deputyApproval: undefined,
+            ...(existing?.coordinatorApproval ? { reviewRequest: undefined } : {}),
+        };
         const common = {
             visitorRole: args.visitorRole,
             visitorId: args.visitorId,
@@ -385,15 +409,16 @@ export const saveVisit = mutation({
             managementRec: args.managementRec?.trim(),
             notes: [args.notes?.trim(), args.oldDateReason?.trim() ? `(إدخال لاحق: ${args.oldDateReason.trim()})` : ""]
                 .filter(Boolean).join("\n") || undefined,
-            status: args.status,
+            status: finalStatus,
             // submitting ends any review; the reviewer who approves is recorded
             ...(args.status === "submitted" ? { reviewRequest: undefined, reviewReturn: undefined, submittedByName: access.name } : {}),
+            ...approvalFields,
             updatedAt: now,
             updatedBy: args.actorName,
         };
 
         // Numbers and the frozen form are fixed at the moment of submitting
-        const becomingSubmitted = args.status === "submitted" && existing?.status !== "submitted";
+        const becomingSubmitted = finalStatus === "submitted" && existing?.status !== "submitted";
         let numbering: any = {};
         if (becomingSubmitted) {
             const all = await ctx.db.query("supervisionVisits")
@@ -408,8 +433,8 @@ export const saveVisit = mutation({
             ).length + 1;
 
             numbering = {
-                recordNo,
-                visitNumber,
+                recordNo: existing?.recordNo ?? recordNo,
+                visitNumber: existing?.visitNumber || visitNumber,
                 academicYear: settings.academicYear,
                 submittedAt: now,
                 snapshot: JSON.stringify({
@@ -454,11 +479,11 @@ export const saveVisit = mutation({
             }
             await ctx.db.patch(existing._id, { ...common, ...numbering });
             await audit(ctx, school._id, existing._id,
-                becomingSubmitted ? "submitted" : teacherChanged ? "teacher_changed" : "updated", args.actorName,
+                coordinatorSubmitting ? "coordinator_approved" : becomingSubmitted ? "submitted" : teacherChanged ? "teacher_changed" : "updated", args.actorName,
                 teacherChanged
                     ? `تغيير معلم الزيارة من ${existing.teacherName} إلى ${teacherName}: ${args.editReason?.trim()}`
                     : `${becomingSubmitted ? "اعتماد" : "تعديل"} زيارة ${teacherName}`);
-            return { ok: true as const, id: existing._id, recordNo: numbering.recordNo ?? existing.recordNo ?? null };
+            return { ok: true as const, id: existing._id, recordNo: numbering.recordNo ?? existing.recordNo ?? null, status: finalStatus, awaitingDeputy: coordinatorSubmitting };
         }
 
         const id = await ctx.db.insert("supervisionVisits", {
@@ -469,9 +494,9 @@ export const saveVisit = mutation({
             ...numbering,
         });
         if (sourceImportId) await ctx.db.patch(sourceImportId, { visitId: id });
-        await audit(ctx, school._id, id, becomingSubmitted ? "submitted" : "created", args.actorName,
-            `${becomingSubmitted ? "اعتماد" : "مسودة"} زيارة ${teacherName}`);
-        return { ok: true as const, id, recordNo: numbering.recordNo ?? null };
+        await audit(ctx, school._id, id, coordinatorSubmitting ? "coordinator_approved" : becomingSubmitted ? "submitted" : "created", args.actorName,
+            `${coordinatorSubmitting ? "اعتماد المنسق وإرسال للنائب" : becomingSubmitted ? "اعتماد" : "مسودة"} زيارة ${teacherName}`);
+        return { ok: true as const, id, recordNo: numbering.recordNo ?? null, status: finalStatus, awaitingDeputy: coordinatorSubmitting };
     },
 });
 

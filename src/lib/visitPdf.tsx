@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { OfficialVisitForm } from "../pages/visits/VisitFormPrint";
+import { OfficialVisitForm, prepareOfficialForm } from "../pages/visits/VisitFormPrint";
 
 // Render the existing official form, rather than maintaining a second PDF template.
 export async function createVisitPdf(data: any): Promise<Blob> {
@@ -17,6 +17,7 @@ export async function createVisitPdf(data: any): Promise<Blob> {
         for (const img of host.querySelectorAll("img")) {
             await withTimeout(img.decode(), 30_000, "تحميل صور الاستمارة"); // Fail visibly instead of archiving a form with a missing official page.
         }
+        await withTimeout(prepareOfficialForm(host), 30_000, "ضبط النص وحجم الصفحة");
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
         for (const [i, page] of pages.entries()) {
             // skipFonts: the form's own text is drawn as shapes and the visit's in a

@@ -487,6 +487,8 @@ export default defineSchema({
         // …and what the reviewer said when sending it back
         reviewReturn: v.optional(v.object({ byName: v.string(), note: v.string(), at: v.number() })),
         submittedByName: v.optional(v.string()),
+        coordinatorApproval: v.optional(v.object({ name: v.string(), at: v.number(), signatureId: v.optional(v.id("_storage")) })),
+        deputyApproval: v.optional(v.object({ name: v.string(), at: v.number(), signatureId: v.optional(v.id("_storage")) })),
         // «ميدانيّة / عن بُعد» and, for a remote lesson, «بث مباشر مدمج / غير مدمج»
         deliveryMode: v.optional(v.union(v.literal("field"), v.literal("remote"))),
         streamMode: v.optional(v.union(v.literal("merged"), v.literal("unmerged"))),

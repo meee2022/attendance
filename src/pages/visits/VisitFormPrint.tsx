@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, DependencyList } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/supervisionSession";
 // @ts-ignore
@@ -22,6 +22,32 @@ const PAGE_H = 841.92;
 const P1_SRC = "/forms/visit-form-2-p1.svg";
 const P2_SRC = "/forms/visit-form-3-p2.svg";
 const FORM_FONT = `"Sakkal Majalla", "Traditional Arabic", "Amiri", "Noto Naskh Arabic", serif`;
+
+// Web-font loading and print media can change Arabic line wrapping after the
+// first render. Refit the text before measuring the complete sheet.
+function usePrintLayout(fit: () => void, deps?: DependencyList) {
+    useLayoutEffect(() => {
+        let active = true;
+        fit();
+        void document.fonts.ready.then(() => { if (active) fit(); });
+        document.fonts.addEventListener("loadingdone", fit);
+        window.addEventListener("beforeprint", fit);
+        window.addEventListener("visit-form-layout", fit);
+        return () => {
+            active = false;
+            document.fonts.removeEventListener("loadingdone", fit);
+            window.removeEventListener("beforeprint", fit);
+            window.removeEventListener("visit-form-layout", fit);
+        };
+    }, deps);
+}
+
+export async function prepareOfficialForm(root: HTMLElement) {
+    await document.fonts.ready;
+    await Promise.all([...root.querySelectorAll("img")].map(img => img.decode()));
+    window.dispatchEvent(new Event("visit-form-layout"));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
 
 type Box = [x0: number, x1: number, y0: number, y1: number];
 
@@ -100,12 +126,15 @@ function PageSlice({ src, y0, y1, top }: { src: string; y0: number; y1: number; 
 function Cell({ box, size = 13, children, style }: { box: Box; size?: number; children: ReactNode; style?: CSSProperties }) {
     const outer = useRef<HTMLDivElement>(null);
     const inner = useRef<HTMLSpanElement>(null);
-    useLayoutEffect(() => {
+    usePrintLayout(() => {
         const o = outer.current, i = inner.current;
         if (!o || !i) return;
         let s = size;
         i.style.fontSize = `${s}pt`;
-        while (s > 7 && (i.offsetHeight > o.clientHeight || i.scrollWidth > o.clientWidth)) {
+        const css = getComputedStyle(o);
+        const availableHeight = o.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
+        const availableWidth = o.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
+        while (s > 5 && (i.scrollHeight > availableHeight + 0.5 || i.scrollWidth > availableWidth + 0.5)) {
             s -= 0.5;
             i.style.fontSize = `${s}pt`;
         }
@@ -113,9 +142,9 @@ function Cell({ box, size = 13, children, style }: { box: Box; size?: number; ch
     return (
         <div ref={outer} style={{
             ...at(box), display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
-            fontFamily: FORM_FONT, fontWeight: 700, lineHeight: 1.1, padding: "0 3pt",
-            overflow: "hidden", color: "#000", ...style,
-        }}><span ref={inner} style={{ fontSize: `${size}pt`, display: "block", maxWidth: "100%" }}>{children}</span></div>
+            fontFamily: FORM_FONT, fontWeight: 700, lineHeight: 1.2, padding: "1pt 3pt", boxSizing: "border-box",
+            overflow: "hidden", overflowWrap: "anywhere", color: "#000", ...style,
+        }}><span ref={inner} style={{ fontSize: `${size}pt`, display: "block", width: "100%", flexShrink: 0 }}>{children}</span></div>
     );
 }
 
@@ -134,7 +163,7 @@ const Tick = ({ box }: { box: Box }) => (
 // does, instead of spilling over the lines of the form
 function FitText({ box, text, max = 15, min = 6 }: { box: Box; text: string; max?: number; min?: number }) {
     const ref = useRef<HTMLDivElement>(null);
-    useLayoutEffect(() => {
+    usePrintLayout(() => {
         const el = ref.current;
         if (!el) return;
         let size = max;
@@ -148,27 +177,18 @@ function FitText({ box, text, max = 15, min = 6 }: { box: Box; text: string; max
     return (
         <div ref={ref} style={{
             ...at(box), fontFamily: FORM_FONT, fontSize: `${max}pt`, lineHeight: 1.15, padding: "2pt 4pt",
-            textAlign: "right", whiteSpace: "pre-line", overflow: "hidden", color: "#000", direction: "rtl",
+            textAlign: "right", whiteSpace: "pre-line", overflow: "hidden", overflowWrap: "anywhere", boxSizing: "border-box", color: "#000", direction: "rtl",
         }}>{text}</div>
     );
 }
 
-function FormEnd({ role, notes, signatureUrl }: { role: VisitorRole; notes: string; signatureUrl: string | null }) {
+function FormEnd({ role, notes, signatureUrl, deputyApproval, deputySignatureUrl }: { role: VisitorRole; notes: string; signatureUrl: string | null; deputyApproval?: { name: string; at: number }; deputySignatureUrl?: string | null }) {
     const line = "0.5pt solid #000";
     const label: CSSProperties = { background: "#DDDDDD", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FORM_FONT, fontSize: "14pt", color: "#000" };
-    const notesRef = useRef<HTMLDivElement>(null);
-    // a very long note grows the box up to a point, then shrinks
-    useLayoutEffect(() => {
-        const el = notesRef.current;
-        if (!el) return;
-        let size = 13;
-        el.style.fontSize = `${size}pt`;
-        while (size > 8 && el.scrollHeight > el.clientHeight + 1) { size -= 0.5; el.style.fontSize = `${size}pt`; }
-    }, [notes]);
     return (
         <div style={{ position: "relative", marginRight: `${PAGE_W - TABLE_X[1]}pt`, width: `${TABLE_X[1] - TABLE_X[0]}pt`, direction: "rtl" }}>
-            <div ref={notesRef} style={{
-                borderInline: line, borderBottom: line, minHeight: `${NOTES_MIN}pt`, maxHeight: "220pt", overflow: "hidden",
+            <div style={{
+                borderInline: line, borderBottom: line, minHeight: `${NOTES_MIN}pt`, overflowWrap: "anywhere",
                 padding: "3pt 6pt", fontFamily: FORM_FONT, fontSize: "13pt", lineHeight: 1.25, whiteSpace: "pre-line", textAlign: "right", color: "#000",
             }}>{notes}</div>
             <div style={{ display: "grid", gridTemplateColumns: "119.7fr 159.5fr 159.1fr 105.6fr", height: "20pt", borderInline: line, borderBottom: line }}>
@@ -184,6 +204,15 @@ function FormEnd({ role, notes, signatureUrl }: { role: VisitorRole; notes: stri
                     )}
                 </div>
             </div>
+            {role === "coordinator" && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "32pt", borderInline: line, borderBottom: line, color: "#000", fontFamily: FORM_FONT }}>
+                <div style={{ ...label, fontSize: "12pt" }}>اعتماد وتوقيع النائب الأكاديمي</div>
+                <div style={{ borderInlineStart: line, padding: "2pt 5pt", textAlign: "center", fontSize: "10pt" }}>
+                    {deputyApproval ? <>
+                        <div>{deputyApproval.name} · {new Date(deputyApproval.at).toLocaleDateString("ar-QA", { timeZone: "Asia/Qatar" })}</div>
+                        {deputySignatureUrl && <img src={deputySignatureUrl} alt="توقيع النائب الأكاديمي" style={{ height: "24pt", maxWidth: "90%", margin: "0 auto", objectFit: "contain" }}/>}
+                    </> : "بانتظار اعتماد النائب الأكاديمي"}
+                </div>
+            </div>}
             <p style={{ margin: 0, paddingInlineStart: "28.6pt", fontFamily: FORM_FONT, fontSize: "11.04pt", lineHeight: 1.3, color: "#C00000", textAlign: "right" }}>
                 يستخدم هذا النموذج من قبل نائب المدير للشؤون الأكاديمية مرة واحدة على الأقل لكل معلم خلال العام الدراسي.
             </p>
@@ -204,27 +233,38 @@ function VisitFormPrintContent() {
     // @ts-ignore
     const data = useQuery(api.visits.getVisitForm, id ? { id } : "skip") as any;
 
-    const printed = useRef(false);
     useEffect(() => {
         if (!data?.visit) return;
         const v = data.visit;
         const role = ({ coordinator: "المنسق", supervisor: "الموجه", deputy: "النائب الأكاديمي" } as Record<string, string>)[v.visitorRole];
         document.title = `${v.recordNo ?? ""} - ${v.subjectName}    ${v.teacherName} زيارة رقم ${v.visitNumber || ""} من قبل ${role}`.trim();
-        if (params.get("autoprint") === "1" && !printed.current) {
-            printed.current = true;
-            setTimeout(() => window.print(), 800);
-        }
     }, [data]);
 
     if (data === undefined) return <p dir="rtl" className="p-10 text-center font-bold text-slate-500">جاري تجهيز الاستمارة…</p>;
     if (!data) return <p dir="rtl" className="p-10 text-center font-bold text-slate-500">الزيارة غير موجودة.</p>;
 
-    return <OfficialVisitForm data={data}/>;
+    return <OfficialVisitForm data={data} autoPrint={params.get("autoprint") === "1"}/>;
 }
 
-export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar?: boolean }) {
+export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: { data: any; toolbar?: boolean; autoPrint?: boolean }) {
     const [downloading, setDownloading] = useState(false);
     const [downloadError, setDownloadError] = useState("");
+    const root = useRef<HTMLDivElement>(null);
+    const printed = useRef(false);
+    const printForm = async () => {
+        try {
+            if (root.current) await prepareOfficialForm(root.current);
+            window.print();
+        } catch { setDownloadError("تعذّر تحميل الاستمارة بالكامل. أعد المحاولة قبل الطباعة."); }
+    };
+    useEffect(() => {
+        if (!autoPrint || !root.current || printed.current) return;
+        let active = true;
+        void prepareOfficialForm(root.current).then(() => {
+            if (active && !printed.current) { printed.current = true; window.print(); }
+        }).catch(() => { if (active) setDownloadError("تعذّر تحميل الاستمارة بالكامل. أعد المحاولة قبل الطباعة."); });
+        return () => { active = false; };
+    }, [autoPrint, data]);
     const { visit, criteria, form } = data;
     const downloadPdf = async () => {
         if (downloading) return;
@@ -291,15 +331,17 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
         let active = true;
         void document.fonts.ready.then(() => { if (active) fit(); });
         window.addEventListener("beforeprint", fit);
+        window.addEventListener("visit-form-layout", fit);
         return () => {
             active = false;
             observer.disconnect();
             window.removeEventListener("beforeprint", fit);
+            window.removeEventListener("visit-form-layout", fit);
         };
     });
 
     return (
-        <div dir="rtl" className="vfp">
+        <div ref={root} dir="rtl" className="vfp">
             <style>{`
                 @page { size: A4 portrait; margin: 0; }
                 @media print {
@@ -321,12 +363,12 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
                 <button onClick={downloadPdf} disabled={downloading} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm disabled:opacity-60">
                     {downloading ? "جاري تجهيز PDF…" : "تنزيل PDF"}
                 </button>
-                <button onClick={() => window.print()} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm">
+                <button onClick={printForm} className="px-5 py-2 rounded-xl bg-qatar-maroon text-white font-black text-sm">
                     طباعة
                 </button>
                 {downloadError && <p role="alert" className="w-full text-center text-sm text-red-700">{downloadError}</p>}
                 {visit.status !== "submitted" && (
-                    <span className="text-xs font-bold text-amber-700">مسودة — لم تُعتمد بعد</span>
+                    <span className="text-xs font-bold text-amber-700">{visit.coordinatorApproval ? "بانتظار اعتماد النائب الأكاديمي" : "مسودة — لم تُعتمد بعد"}</span>
                 )}
                 {!standard && (
                     <span className="text-xs font-bold text-amber-700">
@@ -377,7 +419,7 @@ export function OfficialVisitForm({ data, toolbar = true }: { data: any; toolbar
 
                     {/* in the flow from here, so the notes can grow */}
                     <div style={{ height: `${p2(NOTES_TOP)}pt` }}/>
-                    <FormEnd role={role} notes={String(visit.notes ?? "")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null}/>
+                    <FormEnd role={role} notes={String(visit.notes ?? "")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null} deputyApproval={visit.deputyApproval} deputySignatureUrl={form.deputyApprovalSignatureUrl}/>
                     <div style={{ position: "relative", height: `${FOOTER[1] - FOOTER[0]}pt`, marginTop: "14pt" }}>
                         <PageSlice src={P1_SRC} y0={FOOTER[0]} y1={FOOTER[1]} top={0}/>
                     </div>

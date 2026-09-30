@@ -30,6 +30,8 @@ export type VisitRow = {
     visitorName: string;
     followUpType: "full" | "partial";
     status: "draft" | "submitted";
+    coordinatorApproval?: { name: string; at: number } | null;
+    deputyApproval?: { name: string; at: number } | null;
     averageScore: number | null;
     domainAverages: string;
     ratings: string;

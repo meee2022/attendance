@@ -238,7 +238,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             setDuplicate(null);
             setReviewOpen(false);
             setReviewPick(false);
-            setSaved({ id: res.id, status, recordNo: res.recordNo, reviewTo });
+            setSaved({ id: res.id, status: res.status ?? status, recordNo: res.recordNo, reviewTo: res.awaitingDeputy ? "النائب الأكاديمي للاعتماد النهائي" : reviewTo });
         } catch (e: any) {
             // ConvexError carries the reason in .data; anything else is unexpected
             setServerError(typeof e?.data === "string" ? e.data : "تعذّر الحفظ — تحقّق من الاتصال وأعد المحاولة");
@@ -618,7 +618,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                             <button onClick={() => submit("submitted")} disabled={issues.length > 0 || saving !== null || (teacherChanged && !editReason.trim())}
                                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-qatar-maroon text-white font-black disabled:opacity-40">
                                 {saving === "submitted" ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckCircle2 className="w-4 h-4"/>}
-                                {editingSubmitted ? "حفظ التعديل" : "اعتماد الزيارة"}
+                                {session.role === "coordinator" && recordedRole === "coordinator" ? "اعتماد المنسق وإرسال للنائب" : session.role === "deputy" && recordedRole === "coordinator" ? "اعتماد النائب وإضافة التوقيع" : editingSubmitted ? "حفظ التعديل" : "اعتماد الزيارة"}
                             </button>
                         </div>
                     </div>

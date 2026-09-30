@@ -134,6 +134,9 @@ export function ReviewBanner({ visit, session, onReturned }: { visit: VisitRow; 
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const r = visit.reviewRequest;
+    if (visit.visitorRole === "coordinator" && visit.status === "submitted" && !visit.deputyApproval && session.role === "deputy") {
+        return <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">زيارة سابقة معتمدة من المنسق ولم يسجل اعتماد النائب بعد. راجع الاستمارة ثم اضغط «اعتماد النائب وإضافة التوقيع».</div>;
+    }
     if (r && isReviewer(visit, session)) {
         return (
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 space-y-2 text-xs font-bold text-sky-900">
@@ -157,7 +160,7 @@ export function ReviewBanner({ visit, session, onReturned }: { visit: VisitRow; 
             </div>
         );
     }
-    if (r) return <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">مرسلة إلى {r.toName} للمراجعة — يمكنك متابعة التعديل؛ آخر حفظ هو ما يراه المراجِع.</div>;
+    if (r) return <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">{visit.coordinatorApproval ? "اعتمدها المنسق وهي بانتظار اعتماد النائب النهائي. حفظها كمسودة يلغي الإرسال ويستلزم اعتماد المنسق مرة أخرى." : `مرسلة إلى ${r.toName} للمراجعة — يمكنك متابعة التعديل؛ آخر حفظ هو ما يراه المراجِع.`}</div>;
     if (visit.reviewReturn) return (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900 space-y-1">
             <p>أعادها {visit.reviewReturn.byName} بملاحظة:</p>
@@ -171,7 +174,7 @@ export function ReviewBanner({ visit, session, onReturned }: { visit: VisitRow; 
 export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (id: string) => void }) {
     const session = useSupervisionSession() as Session | null;
     if (!session) return null;
-    const mine = visits.filter(v => isReviewer(v, session));
+    const mine = visits.filter(v => isReviewer(v, session) || (session.role === "deputy" && v.visitorRole === "coordinator" && v.status === "submitted" && !v.deputyApproval));
     if (!mine.length) return null;
     return (
         <div className="bg-white rounded-2xl border border-sky-200 shadow-sm p-4 space-y-2">
@@ -181,7 +184,7 @@ export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (i
                     className="w-full flex items-center gap-3 p-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-right text-sm">
                     <span className="font-black text-slate-800">{v.teacherName}</span>
                     <span className="text-xs font-bold text-slate-500">{v.visitorName} · {v.visitDate}</span>
-                    <span className="text-xs font-black text-sky-800 mr-auto">مراجعة</span>
+                    <span className="text-xs font-black text-sky-800 mr-auto">{v.coordinatorApproval ? "اعتماد النائب" : "مراجعة"}</span>
                 </button>
             ))}
         </div>

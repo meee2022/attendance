@@ -28,6 +28,10 @@ async function fixture() {
 describe("correcting the teacher of a submitted visit", () => {
     it("is the deputy's alone, needs a reason, and renumbers the visit under the new teacher", async () => {
         const f = await fixture();
+        await f.t.run(async ctx => {
+            const signature = await ctx.storage.store(new Blob(["test signature"], { type: "image/png" }));
+            await ctx.db.insert("supervisionSettings", { schoolId: f.schoolId, academicYear: "2026 - 2027", deputySignatureId: signature });
+        });
         const { newTeacher, classId } = await f.t.run(async ctx => ({
             newTeacher: await ctx.db.insert("schoolTeachers", { schoolId: f.schoolId, fullName: "المعلم الصحيح", department: "العلوم", isActive: true }),
             classId: await ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true }),
@@ -46,6 +50,48 @@ describe("correcting the teacher of a submitted visit", () => {
         expect(moved?.visitNumber).toBe(1);
         const versions = await f.t.run(ctx => ctx.db.query("supervisionVisitVersions").collect());
         expect(versions.map(v => v.reason)).toEqual(["اختيار خاطئ"]);
+    });
+});
+
+describe("coordinator then deputy approval", () => {
+    it("queues coordinator approval, requires the deputy's signature, freezes it, and invalidates approval after changes", async () => {
+        const f = await fixture();
+        const classId = await f.t.run(ctx => ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true }));
+        const args = { visitorRole: "coordinator", visitorName: "منسق اختبار", teacherId: f.teacherId, classId,
+            subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-01", followUpType: "full",
+            ratings: "{}", planningRec: "توصية", status: "submitted", confirmDuplicate: true };
+        const result = await f.t.mutation(A.visits.saveVisit, { ...args, sessionToken: f.token });
+        expect(result).toMatchObject({ status: "draft", awaitingDeputy: true });
+        let visit = await f.t.run(ctx => ctx.db.get(result.id));
+        expect(visit.reviewRequest.toRole).toBe("deputy");
+        expect(visit.coordinatorApproval.name).toBe("منسق اختبار");
+        expect(visit.submittedAt).toBeUndefined();
+        await expect(f.t.mutation(A.visitWorkflow.logSend, { sessionToken: f.token, visitId: result.id, via: "test" })).rejects.toThrow("المعتمدة");
+        await expect(f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, sessionToken: f.deputy })).rejects.toThrow("توقيع");
+        const settingsId = await f.t.run(async ctx => {
+            const signature = await ctx.storage.store(new Blob(["signature"], { type: "image/png" }));
+            return ctx.db.insert("supervisionSettings", { schoolId: f.schoolId, academicYear: "2026 - 2027", deputyName: "نائب الاعتماد", deputySignatureId: signature });
+        });
+        await f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, sessionToken: f.deputy });
+        visit = await f.t.run(ctx => ctx.db.get(result.id));
+        expect(visit.status).toBe("submitted");
+        expect(visit.deputyApproval.name).toBe("نائب الاعتماد");
+        expect(visit.reviewRequest).toBeUndefined();
+        const printed = await f.t.query(A.visits.getVisitForm, { sessionToken: f.token, id: result.id });
+        expect(printed.form.deputyApprovalSignatureUrl).toBeTruthy();
+        await f.t.run(ctx => ctx.db.patch(settingsId, { deputyName: "نائب جديد", deputySignatureId: undefined }));
+        const unchanged = await f.t.query(A.visits.getVisitForm, { sessionToken: f.token, id: result.id });
+        expect(unchanged.visit.deputyApproval.name).toBe("نائب الاعتماد");
+        expect(unchanged.form.deputyApprovalSignatureUrl).toBe(printed.form.deputyApprovalSignatureUrl);
+        await f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, planningRec: "توصية معدلة", sessionToken: f.token });
+        visit = await f.t.run(ctx => ctx.db.get(result.id));
+        expect(visit.status).toBe("draft");
+        expect(visit.deputyApproval).toBeUndefined();
+        expect(visit.reviewRequest.toRole).toBe("deputy");
+        await f.t.mutation(A.visitWorkflow.returnVisit, { sessionToken: f.deputy, visitId: result.id, note: "راجع التوصيات" });
+        visit = await f.t.run(ctx => ctx.db.get(result.id));
+        expect(visit.coordinatorApproval).toBeUndefined();
+        await expect(f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, sessionToken: f.deputy })).rejects.toThrow("المنسق أولاً");
     });
 });
 

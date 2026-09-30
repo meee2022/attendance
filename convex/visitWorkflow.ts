@@ -82,6 +82,7 @@ export const requestReview = sessionMutation({
         const s = (ctx as any).supervisionSession;
         const visit = await requireVisit(ctx, s, args.visitId, true);
         if (visit.status !== "draft" || visit.deletedAt) throw new ConvexError("تُرسل المسودات فقط للمراجعة");
+        if (visit.coordinatorApproval) throw new ConvexError("الزيارة بانتظار اعتماد النائب؛ لا يمكن تغيير مسار اعتمادها");
         let toName = "النائب الأكاديمي";
         if (args.toRole === "deputy") {
             const settings = await settingsRow(ctx, visit.schoolId);
@@ -120,6 +121,8 @@ export const returnVisit = sessionMutation({
         if (!note) throw new ConvexError("اكتب ملاحظتك للزائر");
         await ctx.db.patch(visit._id, {
             reviewRequest: undefined,
+            coordinatorApproval: undefined,
+            deputyApproval: undefined,
             reviewReturn: { byName: s.name, note: note.slice(0, 2000), at: Date.now() },
             updatedAt: Date.now(),
         });

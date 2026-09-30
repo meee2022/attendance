@@ -120,8 +120,9 @@ export default function MonthlyReport({ setup, visits }: { setup: any; visits: V
         const html = document.getElementById("monthly-report-sheet")?.outerHTML ?? "";
         const doc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${title}</title>
 <style>@page{size:A4;margin:1.5cm} body{direction:rtl;font-family:'Sakkal Majalla','Traditional Arabic',Arial;font-size:13pt}
-table{border-collapse:collapse;width:100%} th{background:#1F3864;color:#fff;border:1px solid #8a93a5;padding:4pt} td{border:1px solid #8a93a5;padding:4pt;vertical-align:top}
-h1,h2{color:#8A1538} .no-word{display:none}</style></head><body dir="rtl">${html}</body></html>`;
+table{border-collapse:collapse;width:100%} th{background:#8A1538;color:#fff;border:1px solid #6E1029;padding:4pt} td{border:1px solid #E2D3D8;padding:4pt;vertical-align:top}
+h1,h2,.mr-title{color:#8A1538} .label{background:#F3E8EB;color:#5C1523;font-weight:bold} .mr-kpis td{text-align:center;font-size:16pt;font-weight:bold;color:#8A1538}
+.no-word,.no-print{display:none}</style></head><body dir="rtl">${html.replaceAll('src="/forms/', `src="${window.location.origin}/forms/`)}</body></html>`;
         const url = URL.createObjectURL(new Blob(["﻿", doc], { type: "application/msword" }));
         const a = document.createElement("a");
         a.href = url; a.download = `ملخص توصيات الزيارات - ${monthName}.doc`; a.click();
@@ -139,14 +140,22 @@ h1,h2{color:#8A1538} .no-word{display:none}</style></head><body dir="rtl">${html
                     @page { size: A4 portrait; margin: 12mm; }
                     .mr-table tr { break-inside: avoid; }
                     .no-print { display: none !important; }
+                    #monthly-report-sheet h2 { break-after: avoid; }
+                    #monthly-report-sheet section { break-inside: auto; }
                 }
                 #monthly-report-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                 .mr-title { color: #8A1538; }
+                .mr-head { display: grid; grid-template-columns: 150px 1fr 150px; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 3px solid #8A1538; }
+                .mr-band { height: 4px; background: linear-gradient(90deg, #C9A227, #8A1538); margin-top: 2px; }
                 .mr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-                .mr-table th { background: #1F3864; color: #fff; font-weight: 700; padding: 8px 6px; border: 1px solid #8a93a5; }
-                .mr-table td { border: 1px solid #cbd2dc; padding: 8px 6px; vertical-align: top; line-height: 1.7; }
-                .mr-table tr:nth-child(even) td { background: #f4f6f9; }
+                .mr-table th { background: #8A1538; color: #fff; font-weight: 700; padding: 8px 6px; border: 1px solid #6E1029; }
+                .mr-table td { border: 1px solid #E2D3D8; padding: 8px 6px; vertical-align: top; line-height: 1.7; }
+                .mr-table tr:nth-child(even) td { background: #FBF4F6; }
+                .mr-kpis td { text-align: center; font-size: 20px; font-weight: 900; color: #8A1538; background: #fff !important; }
                 .mr-rule { border-bottom: 2px solid #8A1538; }
+                .mr-sign { width: 100%; border-collapse: collapse; font-size: 14px; break-inside: avoid; }
+                .mr-sign td { border: 1px solid #E2D3D8; padding: 8px 10px; height: 44px; vertical-align: middle; }
+                .mr-sign .label { background: #F3E8EB; color: #5C1523; font-weight: 700; white-space: nowrap; }
                 .print-only-empty { display: none; }
                 @media print { .print-only-empty { display: inline; } }
             `}</style>
@@ -173,10 +182,18 @@ h1,h2{color:#8A1538} .no-word{display:none}</style></head><body dir="rtl">${html
             </div>
 
             <div id="monthly-report-sheet" dir="rtl" className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6" style={{ fontFamily: `"Sakkal Majalla", "Traditional Arabic", Arial, sans-serif`, fontSize: 15 }}>
-                <header className="text-center space-y-1">
-                    <h1 className="mr-title text-xl font-black">{title}</h1>
-                    <p className="mr-title font-bold">{setup.settings.schoolNameOnForm} · العام الأكاديمي {setup.settings.academicYear}</p>
-                </header>
+                <div>
+                    <header className="mr-head">
+                        <img src="/forms/moe-logo.png" alt="وزارة التربية والتعليم والتعليم العالي" style={{ width: 150, height: "auto" }}/>
+                        <div className="text-center space-y-1">
+                            <h1 className="mr-title font-black" style={{ fontSize: 18, whiteSpace: "nowrap" }}>{title}</h1>
+                            <p className="font-bold text-slate-700">{setup.settings.schoolNameOnForm}</p>
+                            <p className="mr-title font-bold">العام الأكاديمي {setup.settings.academicYear}</p>
+                        </div>
+                        <div/>
+                    </header>
+                    <div className="mr-band"/>
+                </div>
                 <div className="flex justify-between items-end mr-rule pb-1">
                     <h2 className="text-lg font-black">الشهر: {monthName}</h2>
                     <span className="text-sm text-slate-600">{scopeLine}</span>
@@ -184,9 +201,9 @@ h1,h2{color:#8A1538} .no-word{display:none}</style></head><body dir="rtl">${html
 
                 {!rows.length ? <p className="text-center text-slate-500 py-10">لا توجد زيارات معتمدة في هذا الشهر.</p> : <>
                     {/* the month in figures */}
-                    <table className="mr-table">
+                    <table className="mr-table mr-kpis">
                         <thead><tr><th>عدد الزيارات</th><th>المعلمون المُزارون</th>{ROLE_ORDER.map(r => <th key={r}>{SECTION_TITLE[r].replace("زيارات ", "")}</th>)}<th>متوسط الأداء</th><th>زيارات لها خطة تحسين</th></tr></thead>
-                        <tbody><tr className="text-center font-bold">
+                        <tbody><tr>
                             <td>{rows.length}</td><td>{stats.teachers}</td>
                             {ROLE_ORDER.map(r => <td key={r}>{rows.filter(x => x.visit.visitorRole === r).length}</td>)}
                             <td>{pct(stats.average)}</td><td>{stats.withPlan} من {rows.length}</td>
@@ -234,6 +251,32 @@ h1,h2{color:#8A1538} .no-word{display:none}</style></head><body dir="rtl">${html
                         {!!stats.strongest.length && <p className="text-sm text-slate-700 leading-7"><strong>أبرز نقاط القوة:</strong> {stats.strongest.map(c => `${c.text.replace(/\.$/, "")} (${pct(c.average)})`).join("؛ ")}.</p>}
                     </section>
                 </>}
+
+                <table className="mr-sign">
+                    <colgroup><col style={{ width: "15%" }}/><col style={{ width: "27%" }}/><col style={{ width: "10%" }}/><col style={{ width: "22%" }}/><col style={{ width: "10%" }}/><col style={{ width: "16%" }}/></colgroup>
+                    <tbody>
+                        <tr>
+                            <td className="label">النائب الأكاديمي</td>
+                            <td className="font-bold">{setup.settings.deputyName}</td>
+                            <td className="label">التوقيع</td>
+                            <td style={{ width: "22%", textAlign: "center" }}>
+                                {setup.settings.signatureUrl && <img src={setup.settings.signatureUrl} alt="" style={{ maxHeight: 42, maxWidth: "100%", display: "inline-block" }}/>}
+                            </td>
+                            <td className="label">التاريخ</td>
+                            <td style={{ width: "13%", textAlign: "center" }}>{formatDate(setup.today)}</td>
+                        </tr>
+                        {setup.settings.principalName?.trim() && (
+                            <tr>
+                                <td className="label">مدير المدرسة</td>
+                                <td className="font-bold">{setup.settings.principalName}</td>
+                                <td className="label">التوقيع</td>
+                                <td/>
+                                <td className="label">التاريخ</td>
+                                <td/>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
 
                 <p className="text-xs text-slate-500 border-t border-slate-200 pt-2">
                     أُعدّ من الزيارات المعتمدة في نظام الإشراف الصفي. «آلية التحسين» من خطط التحسين والتدريب المسجّلة لكل زيارة في «المتابعة والخطة».

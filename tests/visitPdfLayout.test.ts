@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { proposeLayoutVisit, regionText, type PdfPiece, type VisitPdfDocument } from "../src/lib/visitPdfLayout";
 import { DEFAULT_CRITERIA } from "../convex/visitCriteria";
+import {EXCEL_CRITERION_ALIASES} from '../src/lib/visitExcelAliases';
 const bounds=[[352.3,379.5,396.8,414,436.5,453.8,476.3,498.8,526.1,548.6,565.9,583.1,605.6,622.9,640.2,657.5,680.3],[198.4,223.1,245.7,268.1,290.7,313.1,335.7,358.1]];
 const columns=[[220,245,270,295,321],[224,249,274,299,324]];
 const headers=["لم يتم قياسه","الأدلة غير متوفرة أو محدودة","تتوفر بعض الأدلة","تتوفر معظم الأدلة","الأدلة مستكملة وفاعلة"];
@@ -44,5 +45,27 @@ describe("position-aware ministry PDF import",()=>{
  it("joins touching Arabic glyph runs without mixing neighbouring columns",()=>{
   const p={width:612,height:792,pieces:[piece('امل',80,20,8),piece('زيد',65,20,15),piece('نص آخر',200,20,70)]};
   expect(regionText(p,[0,0,100,40])).toBe('المزيد');
+ });
+});
+
+describe('Excel archive imports',()=>{
+ function excel():VisitPdfDocument {
+  const ys=Array.from({length:24},(_,i)=>250+i*16);
+  const pieces=[...headers.map((h,c)=>piece(h,220+c*19.6,220,60,true)),...DEFAULT_CRITERIA.flatMap((c,i)=>[piece(EXCEL_CRITERION_ALIASES[i][0],310,ys[i]+7,205),piece('✓',292,ys[i]+7,10)])];
+  for(const [label,y] of [['المدرسة',110],['المادة',130],['الصف',150],['الزائر',170]] as const)pieces.push(piece(label,510,y,25));
+  pieces.push(piece('أحمد محمد علي',100,150,140),piece('نائب تجريبي',370,170,100),piece('العلوم',400,130,80),piece('درس اختبار',100,130,150),piece('2026',241,110,24),piece('9',218,110,7),piece('13',195,110,12));
+  return {text:'نائب المدير للشؤون األكاديمية',pages:[{width:595.2,height:841.8,pieces,rules:ys.map(y=>({left:72,right:542,y}))}]};
+ }
+ it('reads all 23 exact verified criteria, dates and the deputy role',()=>{
+  const r=proposeLayoutVisit(excel(),setup);expect(r.review.recognized).toBe(true);expect(Object.keys(r.form.ratings)).toHaveLength(23);expect(r.form).toMatchObject({visitorRole:'deputy',visitDate:'2026-09-13',teacherId:'t',subjectName:'العلوم'});
+ });
+ it('rejects changed science criteria and missing grid lines instead of shifting scores',()=>{
+  const d=excel();d.pages[0].pieces.find(p=>p.text===EXCEL_CRITERION_ALIASES[10][0])!.text='يطبق إجراءات السلامة في المختبر';expect(proposeLayoutVisit(d,setup).review.recognized).toBe(false);
+  const b=excel();b.pages[0].rules!.splice(5,1);expect(proposeLayoutVisit(b,setup).form.ratings).toEqual({});
+ });
+ it('leaves multiple marks unresolved and zero distinct from an empty cell',()=>{
+  const d=excel();d.pages[0].pieces.push(piece('✓',235,257,10));
+  d.pages[0].pieces=d.pages[0].pieces.filter(p=>!(p.text==='✓'&&p.y===273));
+  const r=proposeLayoutVisit(d,setup);expect(r.review.rows[0].state).toBe('conflict');expect(r.review.rows[1].state).toBe('empty');expect(r.form.ratings['0']).toBeUndefined();
  });
 });

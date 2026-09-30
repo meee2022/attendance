@@ -1,5 +1,6 @@
 import type { Rating } from "../../convex/visitMath";
 import type { PdfPage, VisitPdfDocument } from "./visitPdfLayout";
+import { pdfHorizontalRules } from "./pdfTableGeometry";
 
 export const normalizePdfText = (text: string) => text.normalize("NFKC").replace(/[\u064B-\u065F\u0670\u0640\u200e\u200f]/g, "")
     .replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/[إأآ]/g, "ا").replace(/\s+/g, " ").trim();
@@ -61,7 +62,8 @@ export async function readVisitPdfDocument(file: File): Promise<VisitPdfDocument
                 line.pieces.push({ x: item.transform[4], str: item.str });
             }
             pages.push(lines.sort((a,b) => b.y-a.y).map(l => l.pieces.sort((a,b) => b.x-a.x).map(p => p.str).join(" ")).join("\n"));
-            layout.push({width:viewport.width,height:viewport.height,pieces});
+            const rules=pdfHorizontalRules(await page.getOperatorList(),pdfjs.OPS,viewport.height);
+            layout.push({width:viewport.width,height:viewport.height,pieces,rules});
         }
         return { text: pages.join("\n\n"), pages: layout };
     } finally { await task.destroy(); }

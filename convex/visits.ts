@@ -1,6 +1,6 @@
 import { deputyNameOf } from "./supervisionDefaults";
 import { sessionMutation as mutation, sessionQuery as query, deputyMutation, canAccess, requireVisit } from "./supervisionAccess";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v, type ObjectType } from "convex/values";
 import {
     DOMAINS, computeScores, nameKey, parseRatings, todayInQatar, validateVisit,
     type CriterionRef, type Domain,
@@ -250,6 +250,7 @@ async function audit(ctx: any, schoolId: any, visitId: any, action: string, acto
 const visitArgs = {
     sourceImportId: v.optional(v.id("supervisionImports")),
     importReviewed: v.optional(v.boolean()),
+    originalVisitNumber: v.optional(v.number()),
     id: v.optional(v.id("supervisionVisits")),
     visitorRole: roleV,
     visitorId: v.optional(v.id("supervisors")),
@@ -278,9 +279,7 @@ const visitArgs = {
     expectedUpdatedAt: v.optional(v.number()),
 };
 
-export const saveVisit = mutation({
-    args: visitArgs,
-    handler: async (ctx, args) => {
+export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitArgs>) {
         const school = await getSchool(ctx);
         const settings = await settingsOf(ctx, school);
         const criteria = await activeCriteria(ctx, school._id);
@@ -290,22 +289,25 @@ export const saveVisit = mutation({
         const existing = args.id ? await requireVisit(ctx, access, args.id, true) : null;
         args.actorName = access.name;
         const sourceImportId = existing?.sourceImportId ?? args.sourceImportId;
+        if(args.originalVisitNumber!==undefined && (!sourceImportId||!Number.isInteger(args.originalVisitNumber)||args.originalVisitNumber<1||args.originalVisitNumber>999))throw new ConvexError('رقم الزيارة الأصلي غير صحيح');
         if (sourceImportId) {
             const source = await ctx.db.get(sourceImportId as import("./_generated/dataModel").Id<"supervisionImports">);
             if (!source || source.schoolId !== access.schoolId || (!existing && source.ownerId !== (access.visitorId ?? access.role))) throw new ConvexError("ملف الاستيراد غير متاح");
             if (source.visitId && source.visitId !== args.id) throw new ConvexError("هذا الملف مرتبط بزيارة أخرى");
-            if (args.status === "submitted" && !args.importReviewed) throw new ConvexError("راجع البنود والتوصيات مع ملف الموجه الأصلي قبل الاعتماد");
+            if (args.status === "submitted" && !args.importReviewed) throw new ConvexError("راجع البنود والتوصيات مع ملف الزيارة الأصلي قبل الاعتماد");
         }
 
         if (args.sourceImportId && existing && args.sourceImportId !== existing.sourceImportId) throw new ConvexError("لا يمكن استبدال أصل الزيارة");
-        if (!existing && access.role === "admin" && args.visitorRole !== "supervisor") throw new ConvexError("المسؤول يدير السجلات؛ سجّل الزيارة باسم الزائر الفعلي عبر استيراد زيارة الموجه");
-        const delegated = !existing && (access.role === "coordinator" || access.role === "deputy" || access.role === "admin") && args.visitorRole === "supervisor";
+        if (!existing && access.role === "admin" && args.visitorRole !== "supervisor" && !sourceImportId) throw new ConvexError("استورد ملف الزيارة لتسجيلها باسم الزائر الفعلي");
+        const historicalImport = !existing && !!sourceImportId;
+        if (historicalImport && access.role === "coordinator" && (args.visitorRole === "deputy" || (args.visitorRole === "coordinator" && args.visitorId !== access.visitorId))) throw new ConvexError("يمكنك استيراد زياراتك وزيارات الموجه لقسمك فقط");
+        const importedDeputy = historicalImport && args.visitorRole === "deputy";
+        const delegated = !existing && !importedDeputy && (args.visitorRole === "supervisor" || (historicalImport && args.visitorRole === "coordinator"));
         const supervisor = delegated && args.visitorId ? await ctx.db.get(args.visitorId) : null;
-        if (delegated && (!supervisor || supervisor.schoolId !== school._id || supervisor.role !== "supervisor" || !supervisor.isActive)) throw new ConvexError("اختر الموجه المسجل للقسم");
-        args.visitorRole = existing?.visitorRole ?? (delegated ? "supervisor" : access.role);
-        if (sourceImportId && args.visitorRole !== "supervisor") throw new ConvexError("استيراد PDF مخصص لزيارات الموجه");
-        args.visitorName = existing?.visitorName ?? (delegated ? supervisor!.fullName : access.role === "deputy" ? settings.deputyName : access.name);
-        args.visitorId = existing ? existing.visitorId : delegated ? supervisor!._id : access.visitorId;
+        if (delegated && (!supervisor || supervisor.schoolId !== school._id || supervisor.role !== args.visitorRole || !supervisor.isActive)) throw new ConvexError("اختر الزائر المسجل للقسم بالصفة الصحيحة");
+        args.visitorRole = existing?.visitorRole ?? (delegated || importedDeputy ? args.visitorRole : access.role);
+        args.visitorName = existing?.visitorName ?? (delegated ? supervisor!.fullName : importedDeputy || access.role === "deputy" ? settings.deputyName : access.name);
+        args.visitorId = existing ? existing.visitorId : delegated ? supervisor!._id : importedDeputy ? undefined : access.visitorId;
         if (existing && args.expectedUpdatedAt !== (existing.updatedAt ?? existing.createdAt)) throw new ConvexError("تم تعديل الزيارة في جلسة أخرى؛ أعد فتحها قبل الحفظ");
         if (args.id && !existing) throw new ConvexError("الزيارة غير موجودة");
         if (existing?.deletedAt) throw new ConvexError("الزيارة في سلة المحذوفات — استرجعها أولاً");
@@ -313,7 +315,12 @@ export const saveVisit = mutation({
         const teacher = args.teacherId ? await ctx.db.get(args.teacherId) : null;
         const cls = args.classId ? await ctx.db.get(args.classId) : null;
         if (!teacher || !canAccess(access, teacher.schoolId, teacher.department ?? "")) throw new ConvexError("المعلم خارج الأقسام المسموحة لك");
-        if (delegated && !supervisor!.subjects.map((d: string) => d.trim()).includes((teacher.department ?? "").trim())) throw new ConvexError("الموجه غير مسجل لهذا القسم");
+        if (delegated && !supervisor!.subjects.map((d: string) => d.trim()).includes((teacher.department ?? "").trim())) throw new ConvexError("الزائر غير مسجل لهذا القسم");
+        if (historicalImport) {
+            const previous = await ctx.db.query("supervisionVisits").withIndex("by_teacher_id", (q:any)=>q.eq("schoolId",school._id).eq("teacherId",args.teacherId)).collect();
+            const twin=previous.find((x:any)=>!x.deletedAt&&x.visitorRole===args.visitorRole&&x.visitDate===args.visitDate);
+            if(twin) return {ok:false as const,duplicate:{id:twin._id,visitorName:twin.visitorName,recordNo:twin.recordNo??null}};
+        }
         if (cls && cls.schoolId !== school._id) throw new ConvexError("الصف غير متاح");
 
         // A submitted visit keeps by whom and when. The teacher (and with it the
@@ -434,7 +441,7 @@ export const saveVisit = mutation({
 
             numbering = {
                 recordNo: existing?.recordNo ?? recordNo,
-                visitNumber: existing?.visitNumber || visitNumber,
+                visitNumber: existing?.visitNumber || args.originalVisitNumber || visitNumber,
                 academicYear: settings.academicYear,
                 submittedAt: now,
                 snapshot: JSON.stringify({
@@ -489,7 +496,7 @@ export const saveVisit = mutation({
         const id = await ctx.db.insert("supervisionVisits", {
             schoolId: school._id,
             ...common,
-            visitNumber: numbering.visitNumber ?? 0,
+            visitNumber: numbering.visitNumber ?? args.originalVisitNumber ?? 0,
             createdAt: now,
             ...numbering,
         });
@@ -497,8 +504,9 @@ export const saveVisit = mutation({
         await audit(ctx, school._id, id, coordinatorSubmitting ? "coordinator_approved" : becomingSubmitted ? "submitted" : "created", args.actorName,
             `${coordinatorSubmitting ? "اعتماد المنسق وإرسال للنائب" : becomingSubmitted ? "اعتماد" : "مسودة"} زيارة ${teacherName}`);
         return { ok: true as const, id, recordNo: numbering.recordNo ?? null, status: finalStatus, awaitingDeputy: coordinatorSubmitting };
-    },
-});
+}
+
+export const saveVisit = mutation({ args: visitArgs, handler: saveVisitHandler });
 
 export const deleteVisit = deputyMutation({
     args: { id: v.id("supervisionVisits"), reason: v.string(), actorName: v.optional(v.string()) },

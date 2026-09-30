@@ -1,9 +1,10 @@
 import { DEFAULT_CRITERIA } from "../../convex/visitCriteria";
 import type { Rating } from "../../convex/visitMath";
 import { normalizePdfText, proposeVisit } from "./visitImport";
+import { readExcelVisit } from "./visitExcelLayout";
 
 export type PdfPiece = { text: string; x: number; y: number; width: number; height: number; rotated: boolean };
-export type PdfPage = { width: number; height: number; pieces: PdfPiece[] };
+export type PdfPage = { width: number; height: number; pieces: PdfPiece[]; rules?: {left:number;right:number;y:number}[] };
 export type VisitPdfDocument = { text: string; pages: PdfPage[] };
 type Setup = Parameters<typeof proposeVisit>[1] & { classes?: { _id: string; name: string }[] };
 export const cleanWordPdf = (text: string) => text.normalize("NFKC")
@@ -35,8 +36,29 @@ export function regionText(page: PdfPage, box: Box) {
 }
 
 export function proposeLayoutVisit(document: VisitPdfDocument, setup: Setup) {
-    const form = { ...proposeVisit(document.text, setup), classId: "", followUpType: "full" as "full" | "partial", deliveryMode: "field" as "field" | "remote" };
+    const form = { ...proposeVisit(document.text, setup), originalVisitNumber:undefined as number|undefined, visitorRole: "supervisor" as "supervisor"|"coordinator"|"deputy", classId: "", followUpType: "full" as "full" | "partial", deliveryMode: "field" as "field" | "remote" };
     const review = { recognized:false, teacherName:"", supervisorName:"", className:"", teacherSuggestions:[] as string[], supervisorSuggestions:[] as string[], rows:[] as { criterionId:string; text:string; page:number; state:"read"|"conflict"|"empty"|"unmapped"; marks:Rating[] }[], warnings:[] as string[] };
+    const excel=readExcelVisit(document);
+    if(excel) {
+        review.recognized=true;review.teacherName=excel.teacherName;review.supervisorName=excel.visitorName;review.className=excel.className;
+        form.visitorRole=excel.visitorRole??'supervisor';
+        form.originalVisitNumber=excel.originalVisitNumber;
+        const teachers=setup.teachers.filter(t=>key(t.fullName)===key(excel.teacherName));
+        form.teacherId=teachers.length===1?teachers[0]._id:'';form.supervisorId='';
+        for(const field of ['subjectName','lessonTopic','planningRec','executionRec','evalMgmtRec','managementRec','notes'] as const)form[field]=excel[field];
+        const date=new Date(excel.visitDate+'T00:00:00Z');
+        form.visitDate=Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===excel.visitDate?excel.visitDate:'';
+        form.ratings={};
+        for(const row of excel.rows){
+            const matched=setup.criteria.filter(c=>criterionKey(c.text)===criterionKey(row.text));
+            const criterionId=matched.length===1?matched[0]._id:'';
+            const state=!criterionId?'unmapped':row.marks.length>1?'conflict':row.marks.length===0?'empty':'read';
+            review.rows.push({criterionId,text:row.text,page:1,state,marks:row.marks});
+            if(state==='read')form.ratings[criterionId]=row.marks[0];
+        }
+        review.warnings.push('تمت قراءة جدول Excel. راجع اسم الزائر وصفته والصف ونوع المتابعة؛ بعض خطوط العربية في التوصيات تحتاج تصحيحًا بالمقارنة مع الأصل.');
+        return {form,review};
+    }
     // Coordinates are only used after both page geometry and all row/column
     // labels prove this is the supported template. Other layouts fail closed.
     const pages = document.pages.map(p=>({...p,pieces:p.pieces.map(t=>({...t,x:t.x*612/p.width,y:t.y*792/p.height,width:t.width*612/p.width,height:t.height*792/p.height}))}));
@@ -51,7 +73,8 @@ export function proposeLayoutVisit(document: VisitPdfDocument, setup: Setup) {
     });
     if (!recognized) {
         // Generic, explicit labels may still be useful, but never read unknown table ticks.
-        review.warnings.push("لم يُطابق الملف قالب الموجّه المدعوم. راجع البيانات وأدخل التقييمات يدويًا؛ لم تُفسّر علامات الجدول.");
+        review.warnings.push(document.text.trim()?"لم يُطابق الملف القوالب المدعومة. راجع البيانات وأدخل التقييمات يدويًا؛ لم تُفسّر علامات الجدول.":"الملف صور بلا نص قابل للاستخراج؛ أدخل البيانات والتقييمات من المعاينة، أو استخدم PDF مُصدّرًا مباشرة من Word أو Excel.");
+        review.rows=setup.criteria.map(c=>({criterionId:c._id,text:c.text,page:1,state:'empty',marks:[]}));
         return {form,review};
     }
     review.recognized=true;

@@ -204,7 +204,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
         then?: (id: string) => Promise<string | void>) => {
         setServerError("");
         if (!editing && recordedRole === "supervisor" && !selectedSupervisor) { setServerError("اختر الموجه المسجل للقسم قبل الحفظ"); return; }
-        if (status === "submitted" && editing?.sourceImportId && !importReviewed) { setServerError("راجع ملف الموجه وأكد المطابقة قبل الاعتماد"); return; }
+        if (status === "submitted" && editing?.sourceImportId && !importReviewed) { setServerError("راجع ملف الزيارة الأصلي وأكد المطابقة قبل الاعتماد"); return; }
         setSaving(status);
         try {
             const res = await saveVisit({
@@ -300,7 +300,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             {editing?.sourceImportId && <div className="bg-amber-50 rounded-xl p-4 text-sm space-y-3">
                 <OriginalVisitPdf visitId={editing._id}/>
                 <p>زيارة مستوردة: راجع بيانات الحصة وجميع التقديرات والتوصيات مع الأصل قبل الاعتماد.</p>
-                <label className="flex gap-2 items-center"><input type="checkbox" checked={importReviewed} onChange={e => setImportReviewed(e.target.checked)}/>راجعت البيانات والبنود والتوصيات وطابقتها مع ملف الموجّه.</label>
+                <label className="flex gap-2 items-center"><input type="checkbox" checked={importReviewed} onChange={e => setImportReviewed(e.target.checked)}/>راجعت البيانات والبنود والتوصيات وطابقتها مع ملف الزيارة الأصلي.</label>
             </div>}
             {editing && baseUpdatedAt !== editing.updatedAt && <p role="alert" className="rounded-xl p-3 bg-amber-50 text-amber-900 text-sm">توجد نسخة أحدث من الزيارة في السجل. احتفظ بملاحظاتك قبل البدء من جديد؛ لن تُستبدل النسخة الأحدث بتعديلك القديم.</p>}
             {storageError && <p role="alert" className="p-3 bg-amber-50 text-amber-900 rounded-xl">الحفظ على الجهاز غير متاح؛ احفظ المسودة قبل المغادرة.</p>}

@@ -53,6 +53,26 @@ describe("correcting the teacher of a submitted visit", () => {
     });
 });
 
+describe('historical imports keep the actual visitor and prevent duplicate visits',()=>{
+ it('allows an administrator to import the deputy, blocks a coordinator, and detects duplicate drafts',async()=>{
+  const f=await fixture();
+  const source=await f.t.run(async ctx=>{
+   await ctx.db.patch(f.schoolId,{adminPin:'test-admin'});
+   const storageId=await ctx.storage.store(new Blob(['%PDF-test']));
+   return ctx.db.insert('supervisionImports',{schoolId:f.schoolId,ownerId:'admin',storageId,filename:'visit.pdf',sha256:'test',createdAt:1});
+  });
+  const token='c'.repeat(64);await f.t.mutation(A.supervisionSessions.login,{role:'admin',name:'مسؤول الاختبار',pin:'test-admin',token});
+  const args={sourceImportId:source,teacherId:f.teacherId,visitorRole:'deputy',visitorName:'اسم مزيف',subjectName:'العلوم',lessonTopic:'درس',visitDate:'2026-09-15',ratings:'{}',status:'draft'};
+  await f.t.run(ctx=>ctx.db.patch(source,{ownerId:f.visitorId}));
+  await expect(f.t.mutation(A.visits.saveVisit,{...args,sessionToken:f.token})).rejects.toThrow('يمكنك استيراد زياراتك');
+  await f.t.run(ctx=>ctx.db.patch(source,{ownerId:'admin'}));
+  const saved=await f.t.mutation(A.visits.saveVisit,{...args,sessionToken:token});expect(saved.ok).toBe(true);
+  const visit=await f.t.run(ctx=>ctx.db.get(saved.id));expect(visit.visitorRole).toBe('deputy');expect(visit.visitorName).not.toBe('اسم مزيف');expect(visit.sourceImportId).toBe(source);expect(visit.recordedByName).toBeTruthy();
+  const next=await f.t.run(async ctx=>{const previous=await ctx.db.get(source);const {_id,_creationTime,visitId,...data}=previous!;return ctx.db.insert('supervisionImports',{...data,sha256:'another'});});
+  const duplicate=await f.t.mutation(A.visits.saveVisit,{...args,sourceImportId:next,sessionToken:token});expect(duplicate.ok).toBe(false);expect(duplicate.duplicate.id).toBe(saved.id);
+ });
+});
+
 describe("coordinator then deputy approval", () => {
     it("queues coordinator approval, requires the deputy's signature, freezes it, and invalidates approval after changes", async () => {
         const f = await fixture();

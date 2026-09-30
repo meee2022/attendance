@@ -29,6 +29,6 @@ export default function ImportPdfPreview({ file }: { file: File }) {
     }, [file, page]);
     return <div className="border border-slate-200 rounded-lg overflow-hidden">
         <div className="flex items-center justify-between p-2 bg-slate-50 text-xs"><button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="p-2 disabled:opacity-40">السابقة</button><span>صفحة {page} من {pages}</span><button disabled={page >= pages} onClick={() => setPage(p => p + 1)} className="p-2 disabled:opacity-40">التالية</button></div>
-        {error ? <p role="alert" className="p-4 text-sm">{error}</p> : <div className="max-h-[560px] overflow-auto"><canvas ref={canvas} role="img" aria-label={`معاينة الصفحة ${page} من ملف الموجه`} className="w-full h-auto"/></div>}
+        {error ? <p role="alert" className="p-4 text-sm">{error}</p> : <div className="max-h-[560px] overflow-auto"><canvas ref={canvas} role="img" aria-label={`معاينة الصفحة ${page} من ملف الزيارة`} className="w-full h-auto"/></div>}
     </div>;
 }

@@ -126,7 +126,9 @@ describe("platform data protection", () => {
         await expect(f.t.query(A.setup.getInitialData, { sessionToken: f.teacher })).rejects.toThrow();
     });
     it("keeps raw public builders confined to audited login, token-link and wrapper modules", () => {
-        const allowed = new Set(["platformAccess.ts", "supervisionAccess.ts", "supervisionSessions.ts", "supervisionAcknowledgements.ts", "visitImports.ts"]);
+        const maintenance=readFileSync('convex/visitArchiveMaintenance.ts','utf8');
+        expect(maintenance).not.toMatch(/=\s*(query|mutation|action)\s*\(/);
+        const allowed = new Set(["platformAccess.ts", "supervisionAccess.ts", "supervisionSessions.ts", "supervisionAcknowledgements.ts", "visitImports.ts", "visitArchiveMaintenance.ts"]);
         for (const file of readdirSync("convex").filter(x => x.endsWith(".ts") && !allowed.has(x))) {
             expect(readFileSync(`convex/${file}`, "utf8")).not.toMatch(/import[^;]*["']\.\/_generated\/server["']/);
         }

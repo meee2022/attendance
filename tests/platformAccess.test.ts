@@ -20,6 +20,25 @@ async function fixture() {
     return { t, ...ids, admin, teacher, deputy };
 }
 describe("platform data protection", () => {
+    it("imports scores atomically, preserves existing marks, and rejects stale previews and invalid students", async () => {
+        const f = await fixture();
+        const row = { studentId: f.studentId, cells: [{ key: "a1", value: 18, expected: null, max: 20 }] };
+        const args = { mode: "grades", className: "10-1", subjectName: "علوم", overwrite: false, rows: [row], sessionToken: f.teacher };
+        expect((await f.t.mutation(A.scoreImports.save, args)).changed).toBe(1);
+        await expect(f.t.mutation(A.scoreImports.save, args)).rejects.toThrow("تغيرت درجات");
+        const updated = { ...row, cells: [{ key: "a1", value: 14, expected: 18, max: 20 }] };
+        expect((await f.t.mutation(A.scoreImports.save, { ...args, rows: [updated] })).skipped).toBe(1);
+        expect((await f.t.mutation(A.scoreImports.save, { ...args, overwrite: true, rows: [updated] })).changed).toBe(1);
+        await expect(f.t.mutation(A.scoreImports.save, { ...args, overwrite: true, rows: [{ ...row, cells: [{ key: "a2", value: 10, expected: null, max: 20 }, { key: "a3", value: 21, expected: null, max: 20 }] }] })).rejects.toThrow();
+        const saved = await f.t.query(A.grades.getGradesByClassSubject, { sessionToken: f.teacher, className: "10-1", subjectName: "علوم" });
+        expect(saved[0].a1).toBe(14); expect(saved[0].a2).toBeUndefined();
+        const testId = await f.t.mutation(A.diagnostics.createTest, { sessionToken: f.admin, title: "تشخيص", subjectName: "علوم", grade: 10, classNames: ["10-1"], questions: [{ n: 1, maxMark: 50 }] });
+        await f.t.mutation(A.scoreImports.save, { mode: "diagnostics", className: "10-1", testId, overwrite: false, rows: [{ studentId: f.studentId, expectedAbsent: false, cells: [{ key: "1", value: 40, expected: null, max: 50 }] }], sessionToken: f.teacher });
+        const sheet = await f.t.query(A.diagnostics.getEntrySheet, { sessionToken: f.teacher, testId, className: "10-1" });
+        expect(sheet.students[0].total).toBe(40);
+        await expect(f.t.mutation(A.scoreImports.save, { ...args, rows: [row, row] })).rejects.toThrow();
+        await expect(f.t.mutation(A.scoreImports.save, { ...args, sessionToken: "fake" })).rejects.toThrow();
+    });
     it("allows teachers to configure diagnostic marks before entry and locks recorded tests", async () => {
         const f = await fixture();
         const questions = [{ n: 1, maxMark: 10 }, { n: 2, maxMark: 10 }];

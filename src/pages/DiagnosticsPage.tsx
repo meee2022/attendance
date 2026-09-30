@@ -10,6 +10,7 @@ import {
 import { EmptyState, PageHeader, LoadingSpinner, KPICard } from "../components/ui";
 import DiagnosticsExport from "./DiagnosticsExport";
 import DiagnosticMarks from "../components/DiagnosticMarks";
+import ScoreExcelImport from "../components/ScoreExcelImport";
 import { DiagnosticsExportButtons } from "../components/ExportButtons";
 
 const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
@@ -722,6 +723,9 @@ function ScoreEntry({ testId, onGoBuild }: { testId: string; onGoBuild?: () => v
 
     return (
         <div className="space-y-4">
+            {sheet && className && <ScoreExcelImport key={`import-${testId}-${className}`} mode="diagnostics" testId={testId} className={className} title={test.title}
+                columns={test.questions.map((q: any) => ({ key: String(q.n), label: `سؤال ${q.n}`, max: q.maxMark }))}
+                students={sheet.students.map((s: any) => ({ id: s.studentId, name: s.fullName, values: s.scores, absent: s.isAbsent }))}/>} 
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-end gap-3 flex-wrap">
                 <div className="min-w-[160px]">
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">الشعبة</label>

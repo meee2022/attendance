@@ -18,6 +18,7 @@ import type * as grades from "../grades.js";
 import type * as messages from "../messages.js";
 import type * as platformAccess from "../platformAccess.js";
 import type * as practicalExams from "../practicalExams.js";
+import type * as scoreImports from "../scoreImports.js";
 import type * as settings from "../settings.js";
 import type * as setup from "../setup.js";
 import type * as students from "../students.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   platformAccess: typeof platformAccess;
   practicalExams: typeof practicalExams;
+  scoreImports: typeof scoreImports;
   settings: typeof settings;
   setup: typeof setup;
   students: typeof students;

@@ -14,6 +14,7 @@ import { EmptyState, PageHeader } from "../components/ui";
 import { GradesExportButtons } from "../components/ExportButtons";
 import { assessmentIndexOf, dueByNow, weeksFor } from "../lib/planMath";
 import AssessmentPlanGrid from "../components/AssessmentPlanGrid";
+import ScoreExcelImport from "../components/ScoreExcelImport";
 import { computeFinalScore } from "../lib/gradeMath";
 
 type GradeValue = number | "absent" | "excused" | null;
@@ -340,6 +341,7 @@ function WeekBanner({ subjectName, grade }: { subjectName?: string; grade?: numb
 function EntryView({ meta, settings }: { meta: any; settings: any }) {
     const [selectedClass, setSelectedClass] = useState<string>("");
     const [selectedSubject, setSelectedSubject] = useState<string>("");
+    const importRoster = useQuery(api.grades.getClassRoster, selectedClass ? { className: selectedClass } : "skip" as any) as any[] | undefined;
     const grades = useQuery(api.grades.getGradesByClassSubject,
         selectedClass && selectedSubject ? { className: selectedClass, subjectName: selectedSubject } : "skip" as any
     ) as any[] | undefined;
@@ -395,6 +397,10 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
             </div>
 
             <WeekBanner subjectName={selectedSubject || undefined} grade={selectedClassMeta?.grade}/>
+            {selectedClass && selectedSubject && grades && importRoster && <ScoreExcelImport
+                key={`import-${selectedClass}-${selectedSubject}`} mode="grades" className={selectedClass} subjectName={selectedSubject} title={selectedSubject}
+                columns={[1,2,3,4,5].map(n => ({ key: `a${n}`, label: settings.assessmentLabels?.[n-1] || `تقييم ${n}`, max: settings.maxPerAssessment ?? 20 }))}
+                students={importRoster.filter(s => s.studentId).map(s => ({ id: s.studentId, name: s.studentName, values: grades.find(g => g.studentName.trim() === s.studentName.trim()) ?? {} }))}/>} 
 
             {/* A track with no subjects assigned yet cannot be graded at all */}
             {selectedClass && subjectsForClass.length === 0 && (

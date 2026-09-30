@@ -21,7 +21,7 @@ export function readExcelVisit(document:VisitPdfDocument) {
     if(start<0) return null;
     const bounds=ys.slice(start,start+24);
     if(bounds.length!==24) return null;
-    const labels=bounds.slice(0,-1).map((y,i)=>regionText(p,[309,y,519,bounds[i+1]]));
+    const labels=bounds.slice(0,-1).map((y,i)=>regionText(p,[309,y,519,bounds[i+1]],false));
     if(!labels.every((text,i)=>[DEFAULT_CRITERIA[i].text,...EXCEL_CRITERION_ALIASES[i]].some(alias=>key(alias)===key(text))))return null;
     // Header rows are located by labels, not by a fixed vertical offset.
     const labelY=(label:string)=>p.pieces.find(t=>!t.rotated&&t.x>500&&key(t.text)===key(label))?.y;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { proposeLayoutVisit, regionText, type PdfPiece, type VisitPdfDocument } from "../src/lib/visitPdfLayout";
+import { cleanWordPdf, matchClass, proposeLayoutVisit, regionText, type PdfPiece, type VisitPdfDocument } from "../src/lib/visitPdfLayout";
 import { DEFAULT_CRITERIA } from "../convex/visitCriteria";
 import {EXCEL_CRITERION_ALIASES} from '../src/lib/visitExcelAliases';
 const bounds=[[352.3,379.5,396.8,414,436.5,453.8,476.3,498.8,526.1,548.6,565.9,583.1,605.6,622.9,640.2,657.5,680.3],[198.4,223.1,245.7,268.1,290.7,313.1,335.7,358.1]];
@@ -67,5 +67,38 @@ describe('Excel archive imports',()=>{
   const d=excel();d.pages[0].pieces.push(piece('✓',235,257,10));
   d.pages[0].pieces=d.pages[0].pieces.filter(p=>!(p.text==='✓'&&p.y===273));
   const r=proposeLayoutVisit(d,setup);expect(r.review.rows[0].state).toBe('conflict');expect(r.review.rows[1].state).toBe('empty');expect(r.form.ratings['0']).toBeUndefined();
+ });
+});
+
+describe("text recovered from Word and Excel PDFs", () => {
+ it("puts zero-width final letters back on their word, even where pieces overlap", () => {
+  // «أوصي» as Excel writes it: the word, a space piece, a neighbouring piece that
+  // overlaps the letter, and the final «ي» as a zero-width glyph near the word's left edge
+  const page = { width: 612, height: 792, pieces: [
+   { text: "أشكر المعلم على جهوده وأوص", x: 113, y: 294.5, width: 96, height: 9.4, rotated: false },
+   { text: " ب", x: 103.2, y: 294.5, width: 12.9, height: 9.4, rotated: false },
+   { text: "ي", x: 116.1, y: 297.4, width: 0, height: 9.4, rotated: false },
+   { text: "توفي", x: 193.2, y: 330.9, width: 15.5, height: 9.4, rotated: false },
+   { text: "ر", x: 198.1, y: 331.6, width: 0, height: 9.4, rotated: false },
+  ] };
+  const text = regionText(page, [72, 280, 215, 345]);
+  expect(text).toContain("وأوصي");
+  expect(text).toContain("توفير");
+  // and leaves the raw text alone where it is only compared with known labels
+  expect(regionText(page, [72, 280, 215, 345], false)).not.toContain("توفير");
+ });
+ it("mends spellings that are never Arabic, and not the ones that are", () => {
+  expect(cleanWordPdf("عىل الطالب عل الكتاب حت يستكمله أعاله مالحظات عالقته الإسالمية العبدهللا"))
+   .toBe("على الطالب على الكتاب حتى يستكمله أعلاه ملاحظات علاقته الإسلامية العبدالله");
+  expect(cleanWordPdf("علم حتما")).toBe("علم حتما");
+ });
+ it("matches the class written in words or numbers to the class list", () => {
+  const classes = ["10-3", "12-10", "11-3", "12-6", "10-10"].map(name => ({ _id: name, name }));
+  expect(matchClass("عاشر 3", classes)).toBe("10-3");
+  expect(matchClass("ثاني عشر 10", classes)).toBe("12-10");
+  expect(matchClass("الحادي عشر ٣", classes)).toBe("11-3");
+  expect(matchClass("12 / 6 - أدبي (الحصة 2)", classes)).toBe("12-6");
+  expect(matchClass("عاشر 10", classes)).toBe("10-10");
+  expect(matchClass("الصف التاسع 3", classes)).toBe("");
  });
 });

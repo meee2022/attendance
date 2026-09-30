@@ -7,10 +7,17 @@ export type PdfPiece = { text: string; x: number; y: number; width: number; heig
 export type PdfPage = { width: number; height: number; pieces: PdfPiece[]; rules?: {left:number;right:number;y:number}[] };
 export type VisitPdfDocument = { text: string; pages: PdfPage[] };
 type Setup = Parameters<typeof proposeVisit>[1] & { classes?: { _id: string; name: string }[] };
-export const cleanWordPdf = (text: string) => text.normalize("NFKC")
+// Word and Excel write some Arabic ligatures to PDF with their letters swapped
+// or a letter lost. Only spellings that are never correct Arabic are mended;
+// «الطالب» / «الطلاب» cannot be told apart and is left for review.
+const WORD_FIXES: [RegExp, string][] = [
+    [/عىل/g, "على"], [/(^|[\s(])عل(?=[\s.،:)]|$)/g, "$1على"], [/(^|[\s(])حت(?=[\s.،:)]|$)/g, "$1حتى"],
+    [/أعاله/g, "أعلاه"], [/مالحظ/g, "ملاحظ"], [/عالق/g, "علاق"], [/إسالم/g, "إسلام"], [/اسالم/g, "اسلام"],
+    [/هللا/g, "الله"],
+];
+export const cleanWordPdf = (text: string) => WORD_FIXES.reduce((t, [from, to]) => t.replace(from, to), text.normalize("NFKC")
     .replace(/(^|\s)([وفبلك]?)امل/g, "$1$2الم").replace(/األ/g, "الأ").replace(/اإل/g, "الإ").replace(/اال/g, "الا")
-    .replace(/(^|\s)هللا(?=\s|$)/g,"$1الله")
-    .replace(/[\u200e\u200f\uf020]/g, "").replace(/ـ/g, "");
+    .replace(/[\u200e\u200f\uf020]/g, "").replace(/ـ/g, ""));
 const key = (s: string) => normalizePdfText(cleanWordPdf(s)).replace(/[^\p{L}\p{N}]/gu, "");
 const criterionKey = (s: string) => key(s).replace(/امل/g, "الم");
 type Box = [number, number, number, number];
@@ -22,9 +29,36 @@ const headers = ["لم يتم قياسه","الأدلة غير متوفرة أو
 function piecesIn(page: PdfPage, [left,top,right,bottom]: Box) {
     return page.pieces.filter(p => !p.rotated && p.x + p.width / 2 >= left && p.x + p.width / 2 < right && p.y >= top && p.y < bottom);
 }
-export function regionText(page: PdfPage, box: Box) {
+// Word and Excel draw some final letters (ر، ي، ى…) as separate zero-width
+// glyphs placed back over their word. Each is put back at the end of the word
+// it sits on — the word whose left edge is nearest — or dropped if none is close.
+function restoreLooseLetters(pieces: PdfPiece[]) {
+    const solid = pieces.filter(p => p.width > 0);
+    const text = new Map(solid.map(p => [p, p.text]));
+    // compared on the baseline: a zero-width glyph has no height to centre on
+    const baseline = (p: PdfPiece) => p.y + p.height / 2;
+    for (const g of pieces.filter(p => p.width <= 0 && p.text.trim().length === 1)) {
+        // the letter may overlap neighbouring pieces; the nearest word end wins
+        let host: PdfPiece | null = null, best = -1, distance = 5.5;
+        for (const p of solid) {
+            if (Math.abs(baseline(p) - baseline(g)) >= 4 || g.x < p.x - 1 || g.x > p.x + p.width + 1) continue;
+            const t = text.get(p)!;
+            for (let i = 1; i <= t.length; i++) {
+                if ((i < t.length && t[i] !== " ") || t[i - 1] === " ") continue;
+                const edge = p.x + p.width * (1 - i / t.length);   // right to left: index i ends here
+                if (Math.abs(edge - g.x) < distance) { distance = Math.abs(edge - g.x); best = i; host = p; }
+            }
+        }
+        if (host) { const t = text.get(host)!; text.set(host, t.slice(0, best) + g.text.trim() + t.slice(best)); }
+    }
+    return solid.map(p => ({ ...p, text: text.get(p)! }));
+}
+
+// `restore` is off where text is only compared with known labels, which carry
+// the same missing letters
+export function regionText(page: PdfPage, box: Box, restore = true) {
     const lines: { y: number; pieces: PdfPiece[] }[] = [];
-    for (const p of piecesIn(page,box).filter(p=>p.width>0 && p.text.trim() && !/^[\uf020\uf050✓✔\s]+$/.test(p.text))) {
+    for (const p of (restore ? restoreLooseLetters : (x: PdfPiece[]) => x.filter(p => p.width > 0))(piecesIn(page,box).filter(p=>p.text.trim() && !/^[\uf020\uf050✓✔\s]+$/.test(p.text)))) {
         let line = lines.find(l => Math.abs(l.y-p.y)<3);
         if (!line) { line={y:p.y,pieces:[]}; lines.push(line); }
         line.pieces.push(p);
@@ -33,6 +67,32 @@ export function regionText(page: PdfPage, box: Box) {
         const ordered=l.pieces.sort((a,b)=>b.x-a.x);
         return ordered.map((p,i)=>`${i && ordered[i-1].x-(p.x+p.width)>0.2 ? " " : ""}${p.text}`).join("").trim();
     }).join("\n")).trim();
+}
+
+// «عاشر 3», «ثاني عشر 10», «12 / 6 - أدبي» → the class named "10-3", "12-10", "12-6"
+const GRADE_WORDS: [RegExp, number][] = [[/(ال)?ثاني عشر/, 12], [/(ال)?حادي عشر/, 11], [/(ال)?عاشر/, 10]];
+export function matchClass(name: string, classes: { _id: string; name: string }[]) {
+    const text = normalizePdfText(cleanWordPdf(name));
+    let grade: number | undefined, rest = text;
+    for (const [word, g] of GRADE_WORDS) if (word.test(text)) { grade = g; rest = text.replace(word, " "); break; }
+    const numbers = (rest.match(/\d+/g) ?? []).map(Number);
+    if (grade === undefined) {
+        const at = numbers.findIndex(n => n >= 10 && n <= 12);
+        if (at < 0) return "";
+        grade = numbers.splice(at, 1)[0];
+    }
+    const section = numbers.find(n => n >= 1 && n <= 20);
+    if (section === undefined) return "";
+    const found = classes.filter(c => c.name.replace(/\s/g, "") === `${grade}-${section}`);
+    return found.length === 1 ? found[0]._id : "";
+}
+
+// «الطلاب» comes out of these PDFs as «الطالب»; which one was meant is for a person to check
+const REVIEW_TEXT = ["subjectName", "lessonTopic", "planningRec", "executionRec", "evalMgmtRec", "managementRec", "notes"] as const;
+function wordWarnings(form: Record<(typeof REVIEW_TEXT)[number], string>) {
+    return REVIEW_TEXT.some(k => /الطالب(?!ة)/.test(form[k] ?? ""))
+        ? ["كلمة «الطالب» في النص قد تكون «الطلاب» في الأصل؛ هذه الملفات تكتب الكلمتين بالشكل نفسه. راجعها مقابل الاستمارة."]
+        : [];
 }
 
 export function proposeLayoutVisit(document: VisitPdfDocument, setup: Setup) {
@@ -56,6 +116,8 @@ export function proposeLayoutVisit(document: VisitPdfDocument, setup: Setup) {
             review.rows.push({criterionId,text:row.text,page:1,state,marks:row.marks});
             if(state==='read')form.ratings[criterionId]=row.marks[0];
         }
+        form.classId=matchClass(excel.className,setup.classes??[]);
+        review.warnings.push(...wordWarnings(form));
         review.warnings.push('تمت قراءة جدول Excel. راجع اسم الزائر وصفته والصف ونوع المتابعة؛ بعض خطوط العربية في التوصيات تحتاج تصحيحًا بالمقارنة مع الأصل.');
         return {form,review};
     }
@@ -67,12 +129,16 @@ export function proposeLayoutVisit(document: VisitPdfDocument, setup: Setup) {
         const columnLabels = headers.every((h,c)=>p.pieces.some(t=>t.rotated && t.x>=columns[n][c] && t.x<columns[n][c+1] && key(t.text)===key(h)));
         const rowLabels = rows[n].slice(0,-1).every((top,i)=>{
             const expected=DEFAULT_CRITERIA[index++];
-            return criterionKey(regionText(p,[columns[n][5],top,561.7,rows[n][i+1]]))===criterionKey(expected.text);
+            return criterionKey(regionText(p,[columns[n][5],top,561.7,rows[n][i+1]],false))===criterionKey(expected.text);
         });
         return columnLabels && rowLabels;
     });
     if (!recognized) {
         // Generic, explicit labels may still be useful, but never read unknown table ticks.
+        // A form printed from this app has its table drawn as shapes, not text: only the
+        // visit's own words and the ticks remain. That visit is already in the register.
+        if((document.text.match(/✓/g)??[]).length>=20 && !document.text.includes('ES-ESA-P11-F2'))
+            review.warnings.push('يبدو أن هذه الاستمارة مطبوعة من التطبيق نفسه، فالزيارة موجودة غالبًا في سجل الزيارات. تأكد من السجل قبل استيرادها حتى لا تتكرر.');
         review.warnings.push(document.text.trim()?"لم يُطابق الملف القوالب المدعومة. راجع البيانات وأدخل التقييمات يدويًا؛ لم تُفسّر علامات الجدول.":"الملف صور بلا نص قابل للاستخراج؛ أدخل البيانات والتقييمات من المعاينة، أو استخدم PDF مُصدّرًا مباشرة من Word أو Excel.");
         review.rows=setup.criteria.map(c=>({criterionId:c._id,text:c.text,page:1,state:'empty',marks:[]}));
         return {form,review};
@@ -118,6 +184,8 @@ export function proposeLayoutVisit(document: VisitPdfDocument, setup: Setup) {
         review.rows.push({criterionId,text:expected.text,page:n+1,state,marks});
         if(state==="read") form.ratings[criterionId]=marks[0];
     }
+    form.classId=matchClass(review.className,setup.classes??[]);
+    review.warnings.push(...wordWarnings(form));
     review.warnings.push("راجع نوع المتابعة (كلية/جزئية) وطريقة الزيارة (ميدانية/عن بُعد) مع الأصل قبل الحفظ.");
     return {form,review};
 }

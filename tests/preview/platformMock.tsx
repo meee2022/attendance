@@ -5,6 +5,9 @@ let tasks = [
     { _id: "t1", title: "المصادر لكل المستويات", url: "https://example.com/resources", description: "أضف المصادر التعليمية المطلوبة لقسمك.", audience: ["teacher","coordinator"], audienceLabel: "المعلمون والمنسقون", category: "المصادر التعليمية", academicYear: "2026-2027", order: 1, isActive: true },
     { _id: "t2", title: "رصد الاختبارات القصيرة", url: "/grades", description: "", audience: ["coordinator"], audienceLabel: "المنسقون", category: "التقييم والمتابعة", academicYear: "2026-2027", order: 2, isActive: true },
 ];
+if (new URLSearchParams(location.search).has("long")) {
+    tasks = Array.from({ length: 12 }, (_, i) => ({ ...tasks[0], _id: `task-${i+1}`, title: `مهمة تجريبية ${i+1}`, order: i+1 }));
+}
 export const usePlatformSession = () => ({ role, name: "مستخدم تجريبي" });
 export function useQuery(ref: any) {
     const [, refresh] = useState(0);

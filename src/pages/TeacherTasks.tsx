@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink, ClipboardList, Plus, Search, Settings } from "lucide-react";
 import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
@@ -53,6 +53,19 @@ export function TeacherTasksAdmin() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const editorRef = useRef<HTMLFormElement>(null);
+    const [editorRequest, setEditorRequest] = useState(0);
+    function openEditor(value: any) {
+        setEditing(value); setError(""); setNotice("");
+        setEditorRequest(n => n + 1);
+    }
+    useEffect(() => {
+        if (!editorRequest) return;
+        // The editor sits above a long list. Bring it into view on every explicit
+        // edit request, including reopening the same task, never while typing.
+        editorRef.current?.scrollIntoView({ behavior: "instant", block: "start" });
+        editorRef.current?.querySelector<HTMLInputElement>('input[name="task-url"]')?.focus({ preventScroll: true });
+    }, [editorRequest]);
     const change = (key: string, value: any) => setEditing((old: any) => ({ ...old, [key]: value }));
     async function submit(e: React.FormEvent) {
         e.preventDefault(); if (busy) return;
@@ -66,14 +79,14 @@ export function TeacherTasksAdmin() {
         catch (e) { setError(messageOf(e)); } finally { setBusy(false); }
     }
     return <div className="space-y-4">
-        <div className="flex flex-wrap justify-between items-center gap-3"><p className="text-sm text-slate-600">حدّد الرابط والفئة المستهدفة. المسؤول والنائب يستطيعان رؤية جميع المهام المنشورة.</p><button disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-qatar-maroon text-white px-4 py-2 text-sm" onClick={() => { setEditing(empty()); setError(""); setNotice(""); }}><Plus className="w-4 h-4"/>إضافة مهمة</button></div>
+        <div className="flex flex-wrap justify-between items-center gap-3"><p className="text-sm text-slate-600">حدّد الرابط والفئة المستهدفة. المسؤول والنائب يستطيعان رؤية جميع المهام المنشورة.</p><button disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-qatar-maroon text-white px-4 py-2 text-sm" onClick={() => { openEditor(empty()); }}><Plus className="w-4 h-4"/>إضافة مهمة</button></div>
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
         {notice && <p role="status" className="text-sm text-emerald-800">{notice}</p>}
-        {editing && <form onSubmit={submit} className="border border-slate-200 rounded-xl p-4 space-y-4 bg-white">
+        {editing && <form ref={editorRef} onSubmit={submit} aria-label="تعديل بيانات المهمة" className="scroll-mt-28 border border-slate-200 rounded-xl p-4 space-y-4 bg-white">
             <h3 className="font-bold text-qatar-maroon">{editing.id ? "تعديل المهمة" : "مهمة جديدة"}</h3>
             <fieldset disabled={busy} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="text-sm">اسم المهمة<input required maxLength={160} className={inputClass} value={editing.title} onChange={e => change("title", e.target.value)}/></label>
-                <label className="text-sm">الرابط<input required maxLength={4000} dir="ltr" className={inputClass} value={editing.url} onChange={e => change("url", e.target.value)} placeholder="https://… أو /grades"/></label>
+                <label className="text-sm">الرابط<input name="task-url" required maxLength={4000} dir="ltr" className={inputClass} value={editing.url} onChange={e => change("url", e.target.value)} placeholder="https://… أو /grades"/></label>
                 <label className="text-sm sm:col-span-2">توضيح المطلوب (اختياري)<textarea maxLength={1000} className={inputClass} value={editing.description} onChange={e => change("description", e.target.value)}/></label>
                 <label className="text-sm">التصنيف<input required maxLength={80} className={inputClass} value={editing.category} onChange={e => change("category", e.target.value)}/></label>
                 <label className="text-sm">العام الدراسي<input required maxLength={40} className={inputClass} value={editing.academicYear} onChange={e => change("academicYear", e.target.value)}/></label>
@@ -84,6 +97,6 @@ export function TeacherTasksAdmin() {
             </fieldset>
             <div className="flex gap-3"><button disabled={busy || !editing.audience.length} className="rounded-lg bg-qatar-maroon text-white px-4 py-2 text-sm disabled:opacity-50">{busy ? "جاري الحفظ…" : "حفظ المهمة"}</button><button type="button" disabled={busy} className="rounded-lg border border-slate-300 px-4 py-2 text-sm" onClick={() => { setEditing(null); setError(""); }}>إلغاء</button></div>
         </form>}
-        {!tasks ? <p role="status">جاري التحميل…</p> : <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden bg-white">{tasks.map(t => <div key={t._id} className="p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-48"><p className="font-semibold">{t.title}</p><p className="text-xs text-slate-600 mt-1">{t.category} · {t.academicYear} · الترتيب {t.order} · {t.isActive ? "ظاهرة" : "مخفية"}</p></div><button disabled={busy} className="text-sm text-qatar-maroon border border-slate-300 rounded-lg px-3 py-2" onClick={() => { const { _id, _creationTime, schoolId, updatedAt, ...fields } = t; setEditing({ id: _id, ...fields }); setError(""); setNotice(""); }}>تعديل</button><button disabled={busy} className="text-sm text-slate-700 border border-slate-300 rounded-lg px-3 py-2" onClick={() => void toggle(t)}>{t.isActive ? "إخفاء" : "إظهار"}</button></div>)}{!tasks.length && <p className="p-6 text-center text-slate-600">أضف أول مهمة ليظهر رابطها في قسم مهام المعلمين.</p>}</div>}
+        {!tasks ? <p role="status">جاري التحميل…</p> : <div className="divide-y divide-slate-200 border border-slate-200 rounded-xl overflow-hidden bg-white">{tasks.map(t => <div key={t._id} className="p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-48"><p className="font-semibold">{t.title}</p><p className="text-xs text-slate-600 mt-1">{t.category} · {t.academicYear} · الترتيب {t.order} · {t.isActive ? "ظاهرة" : "مخفية"}</p></div><button disabled={busy} className="text-sm text-qatar-maroon border border-slate-300 rounded-lg px-3 py-2" onClick={() => { const { _id, _creationTime, schoolId, updatedAt, ...fields } = t; openEditor({ id: _id, ...fields }); }}>تعديل</button><button disabled={busy} className="text-sm text-slate-700 border border-slate-300 rounded-lg px-3 py-2" onClick={() => void toggle(t)}>{t.isActive ? "إخفاء" : "إظهار"}</button></div>)}{!tasks.length && <p className="p-6 text-center text-slate-600">أضف أول مهمة ليظهر رابطها في قسم مهام المعلمين.</p>}</div>}
     </div>;
 }

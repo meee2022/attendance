@@ -20,6 +20,29 @@ async function fixture() {
     return { t, ...ids, admin, teacher, deputy };
 }
 describe("platform data protection", () => {
+    it("allows teachers to configure diagnostic marks before entry and locks recorded tests", async () => {
+        const f = await fixture();
+        const questions = [{ n: 1, maxMark: 10 }, { n: 2, maxMark: 10 }];
+        const id = await f.t.mutation(A.diagnostics.createTest, { sessionToken: f.admin, title: "اختبار", subjectName: "علوم", grade: 10, classNames: ["10-1"], questions });
+        const marks = [{ n: 1, maxMark: 25 }, { n: 2, maxMark: 25 }];
+        await f.t.mutation(A.diagnostics.configureMarks, { sessionToken: f.teacher, testId: id, expectedQuestions: JSON.stringify(questions), marks });
+        expect((await f.t.query(A.diagnostics.getTest, { sessionToken: f.teacher, testId: id })).totalMarks).toBe(50);
+        await expect(f.t.mutation(A.diagnostics.configureMarks, { sessionToken: f.teacher, testId: id, expectedQuestions: JSON.stringify(questions), marks })).rejects.toThrow();
+        await expect(f.t.mutation(A.diagnostics.configureMarks, { sessionToken: f.teacher, testId: id, expectedQuestions: JSON.stringify(marks), marks: [{ n: 1, maxMark: -1 }, marks[1]] })).rejects.toThrow();
+        await f.t.mutation(A.diagnostics.setScore, { sessionToken: f.teacher, testId: id, studentId: f.studentId, questionNumber: 1, value: 20 });
+        await expect(f.t.mutation(A.diagnostics.configureMarks, { sessionToken: f.teacher, testId: id, expectedQuestions: JSON.stringify(marks), marks: questions })).rejects.toThrow("بدأ رصد");
+        expect((await f.t.query(A.diagnostics.getTest, { sessionToken: f.teacher, testId: id })).totalMarks).toBe(50);
+    });
+    it("archives teachers without deleting their identity and lets staff restore them", async () => {
+        const f = await fixture();
+        await f.t.mutation(A.supervision.addSchoolTeacher, { sessionToken: f.admin, fullName: "معلم", department: "العلوم" });
+        const [teacher] = await f.t.query(A.supervision.getSchoolTeachers, { sessionToken: f.admin });
+        await f.t.mutation(A.supervision.deleteSchoolTeacher, { sessionToken: f.admin, id: teacher._id });
+        expect(await f.t.query(A.supervision.getSchoolTeachers, { sessionToken: f.admin })).toHaveLength(0);
+        expect((await f.t.query(A.supervision.getSchoolTeachers, { sessionToken: f.admin, includeInactive: true }))[0].isActive).toBe(false);
+        await f.t.mutation(A.supervision.updateSchoolTeacher, { sessionToken: f.deputy, id: teacher._id, isActive: true });
+        expect((await f.t.query(A.supervision.getSchoolTeachers, { sessionToken: f.admin }))[0]._id).toBe(teacher._id);
+    });
     it("protects task links by audience and visibility and restricts editing to staff", async () => {
         const f = await fixture();
         const task = { title: "مهمة اختبار", url: "https://example.com/task", description: "", audience: ["teacher"], audienceLabel: "", category: "عام", academicYear: "2026-2027", order: 2, isActive: true };

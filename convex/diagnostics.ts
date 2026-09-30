@@ -96,6 +96,24 @@ export const getTest = query({
     },
 });
 
+// Teachers may configure marks before entry, without gaining test administration.
+export const configureMarks = mutation({
+    args: { testId: v.id("diagnosticTests"), expectedQuestions: v.string(), marks: v.array(v.object({ n: v.number(), maxMark: v.number() })) },
+    handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        const test = await ctx.db.get(args.testId);
+        if (!test || test.schoolId !== school._id || !test.isActive) throw new Error("الاختبار غير متاح.");
+        const canonical = (qs: any[]) => JSON.stringify(qs.map(q => ({ n: q.n, maxMark: q.maxMark, skillId: q.skillId ?? null, subjectName: q.subjectName ?? null })));
+        if (canonical(test.questions) !== canonical(JSON.parse(args.expectedQuestions))) throw new Error("تغير إعداد الاختبار. أعد فتح توزيع الدرجات.");
+        if (!args.marks.length || args.marks.length !== test.questions.length || new Set(args.marks.map(q => q.n)).size !== args.marks.length) throw new Error("يجب تحديد درجة كل سؤال مرة واحدة.");
+        for (const q of args.marks) if (!Number.isFinite(q.maxMark) || q.maxMark <= 0 || q.maxMark > 10000 || !test.questions.some(x => x.n === q.n)) throw new Error("أدخل درجة موجبة وصحيحة لكل سؤال.");
+        const scores = await ctx.db.query("diagnosticScores").withIndex("by_test", q => q.eq("testId", test._id)).collect();
+        if (scores.some(s => Object.keys(parseScores(s.scores)).length > 0)) throw new Error("بدأ رصد درجات الطلاب. لا يمكن تغيير الدرجة النهائية أو توزيعها لهذا الاختبار؛ أنشئ نسخة جديدة إذا لزم الأمر.");
+        await ctx.db.patch(test._id, { questions: test.questions.map(q => ({ ...q, maxMark: args.marks.find(x => x.n === q.n)!.maxMark })) });
+        return "تم حفظ توزيع الدرجات.";
+    },
+});
+
 export const createTest = adminMutation({
     args: {
         title: v.string(),

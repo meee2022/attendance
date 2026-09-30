@@ -7,11 +7,11 @@ import { Plus, Trash2, Pencil, Check, X, Download, Search, Users, Mail, AlertCir
 const SUBJECTS = [
     "الرياضيات", "التربية الإسلامية", "اللغة الإنجليزية", "اللغة العربية",
     "الكيمياء", "الفيزياء", "الأحياء", "العلوم الاجتماعية",
-    "الحوسبة وتكنولوجيا المعلومات", "العلوم", "التربية الرياضية", "المهارات الحياتية",
+    "الحوسبة وتكنولوجيا المعلومات", "العلوم", "التربية الرياضية", "المهارات الحياتية", "الفنون البصرية", "الدعم الإضافي",
 ];
 
 export default function SupervisionTeachers() {
-    const teachers = useQuery(api.supervision.getSchoolTeachers) as any[] | undefined;
+    const teachers = useQuery(api.supervision.getSchoolTeachers, { includeInactive: true }) as any[] | undefined;
     const supervisors = useQuery(api.supervision.getSupervisors) as any[] | undefined;
     const seedDefault = useMutation(api.supervision.seedSchoolTeachersDefault);
     const addTeacher = useMutation(api.supervision.addSchoolTeacher);
@@ -26,6 +26,15 @@ export default function SupervisionTeachers() {
     const [editId, setEditId] = useState<string | null>(null);
     const [editName, setEditName] = useState("");
     const [editEmail, setEditEmail] = useState("");
+    const [editDept, setEditDept] = useState("");
+    const [editPhone, setEditPhone] = useState("");
+    const [status, setStatus] = useState("active");
+    const [error, setError] = useState("");
+    const [busy, setBusy] = useState(false);
+    const run = async (action: () => Promise<unknown>) => {
+        setError(""); setBusy(true);
+        try { await action(); } catch { setError("تعذّر حفظ التغيير. حاول مجددًا."); } finally { setBusy(false); }
+    };
     const [newName, setNewName] = useState("");
     const [newDept, setNewDept] = useState("");
     const [newEmail, setNewEmail] = useState("");
@@ -36,6 +45,7 @@ export default function SupervisionTeachers() {
     const departments = Array.from(new Set(teachers.map(t => t.department))).sort();
 
     const filteredTeachers = teachers.filter(t => {
+        if (status === "active" && t.isActive === false || status === "inactive" && t.isActive !== false) return false;
         if (filterDept !== "all" && t.department !== filterDept) return false;
         if (search.trim() && !t.fullName.includes(search.trim()) && !(t.email ?? "").includes(search.trim())) return false;
         return true;
@@ -111,7 +121,7 @@ export default function SupervisionTeachers() {
                                     <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="البريد (اختياري)" type="email"
                                         className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold bg-white focus:outline-none focus:border-qatar-maroon"/>
                                 </div>
-                                <button onClick={handleAdd} disabled={!newName.trim() || !newDept}
+                                    <button onClick={() => run(handleAdd)} disabled={busy || !newName.trim() || !newDept}
                                     className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-qatar-maroon text-white text-sm font-black hover:opacity-90 disabled:opacity-40">
                                     <Plus className="w-4 h-4"/>إضافة
                                 </button>
@@ -119,6 +129,15 @@ export default function SupervisionTeachers() {
 
                             {/* Search & Filter */}
                             <div className="space-y-2">
+                                <p className="text-sm text-slate-600">إنهاء الخدمة يُخفي المعلم من الزيارات الجديدة ويحفظ سجله السابق. يمكنك إعادة تفعيله في أي وقت.</p>
+                                {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+                                <label className="block text-sm">حالة المعلم
+                                    <select aria-label="حالة المعلم" value={status} onChange={e => setStatus(e.target.value)} className="mx-2 rounded-lg border border-slate-200 px-3 py-2">
+                                        <option value="active">على رأس العمل ({teachers.filter(t => t.isActive !== false).length})</option>
+                                        <option value="inactive">معلمون سابقون ({teachers.filter(t => t.isActive === false).length})</option>
+                                        <option value="all">الجميع</option>
+                                    </select>
+                                </label>
                                 <div className="relative">
                                     <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/>
                                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم أو البريد..."
@@ -147,12 +166,14 @@ export default function SupervisionTeachers() {
                                     </div>
                                     <div className="divide-y divide-slate-100 bg-white">
                                         {list.map(t => editId === t._id ? (
-                                            <div key={t._id} className="p-3 flex items-center gap-2 bg-blue-50">
+                                            <div key={t._id} className="p-3 flex flex-wrap items-center gap-2 bg-slate-50">
                                                 <input value={editName} onChange={e => setEditName(e.target.value)}
                                                     className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold bg-white focus:outline-none focus:border-qatar-maroon"/>
                                                 <input value={editEmail} onChange={e => setEditEmail(e.target.value)} placeholder="البريد"
                                                     className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold bg-white focus:outline-none focus:border-qatar-maroon"/>
-                                                <button onClick={async () => { await updateTeacher({ id: t._id as any, fullName: editName, email: editEmail }); setEditId(null); }}
+                                                <select aria-label="قسم المعلم" value={editDept} onChange={e => setEditDept(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm">{Array.from(new Set([...SUBJECTS, editDept])).map(d => <option key={d}>{d}</option>)}</select>
+                                                <input aria-label="هاتف المعلم" value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="الهاتف" className="rounded-lg border border-slate-200 px-2 py-1 text-sm"/>
+                                                <button title="حفظ التعديل" disabled={busy || !editName.trim() || !editDept} onClick={() => run(async () => { await updateTeacher({ id: t._id as any, fullName: editName, department: editDept, phone: editPhone, email: editEmail }); setEditId(null); })}
                                                     className="p-1 rounded-lg bg-emerald-100 text-emerald-600 hover:bg-emerald-200">
                                                     <Check className="w-3.5 h-3.5"/>
                                                 </button>
@@ -163,17 +184,18 @@ export default function SupervisionTeachers() {
                                         ) : (
                                             <div key={t._id} className="p-3 flex items-center justify-between gap-2">
                                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <button onClick={() => { setEditId(t._id); setEditName(t.fullName); setEditEmail(t.email ?? ""); }}
+                                                    <button title="تعديل المعلم" onClick={() => { setEditId(t._id); setEditName(t.fullName); setEditEmail(t.email ?? ""); setEditDept(t.department); setEditPhone(t.phone ?? ""); }}
                                                         className="p-1.5 rounded-lg text-slate-300 hover:bg-blue-50 hover:text-blue-500">
                                                         <Pencil className="w-3.5 h-3.5"/>
                                                     </button>
-                                                    <button onClick={async () => { if (confirm(`حذف ${t.fullName}؟`)) await deleteTeacher({ id: t._id as any }); }}
-                                                        className="p-1.5 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500">
-                                                        <Trash2 className="w-3.5 h-3.5"/>
+                                                    <button disabled={busy} onClick={() => run(async () => { if (t.isActive === false) await updateTeacher({ id: t._id, isActive: true }); else if (confirm(`إنهاء خدمة ${t.fullName} مع الاحتفاظ بزياراته وسجله؟`)) await deleteTeacher({ id: t._id as any }); })}
+                                                        className="px-2 py-1.5 rounded-lg text-sm text-qatar-maroon hover:bg-rose-50">
+                                                        {t.isActive === false ? "إعادة تفعيل" : "إنهاء الخدمة"}
                                                     </button>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-bold text-slate-700 truncate">{t.fullName}</p>
+                                                    {t.isActive === false && <span className="text-xs text-slate-500">معلم سابق</span>}
                                                     {t.email && (
                                                         <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1 mt-0.5 truncate">
                                                             <Mail className="w-2.5 h-2.5"/>{t.email}

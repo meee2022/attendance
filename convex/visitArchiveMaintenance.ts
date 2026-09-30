@@ -5,6 +5,33 @@ import {internal} from './_generated/api';
 import {v,ConvexError} from 'convex/values';
 import {saveVisitHandler} from './visits';
 const I=internal as any;
+// Apply an explicitly reviewed roster atomically; reject concurrent roster edits.
+export const reconcileRoster=internalMutation({args:{schoolId:v.id('schools'),expected:v.string(),rows:v.string(),deactivate:v.array(v.id('schoolTeachers'))},handler:async(ctx,args)=>{
+ const current=await ctx.db.query('schoolTeachers').withIndex('by_school',q=>q.eq('schoolId',args.schoolId)).collect();
+ const stable=(rows:any[])=>JSON.stringify(rows.map(x=>Object.fromEntries(Object.entries(x).sort(([a],[b])=>a.localeCompare(b)))).sort((a,b)=>String(a._id).localeCompare(String(b._id))));
+ const expected=JSON.parse(args.expected);
+ if(stable(current)!==stable(expected))throw new ConvexError('تغيرت قائمة المعلمين؛ أعد المطابقة قبل التنفيذ');
+ const rows=JSON.parse(args.rows) as {id?:string|null,value:{fullName:string,department:string,email?:string,phone?:string,isActive:boolean}}[];
+ const ids=new Set(current.map(x=>String(x._id)));const used=new Set<string>();const names=new Set<string>();const emails=new Set<string>();
+ for(const r of rows){
+  if(!r.value.fullName.trim()||!r.value.department.trim()||r.value.isActive!==true)throw new ConvexError('بيانات معلم غير مكتملة');
+  if(names.has(r.value.fullName)||r.value.email&&emails.has(r.value.email))throw new ConvexError('بيانات مكررة');
+  names.add(r.value.fullName);if(r.value.email)emails.add(r.value.email);
+  if(r.id){if(!ids.has(r.id)||used.has(r.id))throw new ConvexError('معلم غير متاح أو مكرر');used.add(r.id);}
+ }
+ for(const id of args.deactivate)if(!ids.has(id)||used.has(id))throw new ConvexError('قائمة إنهاء الخدمة غير صحيحة');
+ const result:{id:string,name:string,action:string}[]=[];
+ for(const r of rows){
+  const value={fullName:r.value.fullName.trim(),department:r.value.department.trim(),email:r.value.email?.trim()||undefined,phone:r.value.phone?.trim()||undefined,isActive:true};
+  const id=r.id as any;
+  if(id)await ctx.db.patch(id,value);
+  const saved=id??await ctx.db.insert('schoolTeachers',{schoolId:args.schoolId,...value});
+  result.push({id:saved,name:value.fullName,action:id?'updated':'added'});
+ }
+ for(const id of args.deactivate){await ctx.db.patch(id,{isActive:false});result.push({id,name:current.find(x=>x._id===id)!.fullName,action:'deactivated'});}
+ await ctx.db.insert('supervisionAuditLog',{schoolId:args.schoolId,action:'roster_reconciled',actorName:'مسؤول المنصة',details:JSON.stringify(result),timestamp:Date.now()});
+ return result;
+}});
 export const verify=internalQuery({args:{id:v.id('supervisionVisits')},handler:async(ctx,{id})=>{
  const visit=await ctx.db.get(id);if(!visit||!visit.sourceImportId)throw new ConvexError('الزيارة المستوردة غير موجودة');
  const snapshot=JSON.parse(visit.snapshot??'{}');

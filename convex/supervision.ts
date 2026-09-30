@@ -416,14 +416,14 @@ export const seedSchoolTeachersDefault = mutation({
 
 // ── School Teachers (مصدر الحقيقة الموحد) ────────────────────────────────
 export const getSchoolTeachers = query({
-    args: {},
-    handler: async (ctx) => {
+    args: { includeInactive: v.optional(v.boolean()) },
+    handler: async (ctx, args) => {
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
         const teachers = await ctx.db.query("schoolTeachers")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
-        return teachers.filter(t => t.isActive !== false);
+        return args.includeInactive ? teachers : teachers.filter(t => t.isActive !== false);
     },
 });
 
@@ -507,7 +507,7 @@ export const updateSchoolTeacher = mutation({
 
 export const deleteSchoolTeacher = mutation({
     args: { id: v.id("schoolTeachers") },
-    handler: async (ctx, args) => { await ctx.db.delete(args.id); },
+    handler: async (ctx, args) => { await ctx.db.patch(args.id, { isActive: false }); },
 });
 
 // ── Audit Log ─────────────────────────────────────────────────────────────

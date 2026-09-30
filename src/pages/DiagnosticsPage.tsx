@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { EmptyState, PageHeader, LoadingSpinner, KPICard } from "../components/ui";
 import DiagnosticsExport from "./DiagnosticsExport";
+import DiagnosticMarks from "../components/DiagnosticMarks";
 import { DiagnosticsExportButtons } from "../components/ExportButtons";
 
 const GRADE_LABELS: Record<number, string> = { 10: "العاشر", 11: "الحادي عشر", 12: "الثاني عشر" };
@@ -57,12 +58,17 @@ export default function DiagnosticsPage() {
                 ))}
             </div>
             {view === "build" && canManage && <TestBuilder testId={testId}/>}
-            {view === "entry" && <ScoreEntry testId={testId} onGoBuild={canManage ? () => setView("build") : undefined}/>}
+            {view === "entry" && <><TestMarks testId={testId}/><ScoreEntry testId={testId} onGoBuild={canManage ? () => setView("build") : undefined}/></>}
             {view === "analysis" && <AnalysisView testId={testId}/>}
             {view === "compare" && <CompareView testId={testId}/>}
             {view === "export" && <DiagnosticsExport testId={testId}/>}
         </div>
     );
+}
+
+function TestMarks({ testId }: { testId: string }) {
+    const test = useQuery(api.diagnostics.getTest, { testId: testId as any }) as any;
+    return test ? <DiagnosticMarks test={test}/> : null;
 }
 
 function TestHeader({ testId, onBack }: { testId: string; onBack: () => void }) {

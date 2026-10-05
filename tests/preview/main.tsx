@@ -5,6 +5,9 @@ import { setup, visits, session } from "./sessionMock";
 import "../../src/index.css";
 const mobile = new URLSearchParams(location.search).has("mobile");
 import MonthlyReport from "../../src/pages/visits/MonthlyReport";
+import GradesCheck from "./GradesCheck";
+if (new URLSearchParams(location.search).has("grades")) createRoot(document.getElementById("root")!).render(<GradesCheck/>);
+else
 if (new URLSearchParams(location.search).has("report")) {
     // local data only (.cache is not committed)
     fetch("/.cache/report-data.json").then(r => r.json()).then(d => createRoot(document.getElementById("root")!).render(

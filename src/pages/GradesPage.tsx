@@ -33,8 +33,15 @@ function formatGrade(v: any): string {
     return String(v);
 }
 
-function parseInput(s: string, max?: number): GradeValue | { error: string } {
-    const t = s.trim();
+// Marks typed on an Arabic keyboard: ١٨ and ۱۸ are 18, and «٫» or «,» is the decimal point
+export function normalizeDigits(s: string): string {
+    return s.replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
+        .replace(/[٫,،]/g, ".");
+}
+
+export function parseInput(s: string, max?: number): GradeValue | { error: string } {
+    const t = normalizeDigits(s.trim());
     if (!t) return null;
     if (t === "غ" || t === "غياب" || t.toLowerCase() === "a") return "absent";
     if (t === "م" || t === "معذور" || t.toLowerCase() === "e") return "excused";
@@ -457,7 +464,7 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
     );
 }
 
-function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill, onUndoFill }: any) {
+export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill, onUndoFill }: any) {
     const [search, setSearch] = useState("");
     const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
     const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
@@ -465,23 +472,30 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
     const finalOutOf = settings.finalScoreOutOf;
     const labels = settings.assessmentLabels;
 
-    // Local edit buffer for fast typing
+    // What the teacher has typed and the server has not confirmed yet. Saved
+    // marks are read straight from `grades`; this buffer is never rebuilt from
+    // the server, so a cell typed while an earlier one is still saving is not
+    // wiped when that save comes back.
     const [localValues, setLocalValues] = useState<Record<string, Record<string, string>>>({});
     const [errorMap, setErrorMap] = useState<Record<string, string>>({});
+    const shown = (g: any, field: string): string => localValues[g.studentName]?.[field] ?? formatGrade(g[field]);
+    const withoutEdit = (p: Record<string, Record<string, string>>, studentName: string, field: string) => {
+        if (p[studentName]?.[field] === undefined) return p;
+        const row = { ...p[studentName] };
+        delete row[field];
+        const next = { ...p };
+        if (Object.keys(row).length) next[studentName] = row; else delete next[studentName];
+        return next;
+    };
+    const unsaved = Object.entries(localValues).flatMap(([name, row]) => Object.keys(row).map(field => ({ name, field })));
 
+    // Leaving with marks that never reached the server would lose them silently
     useEffect(() => {
-        const init: Record<string, Record<string, string>> = {};
-        for (const g of grades) {
-            init[g.studentName] = {
-                a1: formatGrade(g.a1),
-                a2: formatGrade(g.a2),
-                a3: formatGrade(g.a3),
-                a4: formatGrade(g.a4),
-                a5: formatGrade(g.a5),
-            };
-        }
-        setLocalValues(init);
-    }, [grades]);
+        if (!unsaved.length) return;
+        const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+        window.addEventListener("beforeunload", warn);
+        return () => window.removeEventListener("beforeunload", warn);
+    }, [unsaved.length]);
 
     const filtered = useMemo(() => {
         if (!search.trim()) return grades;
@@ -503,8 +517,7 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
         if (names.length === 0) return;
 
         const emptyCount = filtered.filter((g: any) => {
-            const v = localValues[g.studentName]?.[which];
-            return v === undefined || v.trim() === "";
+            return shown(g, which).trim() === "";
         }).length;
 
         // Nothing left to fill — offer to reset the column instead of doing nothing
@@ -560,8 +573,8 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
         // Validate locally first
         const parsed = parseInput(val, max);
         if (parsed && typeof parsed === "object" && "error" in parsed) {
+            // stays marked until the teacher corrects the cell
             setErrorMap(p => ({ ...p, [key]: parsed.error }));
-            setTimeout(() => setErrorMap(p => { const n = { ...p }; delete n[key]; return n; }), 2500);
             return;
         }
         setErrorMap(p => { const n = { ...p }; delete n[key]; return n; });
@@ -574,11 +587,13 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
                 studentName,
                 values: { [which]: parsed },
             });
+            // the server has it now — unless the teacher typed again meanwhile
+            setLocalValues(p => (p[studentName]?.[which] === val ? withoutEdit(p, studentName, which) : p));
             setSavedMap(p => ({ ...p, [key]: true }));
             setTimeout(() => setSavedMap(p => ({ ...p, [key]: false })), 1500);
         } catch (e: any) {
-            setErrorMap(p => ({ ...p, [key]: e.message ?? "خطأ في الحفظ" }));
-            setTimeout(() => setErrorMap(p => { const n = { ...p }; delete n[key]; return n; }), 2500);
+            // the typed mark stays in its cell, marked, until it is saved
+            setErrorMap(p => ({ ...p, [key]: (typeof e?.data === "string" ? e.data : "") || "لم تُحفظ — تحقّق من الاتصال وأعد المحاولة" }));
         } finally {
             setSavingMap(p => ({ ...p, [key]: false }));
         }
@@ -632,6 +647,14 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
                     <input value={search} onChange={e => setSearch(e.target.value)} aria-label="بحث باسم الطالب" placeholder="بحث باسم الطالب..."
                         className="w-full border-2 border-slate-100 rounded-xl pr-9 pl-3 py-2 text-sm focus:outline-none focus:border-qatar-maroon bg-slate-50"/>
                 </div>
+                {Object.keys(errorMap).length > 0 && (
+                    <div role="alert" className="mt-2 flex items-center gap-2 flex-wrap text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                        <AlertCircle className="w-4 h-4"/>
+                        <span>{Object.keys(errorMap).length} خانة لم تُحفظ — الخانات المحدَّدة بالأحمر. صحّح الدرجة أو أعد المحاولة قبل مغادرة الصفحة.</span>
+                        <button type="button" onClick={() => { for (const u of unsaved) void saveCell(u.name, u.field, localValues[u.name][u.field]); }}
+                            className="px-3 py-1 rounded-lg bg-rose-700 text-white">إعادة المحاولة</button>
+                    </div>
+                )}
                 {(fillMsg || pendingFills.length > 0) && (
                     <div role="status" className="mt-2 flex items-center gap-2 flex-wrap text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 animate-in fade-in">
                         {fillMsg && <span className="ml-1">{fillMsg}</span>}
@@ -695,11 +718,11 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
                         )}
                         {filtered.map((g: any, idx: number) => {
                             const summary = calcSummary({
-                                a1: cleanParse(localValues[g.studentName]?.a1 ?? "", max),
-                                a2: cleanParse(localValues[g.studentName]?.a2 ?? "", max),
-                                a3: cleanParse(localValues[g.studentName]?.a3 ?? "", max),
-                                a4: cleanParse(localValues[g.studentName]?.a4 ?? "", max),
-                                a5: cleanParse(localValues[g.studentName]?.a5 ?? "", max),
+                                a1: cleanParse(shown(g, "a1"), max),
+                                a2: cleanParse(shown(g, "a2"), max),
+                                a3: cleanParse(shown(g, "a3"), max),
+                                a4: cleanParse(shown(g, "a4"), max),
+                                a5: cleanParse(shown(g, "a5"), max),
                             }, max, finalOutOf);
                             const isPass = summary.finalScore >= settings.passThreshold;
                             const isExcellent = summary.finalScore >= settings.excellenceThreshold;
@@ -715,7 +738,7 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
                                         const isSaving = savingMap[cellKey];
                                         const isSaved = savedMap[cellKey];
                                         const errorMsg = errorMap[cellKey];
-                                        const value = localValues[g.studentName]?.[field] ?? "";
+                                        const value = shown(g, field);
                                         return (
                                             <td key={field} className="border-l border-slate-50 p-0.5">
                                                 <div className="relative" title={errorMsg || ""}>
@@ -729,6 +752,10 @@ function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill
                                                             const original = formatGrade(g[field]);
                                                             if (e.target.value !== original) {
                                                                 saveCell(g.studentName, field, e.target.value);
+                                                            } else {
+                                                                // typed back to the saved mark: nothing to save
+                                                                setLocalValues(p => withoutEdit(p, g.studentName, field));
+                                                                setErrorMap(p => { const n = { ...p }; delete n[cellKey]; return n; });
                                                             }
                                                         }}
                                                         onKeyDown={e => handleKeyDown(e, idx, fieldIdx)}

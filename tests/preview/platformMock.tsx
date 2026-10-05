@@ -19,3 +19,6 @@ export function useMutation(ref: any) { return async (args: any) => {
     else tasks = tasks.map(t => t._id === args.id ? {...t,isActive:args.isActive} : t);
     window.dispatchEvent(new Event("tasks-preview"));
 }; }
+
+// Read-only stand-in: exports ask the server for data the preview does not have
+export const useConvex = () => ({ query: async () => [] as any, mutation: async () => null as any });

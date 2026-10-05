@@ -77,7 +77,7 @@ export default function GradesPrint() {
                         <tr>
                             <th style={{ width: "25%" }}>المادة</th>
                             {settings.assessmentLabels.map((l: string, i: number) => <th key={i}>{l}</th>)}
-                            <th>المجموع<br/>من {5 * settings.maxPerAssessment}</th>
+                            <th>المجموع<br/>من المرصود</th>
                             <th>الدرجة<br/>من {settings.finalScoreOutOf}</th>
                         </tr>
                     </thead>

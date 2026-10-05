@@ -105,14 +105,14 @@ export function buildGradesSheets(data: any): ExcelSheetSpec[] {
         title: `كشف التقييمات القصيرة — ${sheet.subjectName}`,
         meta: [
             classLine,
-            `الدرجة القصوى لكل تقييم ${settings.maxPerAssessment} · النهائية من ${settings.finalScoreOutOf} · حد النجاح ${settings.passThreshold} · حد التميز ${settings.excellenceThreshold}`,
+            `الدرجة الكلية لكل تقييم كما في رأس عموده · النهائية من ${settings.finalScoreOutOf} · حد النجاح ${settings.passThreshold} · حد التميز ${settings.excellenceThreshold}`,
             `تاريخ التصدير: ${exportedAt}`,
         ],
         columns: [
             { header: "م", width: 5, align: "center" },
             { header: "الرقم", width: 14, align: "center" },
             { header: "اسم الطالب", width: 32, bold: true },
-            ...labels.map(l => ({ header: `${l}\n(من ${settings.maxPerAssessment})`, width: 11, align: "center" as const })),
+            ...labels.map((l, i) => ({ header: `${l}\n(من ${sheet.maxes?.[i] ?? settings.maxPerAssessment})`, width: 11, align: "center" as const })),
             { header: `المجموع\n(من المرصود)`, width: 11, align: "center", bold: true },
             { header: `الدرجة النهائية\n(من ${settings.finalScoreOutOf})`, width: 13, align: "center", bold: true, numFmt: "0.00" },
             { header: "الحالة", width: 14, align: "center" },
@@ -144,7 +144,7 @@ export function buildGradesSheets(data: any): ExcelSheetSpec[] {
         },
         notes: [
             "غ = غائب · م = معذور · الخانة الفارغة = لم يُرصد بعد",
-            `الدرجة النهائية = مجموع درجات التقييمات المرصودة ÷ (عددها × ${settings.maxPerAssessment}) × ${settings.finalScoreOutOf} · الغائب يُحتسب صفراً والمعذور لا يدخل في الحساب`,
+            `الدرجة النهائية = مجموع درجات التقييمات المرصودة ÷ مجموع درجاتها الكلية × ${settings.finalScoreOutOf} · الغائب يُحتسب صفراً والمعذور لا يدخل في الحساب`,
         ],
         signatures: SIGNATURE_LINES,
     }));

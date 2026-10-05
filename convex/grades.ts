@@ -1,5 +1,5 @@
 import { memberMutation as mutation, memberQuery as query, staffMutation as adminMutation, staffQuery } from "./platformAccess";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { dueByNow, planContext } from "./assessmentPlan";
 
 async function getSchool(ctx: any) {
@@ -18,6 +18,54 @@ async function includedGrades(ctx: any, schoolId: any): Promise<number[]> {
         .withIndex("by_school", (q: any) => q.eq("schoolId", schoolId))
         .first();
     return s?.includedGrades ?? DEFAULT_INCLUDED_GRADES;
+}
+
+// ── What each assessment is marked out of ─────────────────────────────────
+// The school default (20) holds unless the teacher has set another total for
+// that assessment on that sheet — a 30- or 40-mark assessment is recorded as
+// it was marked. Only totals that differ from the default are stored.
+type SlotMaxes = Partial<Record<(typeof SLOTS)[number], number>>;
+
+async function defaultMax(ctx: any, schoolId: any): Promise<number> {
+    const s = await ctx.db.query("gradeSettings")
+        .withIndex("by_school", (q: any) => q.eq("schoolId", schoolId))
+        .first();
+    return s?.maxPerAssessment ?? 20;
+}
+
+function overridesOf(doc: any): SlotMaxes | undefined {
+    if (!doc) return undefined;
+    const out: SlotMaxes = {};
+    for (const slot of SLOTS) if (typeof doc[slot] === "number") out[slot] = doc[slot];
+    return Object.keys(out).length ? out : undefined;
+}
+
+async function sheetMaxDoc(ctx: any, schoolId: any, className: string, subjectName: string) {
+    return ctx.db.query("assessmentMaxes")
+        .withIndex("by_class_subject", (q: any) =>
+            q.eq("schoolId", schoolId).eq("className", className).eq("subjectName", subjectName))
+        .first();
+}
+
+// The five totals of one sheet, defaults filled in
+async function sheetMaxes(ctx: any, schoolId: any, className: string, subjectName: string): Promise<Record<string, number>> {
+    const fallback = await defaultMax(ctx, schoolId);
+    const doc = await sheetMaxDoc(ctx, schoolId, className, subjectName);
+    return Object.fromEntries(SLOTS.map(slot => [slot, typeof doc?.[slot] === "number" ? doc[slot] : fallback]));
+}
+
+const sheetKey = (className: string, subjectName: string) => `${className}\u0000${subjectName}`;
+
+async function allOverrides(ctx: any, schoolId: any): Promise<Map<string, SlotMaxes>> {
+    const docs = await ctx.db.query("assessmentMaxes")
+        .withIndex("by_school", (q: any) => q.eq("schoolId", schoolId))
+        .collect();
+    const map = new Map<string, SlotMaxes>();
+    for (const d of docs) {
+        const o = overridesOf(d);
+        if (o) map.set(sheetKey(d.className, d.subjectName), o);
+    }
+    return map;
 }
 
 // Support (ESE) sections sit outside the short-assessment scheme altogether.
@@ -113,8 +161,10 @@ export const getClassExport = query({
         }
 
         const roster = await rosterForClass(ctx, school._id, cls.name);
+        const overrides = await allOverrides(ctx, school._id);
 
         const sheets = subjectNames.map(subjectName => {
+            const maxes = overrides.get(sheetKey(cls.name, subjectName));
             const byName = new Map(saved
                 .filter(g => g.subjectName === subjectName)
                 .map(g => [g.studentName.trim(), g] as const));
@@ -127,13 +177,16 @@ export const getClassExport = query({
                 const key = entry.studentName.trim();
                 const g = byName.get(key);
                 byName.delete(key);
-                return { studentName: entry.studentName, nationalId: entry.nationalId ?? "", ...marksOf(g) };
+                return { studentName: entry.studentName, nationalId: entry.nationalId ?? "", ...marksOf(g), maxes };
             });
             // Marks under a name no longer on the roster still belong in the record
             for (const g of [...byName.values()].sort(byArabicName)) {
-                students.push({ studentName: g.studentName, nationalId: "", ...marksOf(g) });
+                students.push({ studentName: g.studentName, nationalId: "", ...marksOf(g), maxes });
             }
-            return { subjectName, students };
+            return {
+                subjectName, students,
+                maxes: SLOTS.map(slot => maxes?.[slot] ?? settings.maxPerAssessment),
+            };
         });
 
         return {
@@ -217,14 +270,16 @@ export const getGradesByClassSubject = query({
 
         const savedByName = new Map(saved.map(g => [g.studentName.trim(), g]));
         const roster = await rosterForClass(ctx, school._id, args.className);
+        const maxes = overridesOf(await sheetMaxDoc(ctx, school._id, args.className, args.subjectName));
 
         const rows: any[] = roster.map(entry => {
             const existing = savedByName.get(entry.studentName.trim());
             if (existing) {
                 savedByName.delete(entry.studentName.trim());
-                return existing;
+                return { ...existing, maxes };
             }
             return {
+                maxes,
                 studentId: entry.studentId,
                 studentName: entry.studentName,
                 className: entry.className,
@@ -236,7 +291,7 @@ export const getGradesByClassSubject = query({
 
         // Imported rows whose name no longer matches anyone on the roster —
         // keep them visible rather than silently dropping entered marks.
-        const orphans = [...savedByName.values()].sort(byArabicName);
+        const orphans = [...savedByName.values()].sort(byArabicName).map(g => ({ ...g, maxes }));
         return [...rows, ...orphans];
     },
 });
@@ -246,9 +301,11 @@ export const getStudentGrades = query({
     handler: async (ctx, args) => {
         const school = await ctx.db.query("schools").first();
         if (!school) return [];
-        return ctx.db.query("studentGrades")
+        const overrides = await allOverrides(ctx, school._id);
+        const rows = await ctx.db.query("studentGrades")
             .withIndex("by_student", q => q.eq("schoolId", school._id).eq("studentName", args.studentName))
             .collect();
+        return rows.map(g => ({ ...g, maxes: overrides.get(sheetKey(g.className, g.subjectName)) }));
     },
 });
 
@@ -261,8 +318,10 @@ export const getAllGrades = query({
         const all = await ctx.db.query("studentGrades")
             .withIndex("by_school", q => q.eq("schoolId", school._id))
             .collect();
+        const overrides = await allOverrides(ctx, school._id);
         // Keep the result views in step with the class list
-        return all.filter(g => included.includes(g.grade) && !isSupportClass(g.className));
+        return all.filter(g => included.includes(g.grade) && !isSupportClass(g.className))
+            .map(g => ({ ...g, maxes: overrides.get(sheetKey(g.className, g.subjectName)) }));
     },
 });
 
@@ -520,22 +579,63 @@ export const getClassesAndSubjects = query({
 });
 
 // ── Mutations ─────────────────────────────────────────────────────────────
-async function validateAssessment(ctx: any, value: any): Promise<void> {
+// A mark is checked against the total of its own assessment on its own sheet.
+// ConvexError, so the teacher reads the reason rather than «Server Error».
+function validateAssessment(value: any, max: number): void {
     if (value === undefined || value === null) return;
     if (value === "absent" || value === "excused") return;
-    if (typeof value === "number") {
-        const school = await ctx.db.query("schools").first();
-        const settings = school
-            ? await ctx.db.query("gradeSettings")
-                .withIndex("by_school", (q: any) => q.eq("schoolId", school._id)).first()
-            : null;
-        const max = settings?.maxPerAssessment ?? 20;
-        if (value < 0) throw new Error(`الدرجة لا يمكن أن تكون أقل من 0`);
-        if (value > max) throw new Error(`الدرجة لا يمكن أن تتجاوز ${max}`);
+    if (typeof value === "number" && Number.isFinite(value)) {
+        if (value < 0) throw new ConvexError("الدرجة لا يمكن أن تكون أقل من 0");
+        if (value > max) throw new ConvexError(`الدرجة ${value} أكبر من الدرجة الكلية للتقييم (${max}) — عدّل الدرجة الكلية من رأس العمود إن كان التقييم من أكثر`);
         return;
     }
-    throw new Error(`قيمة غير صالحة: ${value}`);
+    throw new ConvexError(`قيمة غير صالحة: ${value}`);
 }
+
+// The teacher sets what an assessment is out of. It cannot drop below a mark
+// already recorded in that column.
+export const getSheetMaxes = query({
+    args: { className: v.string(), subjectName: v.string() },
+    handler: async (ctx, args) => {
+        const school = await ctx.db.query("schools").first();
+        if (!school) return SLOTS.map(() => 20);
+        const maxes = await sheetMaxes(ctx, school._id, args.className, args.subjectName);
+        return SLOTS.map(slot => maxes[slot]);
+    },
+});
+
+export const setAssessmentMax = mutation({
+    args: {
+        className: v.string(),
+        subjectName: v.string(),
+        which: v.union(v.literal("a1"), v.literal("a2"), v.literal("a3"), v.literal("a4"), v.literal("a5")),
+        max: v.number(),
+        updatedBy: v.optional(v.string()),
+    },
+    handler: async (ctx, args) => {
+        const school = await getSchool(ctx);
+        if (!Number.isFinite(args.max) || args.max < 1 || args.max > 200) throw new ConvexError("الدرجة الكلية بين 1 و200");
+        const rows = await ctx.db.query("studentGrades")
+            .withIndex("by_class_subject", q =>
+                q.eq("schoolId", school._id).eq("className", args.className).eq("subjectName", args.subjectName))
+            .collect();
+        const highest = Math.max(0, ...rows.map(r => (typeof (r as any)[args.which] === "number" ? (r as any)[args.which] : 0)));
+        if (highest > args.max) throw new ConvexError(`توجد درجة مرصودة (${highest}) أعلى من ${args.max} — عدّلها أولاً أو اختر درجة كلية أكبر`);
+
+        const fallback = await defaultMax(ctx, school._id);
+        const doc = await sheetMaxDoc(ctx, school._id, args.className, args.subjectName);
+        const value = args.max === fallback ? undefined : args.max;
+        if (doc) {
+            await ctx.db.patch(doc._id, { [args.which]: value, updatedAt: Date.now(), updatedBy: args.updatedBy } as any);
+        } else if (value !== undefined) {
+            await ctx.db.insert("assessmentMaxes", {
+                schoolId: school._id, className: args.className, subjectName: args.subjectName,
+                [args.which]: value, updatedAt: Date.now(), updatedBy: args.updatedBy,
+            } as any);
+        }
+        return args.max;
+    },
+});
 
 export const upsertGrade = mutation({
     args: {
@@ -552,10 +652,11 @@ export const upsertGrade = mutation({
         updatedBy: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
-        // Validate ranges
-        await Promise.all([args.a1, args.a2, args.a3, args.a4, args.a5].map(v => validateAssessment(ctx, v)));
-
         const school = await getSchool(ctx);
+        // Each mark against the total of its own assessment
+        const maxes = await sheetMaxes(ctx, school._id, args.className, args.subjectName);
+        for (const slot of SLOTS) validateAssessment(args[slot], maxes[slot]);
+
         const all = await ctx.db.query("studentGrades")
             .withIndex("by_class_subject", q =>
                 q.eq("schoolId", school._id)
@@ -618,8 +719,8 @@ export const fillAssessment = mutation({
         updatedBy: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
-        await validateAssessment(ctx, args.value);
         const school = await getSchool(ctx);
+        validateAssessment(args.value, (await sheetMaxes(ctx, school._id, args.className, args.subjectName))[args.which]);
 
         const existing = await ctx.db.query("studentGrades")
             .withIndex("by_class_subject", q =>
@@ -684,8 +785,9 @@ export const restoreAssessment = mutation({
         updatedBy: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
-        await Promise.all(args.entries.map(e => validateAssessment(ctx, e.value)));
         const school = await getSchool(ctx);
+        const restoreMax = (await sheetMaxes(ctx, school._id, args.className, args.subjectName))[args.which];
+        for (const e of args.entries) validateAssessment(e.value, restoreMax);
 
         const existing = await ctx.db.query("studentGrades")
             .withIndex("by_class_subject", q =>
@@ -742,11 +844,13 @@ export const updateAssessment = mutation({
         updatedBy: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
-        await validateAssessment(ctx, args.value);
         const patch: any = { updatedAt: Date.now(), updatedBy: args.updatedBy };
         patch[args.which] = args.value ?? undefined;
 
         const existing = await ctx.db.get(args.id);
+        if (existing) {
+            validateAssessment(args.value, (await sheetMaxes(ctx, existing.schoolId, existing.className, existing.subjectName))[args.which]);
+        }
         if (existing && isBlankGradeRow({ ...existing, ...patch })) {
             await ctx.db.delete(args.id);
             return;

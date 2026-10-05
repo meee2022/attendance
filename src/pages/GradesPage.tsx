@@ -48,7 +48,7 @@ export function parseInput(s: string, max?: number): GradeValue | { error: strin
     const n = Number(t);
     if (isNaN(n)) return { error: "قيمة غير صالحة" };
     if (n < 0) return { error: "لا يمكن أن تكون أقل من 0" };
-    if (max !== undefined && n > max) return { error: `لا يمكن أن تتجاوز ${max}` };
+    if (max !== undefined && n > max) return { error: `أكبر من الدرجة الكلية للتقييم (${max}) — عدّل خانة «من» أعلى العمود إن كان التقييم من أكثر` };
     return n;
 }
 
@@ -357,6 +357,11 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
     const fillColumn = useMutation(api.grades.fillAssessment);
     // @ts-ignore
     const restoreColumn = useMutation(api.grades.restoreAssessment);
+    // What each assessment of this sheet is out of (20 unless the teacher set otherwise)
+    const sheetMaxes = useQuery((api as any).grades.getSheetMaxes,
+        selectedClass && selectedSubject ? { className: selectedClass, subjectName: selectedSubject } : "skip" as any
+    ) as number[] | undefined;
+    const setMax = useMutation((api as any).grades.setAssessmentMax);
 
     const classes = meta.classes ?? [];
     const subjectsFor = (className: string): string[] => {
@@ -406,7 +411,7 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
             <WeekBanner subjectName={selectedSubject || undefined} grade={selectedClassMeta?.grade}/>
             {selectedClass && selectedSubject && grades && importRoster && <ScoreExcelImport
                 key={`import-${selectedClass}-${selectedSubject}`} mode="grades" className={selectedClass} subjectName={selectedSubject} title={selectedSubject}
-                columns={[1,2,3,4,5].map(n => ({ key: `a${n}`, label: settings.assessmentLabels?.[n-1] || `تقييم ${n}`, max: settings.maxPerAssessment ?? 20 }))}
+                columns={[1,2,3,4,5].map(n => ({ key: `a${n}`, label: settings.assessmentLabels?.[n-1] || `تقييم ${n}`, max: sheetMaxes?.[n-1] ?? settings.maxPerAssessment ?? 20 }))}
                 students={importRoster.filter(s => s.studentId).map(s => ({ id: s.studentId, name: s.studentName, values: grades.find(g => g.studentName.trim() === s.studentName.trim()) ?? {} }))}/>} 
 
             {/* A track with no subjects assigned yet cannot be graded at all */}
@@ -430,6 +435,10 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
                     settings={settings}
                     classMeta={selectedClassMeta}
                     subjectName={selectedSubject}
+                    maxes={sheetMaxes}
+                    onSetMax={async (which: string, max: number) => {
+                        await setMax({ className: selectedClass, subjectName: selectedSubject, which, max });
+                    }}
                     onUpdate={async (data: any) => {
                         await upsert({
                             studentName: data.studentName,
@@ -464,11 +473,26 @@ function EntryView({ meta, settings }: { meta: any; settings: any }) {
     );
 }
 
-export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill, onUndoFill }: any) {
+export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate, onFill, onUndoFill, maxes, onSetMax }: any) {
     const [search, setSearch] = useState("");
     const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
     const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
-    const max = settings.maxPerAssessment;
+    // Each assessment has its own total; the school default until the teacher changes it
+    const maxOf = (field: string): number => maxes?.[Number(field.slice(1)) - 1] ?? settings.maxPerAssessment;
+    const maxesByField = Object.fromEntries(["a1", "a2", "a3", "a4", "a5"].map(f => [f, maxOf(f)]));
+    const [maxDraft, setMaxDraft] = useState<Record<string, string>>({});
+    const [maxError, setMaxError] = useState("");
+    const saveMax = async (field: string) => {
+        const typed = maxDraft[field];
+        if (typed === undefined) return;
+        const n = Number(normalizeDigits(typed.trim()));
+        setMaxDraft(p => { const next = { ...p }; delete next[field]; return next; });
+        if (!typed.trim() || n === maxOf(field)) return;
+        if (!Number.isFinite(n) || n < 1 || n > 200) { setMaxError("الدرجة الكلية رقم بين 1 و200"); return; }
+        setMaxError("");
+        try { await onSetMax?.(field, n); }
+        catch (e: any) { setMaxError((typeof e?.data === "string" ? e.data : "") || "تعذّر تغيير الدرجة الكلية"); }
+    };
     const finalOutOf = settings.finalScoreOutOf;
     const labels = settings.assessmentLabels;
 
@@ -524,7 +548,7 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
         let overwrite = false;
         if (emptyCount === 0) {
             if (!window.confirm(
-                `كل خانات «${label}» مرصودة بالفعل (${names.length}). هل تريد استبدالها جميعاً بالدرجة الكاملة (${max})؟`
+                `كل خانات «${label}» مرصودة بالفعل (${names.length}). هل تريد استبدالها جميعاً بالدرجة الكاملة (${maxOf(which)})؟`
             )) return;
             overwrite = true;
         }
@@ -537,10 +561,10 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
 
         setFilling(which);
         try {
-            const res = await onFill(which, max, names, overwrite);
+            const res = await onFill(which, maxOf(which), names, overwrite);
             const skipped = res?.skipped ?? 0;
             setFillMsg(
-                `تم ملء ${res?.filled ?? 0} خانة في «${label}» بالدرجة ${max}` +
+                `تم ملء ${res?.filled ?? 0} خانة في «${label}» بالدرجة ${maxOf(which)}` +
                 (skipped > 0 ? ` — وتُركت ${skipped} خانة مرصودة كما هي` : "")
             );
             // Keep the first snapshot for this column — it is the real "before"
@@ -571,7 +595,7 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
     const saveCell = async (studentName: string, which: string, val: string) => {
         const key = `${studentName}|${which}`;
         // Validate locally first
-        const parsed = parseInput(val, max);
+        const parsed = parseInput(val, maxOf(which));
         if (parsed && typeof parsed === "object" && "error" in parsed) {
             // stays marked until the teacher corrects the cell
             setErrorMap(p => ({ ...p, [key]: parsed.error }));
@@ -636,7 +660,7 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
                 </div>
                 <div className="text-[10px] text-white/80 font-bold flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
                     <AlertCircle className="w-3 h-3"/>
-                    من 0 إلى {max} · "غ" غياب (صفر) · "م" معذور (لا يُحتسب) · النهائية من المرصود · Enter للانتقال
+                    الدرجة الكلية لكل تقييم تُعدَّل من خانة «من» أعلى عموده · "غ" غياب (صفر) · "م" معذور (لا يُحتسب) · النهائية من المرصود · Enter للانتقال
                 </div>
             </div>
 
@@ -651,6 +675,7 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
                     <div role="alert" className="mt-2 flex items-center gap-2 flex-wrap text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
                         <AlertCircle className="w-4 h-4"/>
                         <span>{Object.keys(errorMap).length} خانة لم تُحفظ — الخانات المحدَّدة بالأحمر. صحّح الدرجة أو أعد المحاولة قبل مغادرة الصفحة.</span>
+                        <span className="basis-full font-semibold">{[...new Set(Object.values(errorMap))].join(" · ")}</span>
                         <button type="button" onClick={() => { for (const u of unsaved) void saveCell(u.name, u.field, localValues[u.name][u.field]); }}
                             className="px-3 py-1 rounded-lg bg-rose-700 text-white">إعادة المحاولة</button>
                     </div>
@@ -675,6 +700,9 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
                         </button>
                     </div>
                 )}
+                {maxError && (
+                    <p role="alert" className="mt-2 text-xs font-bold text-rose-800 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{maxError}</p>
+                )}
                 {search.trim() && (
                     <p className="mt-2 text-[11px] font-bold text-amber-700">
                         البحث مُفعَّل — زر «ملء» سيطبّق على الـ {filtered.length} طالب الظاهرين فقط.
@@ -695,9 +723,19 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
                                     <th key={i} className="px-1 py-2 text-center font-semibold text-slate-600 border-l border-slate-100 min-w-[68px]">
                                         <div className="flex flex-col items-center gap-1">
                                             <span>{label}</span>
+                                            <label className="flex items-center gap-1 text-[10px] font-bold text-slate-500" title="الدرجة الكلية لهذا التقييم">
+                                                من
+                                                <input inputMode="numeric" aria-label={`الدرجة الكلية لـ${label}`}
+                                                    value={maxDraft[field] ?? String(maxOf(field))}
+                                                    onChange={e => setMaxDraft(p => ({ ...p, [field]: e.target.value }))}
+                                                    onBlur={() => void saveMax(field)}
+                                                    onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                                    className={`w-10 px-1 py-0.5 text-center rounded-md border bg-white focus:outline-none focus:border-qatar-maroon ${
+                                                        maxOf(field) !== settings.maxPerAssessment ? "border-qatar-maroon text-qatar-maroon" : "border-slate-200 text-slate-600"}`}/>
+                                            </label>
                                             <button type="button" onClick={() => handleFill(field, label)}
                                                 disabled={filling !== null || filtered.length === 0}
-                                                title={`ملء العمود بالدرجة الكاملة (${max})`}
+                                                title={`ملء العمود بالدرجة الكاملة (${maxOf(field)})`}
                                                 className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-slate-500 bg-white border border-slate-200 hover:text-qatar-maroon hover:border-qatar-maroon/40 disabled:opacity-40 disabled:pointer-events-none transition-colors">
                                                 {filling === field
                                                     ? <span className="w-3 h-3 border-2 border-slate-300 border-t-qatar-maroon rounded-full animate-spin"/>
@@ -718,12 +756,13 @@ export function GradesGrid({ grades, settings, classMeta, subjectName, onUpdate,
                         )}
                         {filtered.map((g: any, idx: number) => {
                             const summary = calcSummary({
-                                a1: cleanParse(shown(g, "a1"), max),
-                                a2: cleanParse(shown(g, "a2"), max),
-                                a3: cleanParse(shown(g, "a3"), max),
-                                a4: cleanParse(shown(g, "a4"), max),
-                                a5: cleanParse(shown(g, "a5"), max),
-                            }, max, finalOutOf);
+                                a1: cleanParse(shown(g, "a1"), maxOf("a1")),
+                                a2: cleanParse(shown(g, "a2"), maxOf("a2")),
+                                a3: cleanParse(shown(g, "a3"), maxOf("a3")),
+                                a4: cleanParse(shown(g, "a4"), maxOf("a4")),
+                                a5: cleanParse(shown(g, "a5"), maxOf("a5")),
+                                maxes: maxesByField,
+                            }, settings.maxPerAssessment, finalOutOf);
                             const isPass = summary.finalScore >= settings.passThreshold;
                             const isExcellent = summary.finalScore >= settings.excellenceThreshold;
                             // placeholder rows have no _id yet; the name is unique per class+subject

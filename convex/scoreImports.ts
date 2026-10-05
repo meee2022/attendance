@@ -20,6 +20,8 @@ export const save = memberMutation({
         if (args.mode === "diagnostics" && (!test || test.schoolId !== school._id || !test.isActive || !test.classNames.includes(cls.name))) throw new Error("الاختبار غير متاح لهذا الفصل");
         if (args.mode === "grades" && !args.subjectName?.trim()) throw new Error("اختر المادة");
         const settings = await ctx.db.query("gradeSettings").withIndex("by_school", q => q.eq("schoolId", school._id)).first();
+        // a short assessment may be out of more than the default on this sheet
+        const sheetMax: any = args.mode === "grades" ? await ctx.db.query("assessmentMaxes").withIndex("by_class_subject", q => q.eq("schoolId", school._id).eq("className", cls.name).eq("subjectName", args.subjectName!)).first() : null;
         const saved: any[] = args.mode === "diagnostics"
             ? await ctx.db.query("diagnosticScores").withIndex("by_test_class", q => q.eq("testId", test!._id).eq("className", cls.name)).collect()
             : await ctx.db.query("studentGrades").withIndex("by_class_subject", q => q.eq("schoolId", school._id).eq("className", cls.name).eq("subjectName", args.subjectName!)).collect();
@@ -36,7 +38,7 @@ export const save = memberMutation({
             const patch: Record<string, number | string> = {};
             for (const cell of row.cells) {
                 const q = test?.questions.find(x => String(x.n) === cell.key);
-                const max = args.mode === "diagnostics" ? q?.maxMark : settings?.maxPerAssessment ?? 20;
+                const max = args.mode === "diagnostics" ? q?.maxMark : sheetMax?.[cell.key] ?? settings?.maxPerAssessment ?? 20;
                 if (max === undefined || !Number.isFinite(max) || max <= 0 || cell.max !== max || args.mode === "grades" && !/^a[1-5]$/.test(cell.key)) throw new Error("تغير توزيع الدرجات أو العمود غير صحيح؛ أعد المعاينة");
                 if (cell.value === null || typeof cell.value === "number" && (!Number.isFinite(cell.value) || cell.value < 0 || cell.value > max) || typeof cell.value === "string" && (args.mode !== "grades" || !["absent", "excused"].includes(cell.value))) throw new Error("توجد درجة غير صالحة أو تتجاوز الدرجة النهائية");
                 if ((original[cell.key] ?? null) !== cell.expected) throw new Error("تغيرت درجات طالب بعد المعاينة؛ أعد المعاينة قبل الحفظ");

@@ -152,8 +152,8 @@ export default function GradesSheetPrint() {
                                 <th style={{ width: "26px" }}>م</th>
                                 <th style={{ width: "86px" }}>الرقم</th>
                                 <th style={{ minWidth: "160px" }}>اسم الطالب</th>
-                                {labels.map(l => (
-                                    <th key={l}>{l}<div style={{ fontSize: "9px", fontWeight: 400 }}>(من {settings.maxPerAssessment})</div></th>
+                                {labels.map((l, i) => (
+                                    <th key={l}>{l}<div style={{ fontSize: "9px", fontWeight: 400 }}>(من {sheet.maxes?.[i] ?? settings.maxPerAssessment})</div></th>
                                 ))}
                                 <th>المجموع</th>
                                 <th>النهائية<div style={{ fontSize: "9px", fontWeight: 400 }}>(من {settings.finalScoreOutOf})</div></th>

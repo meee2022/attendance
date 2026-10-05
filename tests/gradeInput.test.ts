@@ -13,7 +13,8 @@ describe("short-assessment mark input", () => {
         expect(parseInput("غ", 20)).toBe("absent");
         expect(parseInput("م", 20)).toBe("excused");
         expect(parseInput("", 20)).toBeNull();
-        expect(parseInput("٢٥", 20)).toEqual({ error: "لا يمكن أن تتجاوز 20" });
+        expect(parseInput("٢٥", 20)).toMatchObject({ error: expect.stringContaining("أكبر من الدرجة الكلية للتقييم (20)") });
+        expect(parseInput("٣٦", 40)).toBe(36);
         expect(parseInput("abc", 20)).toEqual({ error: "قيمة غير صالحة" });
     });
 });

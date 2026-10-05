@@ -247,6 +247,22 @@ export default defineSchema({
       .index("by_student", ["schoolId", "studentName"])
       .index("by_subject", ["schoolId", "subjectName"]),
 
+    // الدرجة الكلية لكل تقييم في كشف (شعبة + مادة) حين تختلف عن الافتراضية:
+    // تقييم من 30 أو 40 يُرصد بدرجته الفعلية
+    assessmentMaxes: defineTable({
+        schoolId: v.id("schools"),
+        className: v.string(),
+        subjectName: v.string(),
+        a1: v.optional(v.number()),
+        a2: v.optional(v.number()),
+        a3: v.optional(v.number()),
+        a4: v.optional(v.number()),
+        a5: v.optional(v.number()),
+        updatedAt: v.number(),
+        updatedBy: v.optional(v.string()),
+    }).index("by_class_subject", ["schoolId", "className", "subjectName"])
+      .index("by_school", ["schoolId"]),
+
     // إعدادات نظام الدرجات
     gradeSettings: defineTable({
         schoolId: v.id("schools"),

@@ -5,7 +5,7 @@
 // never counted.
 
 import {
-    DOMAINS, parseRatings,
+    DOMAINS, formatDate, parseRatings,
     type Domain, type Rating, type VisitorRole,
 } from "../../convex/visitMath";
 
@@ -32,6 +32,7 @@ export type VisitRow = {
     status: "draft" | "submitted";
     coordinatorApproval?: { name: string; at: number } | null;
     deputyApproval?: { name: string; at: number } | null;
+    teacherSign?: { method: "device" | "link" | "paper" | "none"; at: number; reason?: string | null; comment?: string | null } | null;
     averageScore: number | null;
     domainAverages: string;
     ratings: string;
@@ -73,6 +74,29 @@ export function applyFilters(visits: VisitRow[], f: Filters): VisitRow[] {
 }
 
 export const submittedOnly = (visits: VisitRow[]) => visits.filter(x => x.status === "submitted");
+
+// Where a coordinator's visit stands: signed by the coordinator, it waits for
+// the teacher's signature, is then ready to send, then waits for the deputy.
+export type VisitStage = "draft" | "teacher" | "ready" | "deputy" | "approved";
+type Staged = Pick<VisitRow, "status" | "visitorRole" | "coordinatorApproval" | "reviewRequest" | "teacherSign">;
+export function stageOf(v: Staged): VisitStage {
+    if (v.status === "submitted") return "approved";
+    if (v.visitorRole !== "coordinator" || !v.coordinatorApproval) return "draft";
+    if (v.reviewRequest?.toRole === "deputy") return "deputy";
+    return v.teacherSign ? "ready" : "teacher";
+}
+export const STAGE_LABELS: Record<VisitStage, string> = {
+    draft: "مسودة", teacher: "بانتظار توقيع المعلم", ready: "جاهزة للإرسال للنائب",
+    deputy: "بانتظار اعتماد النائب", approved: "معتمدة",
+};
+
+export const dayOfStamp = (at: number) => formatDate(new Date(at + 3 * 3600_000).toISOString().slice(0, 10)); // Qatar time
+export function teacherSignText(sign: NonNullable<VisitRow["teacherSign"]>) {
+    return sign.method === "device" ? `وقّع المعلم على الجهاز · ${dayOfStamp(sign.at)}`
+        : sign.method === "link" ? `وقّع المعلم عبر الرابط · ${dayOfStamp(sign.at)}`
+        : sign.method === "paper" ? `وقّع المعلم على النسخة الورقية · ${dayOfStamp(sign.at)}`
+        : `لم يوقّع المعلم: ${sign.reason ?? ""}`;
+}
 
 // Compare two dates from the same role and named visitor, on unchanged criteria
 // measured in both visits. Missing evidence is not evidence of decline.

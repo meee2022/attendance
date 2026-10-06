@@ -1,19 +1,20 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useConvex } from "convex/react";
-import { FileDown, ImageUp, Loader2, Mail, MessageCircle, PenLine, Send, Trash2, Undo2, X } from "lucide-react";
+import { Check, FileDown, ImageUp, Loader2, Mail, MessageCircle, PenLine, Send, Trash2, Undo2, X } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { useSupervisionMutation, useSupervisionQuery, useSupervisionSession } from "../../lib/supervisionSession";
-import type { VisitRow } from "../../lib/visitStats";
+import { STAGE_LABELS, stageOf, teacherSignText, type VisitRow } from "../../lib/visitStats";
+import { SignaturePad, type SignaturePadHandle } from "./SignaturePad";
 import { formatDate } from "../../../convex/visitMath";
 import type { Session } from "./VisitsPage";
 
 // The steps around a visit that are not the form itself: the visitor's
-// signature (uploaded once), sending a draft for review, and e-mailing the
-// submitted form to the teacher.
+// signature (uploaded or drawn once), a visit waiting for its next step, and
+// sending the form to the teacher.
 
-const errorText = (e: any, fallback: string) => typeof e?.data === "string" ? e.data : fallback;
+export const errorText = (e: any, fallback: string) => typeof e?.data === "string" ? e.data : fallback;
 
-async function uploadFile(getUrl: () => Promise<string>, file: Blob) {
+export async function uploadFile(getUrl: () => Promise<string>, file: Blob) {
     const url = await getUrl();
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
     if (!res.ok) throw new Error("upload failed");
@@ -33,37 +34,57 @@ export function MySignatureButton({ session }: { session: Session }) {
     </>;
 }
 
-function MySignatureDialog({ onClose }: { onClose: () => void }) {
+// The signature is added once — a picture of it, or drawn here — and then goes
+// into the visitor's cell on every visit they sign
+export function MySignatureDialog({ onClose, notice }: { onClose: () => void; notice?: string }) {
     const url = useSupervisionQuery((api as any).visitWorkflow.mySignature) as string | null | undefined;
     const getUploadUrl = useSupervisionMutation((api as any).visitWorkflow.uploadUrl);
     const setSignature = useSupervisionMutation((api as any).visitWorkflow.setMySignature);
+    const pad = useRef<SignaturePadHandle>(null);
+    const [drawing, setDrawing] = useState(false);
+    const [drawn, setDrawn] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
+    const save = async (file: Blob) => {
+        setBusy(true); setError("");
+        try { await setSignature({ storageId: await uploadFile(() => getUploadUrl({}), file) }); setDrawing(false); setDrawn(false); }
+        catch (e) { setError(errorText(e, "تعذّر حفظ التوقيع")); }
+        finally { setBusy(false); }
+    };
     const upload = async (file: File) => {
         if (!/^image\/(png|jpeg)$/.test(file.type)) { setError("اختر صورة PNG أو JPG"); return; }
         if (file.size > 2 * 1024 * 1024) { setError("الصورة أكبر من 2 ميجا"); return; }
-        setBusy(true); setError("");
-        try { await setSignature({ storageId: await uploadFile(() => getUploadUrl({}), file) }); }
-        catch (e) { setError(errorText(e, "تعذّر رفع التوقيع")); }
-        finally { setBusy(false); }
+        await save(file);
     };
     return (
         <Dialog title="توقيعي" onClose={onClose}>
+            {notice && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">{notice}</p>}
             <p className="text-xs font-bold text-slate-500 leading-relaxed">
-                يُرفع مرة واحدة ويُطبع تلقائيًا في خانة توقيعك على زياراتك المعتمدة. يُفضَّل PNG بخلفية شفافة.
+                يُضاف مرة واحدة — صورة توقيعك أو رسمه هنا — ثم ينزل تلقائيًا في خانة توقيعك على كل زيارة توقّعها. للصورة يُفضَّل PNG بخلفية شفافة.
             </p>
             {url === undefined ? <div className="h-24 rounded-xl bg-slate-50 animate-pulse"/>
                 : url ? <img src={url} alt="توقيعي" className="h-24 max-w-full object-contain rounded-xl border border-slate-100 bg-white p-2 mx-auto"/>
-                : <p className="text-xs font-bold text-slate-400 text-center py-4">لم تُرفع توقيعًا بعد — تبقى الخانة فارغة للتوقيع باليد.</p>}
-            <div className="flex gap-2 justify-center">
+                : <p className="text-xs font-bold text-slate-400 text-center py-4">لم تُضف توقيعك بعد.</p>}
+            {drawing && <div className="space-y-2">
+                <SignaturePad ref={pad} onChange={setDrawn}/>
+                <button disabled={!drawn || busy} onClick={async () => { const blob = await pad.current?.toBlob(); if (blob) await save(blob); }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-qatar-maroon text-white text-sm font-black disabled:opacity-50">
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4"/>}حفظ التوقيع المرسوم
+                </button>
+            </div>}
+            <div className="flex gap-2 justify-center flex-wrap">
                 <label className="flex items-center gap-2 px-4 py-2 rounded-xl bg-qatar-maroon text-white text-xs font-black cursor-pointer">
-                    {busy ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImageUp className="w-4 h-4"/>}
-                    {url ? "تغيير التوقيع" : "رفع التوقيع"}
+                    {busy && !drawing ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImageUp className="w-4 h-4"/>}
+                    {url ? "تغيير الصورة" : "رفع صورة التوقيع"}
                     <input type="file" accept="image/png,image/jpeg" className="hidden" disabled={busy}
                         onChange={e => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }}/>
                 </label>
+                {!drawing && <button disabled={busy} onClick={() => { setError(""); setDrawing(true); }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-qatar-maroon text-qatar-maroon text-xs font-black">
+                    <PenLine className="w-4 h-4"/>رسم التوقيع
+                </button>}
                 {url && <button disabled={busy} onClick={async () => {
-                    if (!window.confirm("إزالة توقيعك؟ لن يُطبع على الزيارات التي تُعتمد بعد ذلك.")) return;
+                    if (!window.confirm("إزالة توقيعك؟ لن يظهر على الزيارات التي توقّعها بعد ذلك.")) return;
                     setBusy(true); try { await setSignature({ storageId: null }); } catch (e) { setError(errorText(e, "تعذّرت الإزالة")); } finally { setBusy(false); }
                 }} className="flex items-center gap-1 px-3 py-2 rounded-xl border-2 border-rose-100 text-xs font-black text-rose-600">
                     <Trash2 className="w-4 h-4"/>إزالة
@@ -78,52 +99,6 @@ function MySignatureDialog({ onClose }: { onClose: () => void }) {
 export function isReviewer(v: Pick<VisitRow, "status" | "reviewRequest">, session: Session) {
     const r = v.reviewRequest;
     return v.status === "draft" && !!r && (r.toRole === "deputy" ? session.role === "deputy" : r.toVisitorId === session.visitorId);
-}
-
-// Choose who reviews the draft; the draft is saved first by the caller
-export function SendForReviewDialog({ department, onSend, onClose }: {
-    department: string;
-    onSend: (target: { toRole: "deputy" | "coordinator"; toVisitorId?: string; name: string }, note: string) => Promise<void>;
-    onClose: () => void;
-}) {
-    const options = useSupervisionQuery((api as any).visitWorkflow.reviewers, { department }) as any[] | undefined;
-    const [choice, setChoice] = useState("");
-    const [note, setNote] = useState("");
-    const [busy, setBusy] = useState(false);
-    const [error, setError] = useState("");
-    const picked = options?.find(o => o.key === choice);
-    return (
-        <Dialog title="إرسال الزيارة للمراجعة" onClose={onClose}>
-            <p className="text-xs font-bold text-slate-500 leading-relaxed">
-                تُحفظ الزيارة مسودة وتظهر عند المراجِع ليعدّلها ويعتمدها أو يعيدها إليك بملاحظة. تبقى الزيارة باسمك.
-            </p>
-            {!options ? <div className="h-20 rounded-xl bg-slate-50 animate-pulse"/> : (
-                <div className="space-y-2" role="radiogroup" aria-label="المراجِع">
-                    {options.map(o => (
-                        <label key={o.key} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer text-sm font-bold ${choice === o.key ? "border-qatar-maroon bg-qatar-maroon/5" : "border-slate-100"}`}>
-                            <input type="radio" name="reviewer" checked={choice === o.key} onChange={() => setChoice(o.key)} className="accent-qatar-maroon"/>
-                            <span className="text-slate-800">{o.name}</span>
-                            <span className="text-xs text-slate-400 mr-auto">{o.label}</span>
-                        </label>
-                    ))}
-                    {options.length === 0 && <p className="text-xs font-bold text-slate-400">لا يوجد من يمكن الإرسال إليه.</p>}
-                </div>
-            )}
-            <label className="block">
-                <span className="block text-xs font-semibold text-slate-600 mb-1.5">ملاحظة للمراجِع (اختياري)</span>
-                <textarea rows={2} value={note} onChange={e => setNote(e.target.value)} maxLength={1000}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-qatar-maroon"/>
-            </label>
-            {error && <p role="alert" className="text-xs font-bold text-rose-700">{error}</p>}
-            <button disabled={!picked || busy} onClick={async () => {
-                setBusy(true); setError("");
-                try { await onSend({ toRole: picked.toRole, toVisitorId: picked.toVisitorId, name: picked.name }, note); }
-                catch (e) { setError(errorText(e, "تعذّر الإرسال")); setBusy(false); }
-            }} className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-qatar-maroon text-white text-sm font-black disabled:opacity-50">
-                {busy ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}إرسال للمراجعة
-            </button>
-        </Dialog>
-    );
 }
 
 // Shown on the form when the visit is under review, or came back from it
@@ -141,12 +116,15 @@ export function ReviewBanner({ visit, session, onReturned }: { visit: VisitRow; 
         return (
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 space-y-2 text-xs font-bold text-sky-900">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <span>أرسلها {r.byName} لمراجعتك. عدّل ما تراه ثم «مراجعة واعتماد»، أو أعِدها بملاحظة.</span>
+                    <span>{visit.coordinatorApproval ? `وقّعها ${r.byName} وأرسلها لاعتمادك. راجعها ثم «مراجعة واعتماد»، أو أعِدها بملاحظة.` : `أرسلها ${r.byName} لمراجعتك. عدّل ما تراه ثم «مراجعة واعتماد»، أو أعِدها بملاحظة.`}</span>
                     <button onClick={() => setOpen(o => !o)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-sky-300 bg-white text-sky-800">
                         <Undo2 className="w-3.5 h-3.5"/>إعادة للزائر
                     </button>
                 </div>
                 {r.note && <p className="font-semibold whitespace-pre-line">ملاحظته: {r.note}</p>}
+                {visit.coordinatorApproval && <p className={visit.teacherSign && visit.teacherSign.method !== "none" ? "text-emerald-800" : "text-amber-800"}>
+                    {visit.teacherSign ? teacherSignText(visit.teacherSign) : "لم يُسجَّل توقيع المعلم."}
+                </p>}
                 {open && <div className="space-y-2">
                     <textarea rows={2} value={note} onChange={e => setNote(e.target.value)} placeholder="ما الذي يحتاج تعديلًا؟"
                         className="w-full border border-sky-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-800 focus:outline-none"/>
@@ -160,7 +138,7 @@ export function ReviewBanner({ visit, session, onReturned }: { visit: VisitRow; 
             </div>
         );
     }
-    if (r) return <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">{visit.coordinatorApproval ? "اعتمدها المنسق وهي بانتظار اعتماد النائب النهائي. حفظها كمسودة يلغي الإرسال ويستلزم اعتماد المنسق مرة أخرى." : `مرسلة إلى ${r.toName} للمراجعة — يمكنك متابعة التعديل؛ آخر حفظ هو ما يراه المراجِع.`}</div>;
+    if (r) return <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs font-bold text-sky-900">{visit.coordinatorApproval ? "وقّعها المنسق وهي بانتظار اعتماد النائب النهائي. حفظها كمسودة يلغي الإرسال ويستلزم توقيع المنسق مرة أخرى." : `مرسلة إلى ${r.toName} للمراجعة — يمكنك متابعة التعديل؛ آخر حفظ هو ما يراه المراجِع.`}</div>;
     if (visit.reviewReturn) return (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900 space-y-1">
             <p>أعادها {visit.reviewReturn.byName} بملاحظة:</p>
@@ -170,21 +148,33 @@ export function ReviewBanner({ visit, session, onReturned }: { visit: VisitRow; 
     return null;
 }
 
-// Drafts sent to the signed-in visitor for review
+// What waits for the signed-in visitor: visits sent to them, and — for a
+// coordinator — their own signed visits not yet with the deputy
 export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (id: string) => void }) {
     const session = useSupervisionSession() as Session | null;
     if (!session) return null;
     const mine = visits.filter(v => isReviewer(v, session) || (session.role === "deputy" && v.visitorRole === "coordinator" && v.status === "submitted" && !v.deputyApproval));
-    if (!mine.length) return null;
+    const unfinished = visits.filter(v => session.role === "coordinator" && v.visitorId === session.visitorId && ["teacher", "ready"].includes(stageOf(v)));
+    if (!mine.length && !unfinished.length) return null;
     return (
         <div className="bg-white rounded-2xl border border-sky-200 shadow-sm p-4 space-y-2">
-            <h3 className="font-bold text-slate-700 text-sm">بانتظار مراجعتك ({mine.length})</h3>
+            {mine.length > 0 && <h3 className="font-bold text-slate-700 text-sm">بانتظار مراجعتك ({mine.length})</h3>}
             {mine.map(v => (
                 <button key={v._id} onClick={() => onOpen(v._id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-right text-sm">
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-right text-sm flex-wrap">
                     <span className="font-black text-slate-800">{v.teacherName}</span>
                     <span className="text-xs font-bold text-slate-500">{v.visitorName} · {v.visitDate}</span>
+                    {v.coordinatorApproval && v.teacherSign?.method === "none" && <span className="text-[11px] font-bold text-amber-700">{teacherSignText(v.teacherSign)}</span>}
                     <span className="text-xs font-black text-sky-800 mr-auto">{v.coordinatorApproval ? "اعتماد النائب" : "مراجعة"}</span>
+                </button>
+            ))}
+            {unfinished.length > 0 && <h3 className="font-bold text-slate-700 text-sm">زياراتك التي لم تُرسل للنائب بعد ({unfinished.length})</h3>}
+            {unfinished.map(v => (
+                <button key={v._id} onClick={() => onOpen(v._id)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-right text-sm">
+                    <span className="font-black text-slate-800">{v.teacherName}</span>
+                    <span className="text-xs font-bold text-slate-500">{v.visitDate}</span>
+                    <span className="text-xs font-black text-amber-800 mr-auto">{STAGE_LABELS[stageOf(v)]}</span>
                 </button>
             ))}
         </div>
@@ -290,7 +280,7 @@ export function SendToTeacher({ visitId }: { visitId: string }) {
     );
 }
 
-function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
     return (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true" aria-label={title}>
             <div dir="rtl" className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-auto shadow-xl">

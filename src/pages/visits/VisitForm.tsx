@@ -1,20 +1,21 @@
 import { OriginalVisitPdf } from "./VisitImport";
 import { AutoArchiveVisit } from "./VisitArchive";
-import { ReviewBanner, SendForReviewDialog, SendToTeacher, isReviewer } from "./VisitWorkflow";
+import { MySignatureDialog, ReviewBanner, SendToTeacher } from "./VisitWorkflow";
+import { TeacherSignControl, VisitSteps } from "./VisitSigning";
 import { useUnsavedChanges } from "../../lib/useUnsavedChanges";
 import { useEffect, useMemo, useState } from "react";
 import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import {
-    AlertTriangle, CheckCircle2, FileText, Loader2, Printer, RotateCcw, Save, Send, Users, X,
+    AlertTriangle, CheckCircle2, FileText, Loader2, Printer, RotateCcw, Save, Send, X,
 } from "lucide-react";
 import {
     DOMAINS, DOMAIN_LABELS, RATING_SCALE, ROLE_LABELS,
     computeScores, dayName, formatDate, parseRatings, validateVisit,
     type Domain, type Rating, type ValidationIssue,
 } from "../../../convex/visitMath";
-import { pct, scoreTone, type VisitRow } from "../../lib/visitStats";
+import { pct, scoreTone, stageOf, type VisitRow } from "../../lib/visitStats";
 import type { Session } from "./VisitsPage";
 
 // The ministry form, laid out for a tablet held in the back of a classroom:
@@ -131,11 +132,10 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const [duplicate, setDuplicate] = useState<any>(null);
     const [oldDateReason, setOldDateReason] = useState("");
     const [editReason, setEditReason] = useState("");
-    const [saved, setSaved] = useState<{ id: string; status: "draft" | "submitted"; recordNo: number | null; reviewTo?: string } | null>(null);
-    const [reviewPick, setReviewPick] = useState(false);
-    // @ts-ignore
-    const requestReview = useMutation(api.visitWorkflow.requestReview);
-    const reviewing = editing ? isReviewer(editing, session) : false;
+    const [saved, setSaved] = useState<{ id: string; status: "draft" | "submitted"; recordNo: number | null; reviewTo?: string; awaitingTeacher?: boolean } | null>(null);
+    // a coordinator signs their visit: the signature has to be there first
+    const mySignature = useQuery((api as any).visitWorkflow.mySignature) as string | null | undefined;
+    const [needSignature, setNeedSignature] = useState(false);
 
     // @ts-ignore
     const saveVisit = useMutation(api.visits.saveVisit);
@@ -200,9 +200,10 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             return { ...f, ratings: next };
         });
 
-    const submit = async (status: "draft" | "submitted", confirmDuplicate = false,
-        then?: (id: string) => Promise<string | void>) => {
+    const signing = session.role === "coordinator" && recordedRole === "coordinator";
+    const submit = async (status: "draft" | "submitted", confirmDuplicate = false) => {
         setServerError("");
+        if (status === "submitted" && signing && !editing?.sourceImportId && mySignature === null) { setNeedSignature(true); return; }
         if (!editing && recordedRole === "supervisor" && !selectedSupervisor) { setServerError("اختر الموجه المسجل للقسم قبل الحفظ"); return; }
         if (status === "submitted" && editing?.sourceImportId && !importReviewed) { setServerError("راجع ملف الزيارة الأصلي وأكد المطابقة قبل الاعتماد"); return; }
         setSaving(status);
@@ -233,12 +234,10 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             }) as any;
 
             if (!res.ok && res.duplicate) { setDuplicate(res.duplicate); return; }
-            const reviewTo = then ? await then(res.id) ?? undefined : undefined;
             try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
             setDuplicate(null);
             setReviewOpen(false);
-            setReviewPick(false);
-            setSaved({ id: res.id, status: res.status ?? status, recordNo: res.recordNo, reviewTo: res.awaitingDeputy ? "النائب الأكاديمي للاعتماد النهائي" : reviewTo });
+            setSaved({ id: res.id, status: res.status ?? status, recordNo: res.recordNo, awaitingTeacher: Boolean(res.awaitingTeacher), reviewTo: res.awaitingDeputy ? "النائب الأكاديمي للاعتماد النهائي" : undefined });
         } catch (e: any) {
             // ConvexError carries the reason in .data; anything else is unexpected
             setServerError(typeof e?.data === "string" ? e.data : "تعذّر الحفظ — تحقّق من الاتصال وأعد المحاولة");
@@ -258,13 +257,19 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     };
 
     if (saved) {
+        const savedVisit = visits.find(v => v._id === saved.id);
         return (
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center space-y-4">
                 <CheckCircle2 className="w-14 h-14 mx-auto text-emerald-600"/>
                 <div>
                     <p className="text-xl font-black text-slate-800">
-                        {saved.status === "submitted" ? "اعتُمدت الزيارة" : saved.reviewTo ? `أُرسلت الزيارة إلى ${saved.reviewTo} للمراجعة` : "حُفظت المسودة"}
+                        {saved.status === "submitted" ? "اعتُمدت الزيارة" : saved.awaitingTeacher ? "حُفظت الزيارة بتوقيعك" : saved.reviewTo ? `أُرسلت الزيارة إلى ${saved.reviewTo} للمراجعة` : "حُفظت المسودة"}
                     </p>
+                    {saved.awaitingTeacher && <p className="text-sm font-bold text-qatar-maroon mt-1">
+                        {!savedVisit || stageOf(savedVisit) === "teacher" ? "بقي توقيع المعلم ثم إرسالها للنائب الأكاديمي."
+                            : stageOf(savedVisit) === "ready" ? "سُجّل توقيع المعلم — بقي إرسالها للنائب الأكاديمي."
+                            : "أُرسلت للنائب الأكاديمي للاعتماد."}
+                    </p>}
                     <p className="text-sm font-bold text-slate-500 mt-1">
                         {teacher?.fullName} · {formatDate(form.visitDate)}
                         {saved.recordNo ? ` · رقم السجل ${saved.recordNo}` : ""}
@@ -272,7 +277,14 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                     </p>
                 </div>
                 {saved.status === "submitted" && <AutoArchiveVisit visitId={saved.id}/>}
+                {savedVisit && <VisitSteps visit={savedVisit} session={session}/>}
                 {saved.status === "submitted" && <SendToTeacher visitId={saved.id}/>}
+                {saved.status === "submitted" && savedVisit && savedVisit.visitorRole !== "coordinator" && (
+                    <div className="max-w-xl mx-auto rounded-2xl border border-slate-200 p-4 text-right space-y-2">
+                        <p className="text-sm font-black text-slate-800">توقيع المعلم</p>
+                        <TeacherSignControl visit={savedVisit} canManage/>
+                    </div>
+                )}
                 <div className="flex gap-2 justify-center flex-wrap">
                     {saved.status === "submitted" && (
                         <button onClick={() => window.open(`/supervision/print/${saved.id}?autoprint=1`, "_blank")}
@@ -322,6 +334,17 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                 </div>
             )}
             {editing && !editingSubmitted && <ReviewBanner visit={editing} session={session} onReturned={onDone}/>}
+            {editing && !editingSubmitted && <VisitSteps visit={editing} session={session}/>}
+            {editing?.teacherSign && editing.teacherSign.method !== "none" && (
+                <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+                    وقّع المعلم هذه الاستمارة: أي تعديل في محتواها يزيل توقيعه ويلزم توقيعه من جديد.
+                </p>
+            )}
+            {editing?.coordinatorApproval && !editingSubmitted && signing && (
+                <p className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-600">
+                    الزيارة موقّعة منك. للتعديل: عدّل ثم «مراجعة وتوقيع» من جديد — «حفظ مسودة» يلغي توقيعك وإرسالها.
+                </p>
+            )}
 
             {/* ١. المعلم والحصة */}
             <Section n={1} title="المعلم والحصة">
@@ -529,15 +552,9 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                 حفظ مسودة
                             </button>
                         )}
-                        {!editingSubmitted && !reviewing && session.role !== "deputy" && session.role !== "admin" && (
-                            <button onClick={() => { setServerError(""); setReviewPick(true); }} disabled={!form.teacherId || saving !== null}
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-sky-200 text-sm font-black text-sky-800 disabled:opacity-50">
-                                <Users className="w-4 h-4"/>إرسال للمراجعة
-                            </button>
-                        )}
                         <button onClick={() => { setServerError(""); setDuplicate(null); setReviewOpen(true); }}
                             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-qatar-maroon text-white text-sm font-black">
-                            <Send className="w-4 h-4"/>{editingSubmitted ? "مراجعة التعديل" : "مراجعة واعتماد"}
+                            <Send className="w-4 h-4"/>{editingSubmitted ? "مراجعة التعديل" : signing ? "مراجعة وتوقيع" : "مراجعة واعتماد"}
                         </button>
                     </div>
                 </div>
@@ -546,15 +563,8 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                 )}
             </div>
 
-            {reviewPick && (
-                <SendForReviewDialog department={teacher?.department ?? form.department} onClose={() => setReviewPick(false)}
-                    onSend={async (target, note) => {
-                        await submit("draft", false, async id => {
-                            await requestReview({ visitId: id, toRole: target.toRole, toVisitorId: target.toVisitorId, note });
-                            return target.name;
-                        });
-                    }}/>
-            )}
+            {needSignature && <MySignatureDialog onClose={() => setNeedSignature(false)}
+                notice="أضف توقيعك أولاً — صورة أو رسمًا — ثم أغلق النافذة واضغط «حفظ وتوقيع المنسق»."/>}
 
             {reviewOpen && (
                 <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-3" role="dialog" aria-modal="true">
@@ -613,12 +623,17 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                 </div>
                             )}
 
+                            {signing && !editing?.sourceImportId && (
+                                <p className="rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">
+                                    تُحفظ الزيارة بتوقيعك وتبقى عندك: يوقّعها المعلم، ثم ترسلها أنت للنائب الأكاديمي للاعتماد.
+                                </p>
+                            )}
                             {serverError && <p className="text-xs font-bold text-rose-700">{serverError}</p>}
 
                             <button onClick={() => submit("submitted")} disabled={issues.length > 0 || saving !== null || (teacherChanged && !editReason.trim())}
                                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-qatar-maroon text-white font-black disabled:opacity-40">
                                 {saving === "submitted" ? <Loader2 className="w-4 h-4 animate-spin"/> : <CheckCircle2 className="w-4 h-4"/>}
-                                {session.role === "coordinator" && recordedRole === "coordinator" ? "اعتماد المنسق وإرسال للنائب" : session.role === "deputy" && recordedRole === "coordinator" ? "اعتماد النائب وإضافة التوقيع" : editingSubmitted ? "حفظ التعديل" : "اعتماد الزيارة"}
+                                {signing ? "حفظ وتوقيع المنسق" : session.role === "deputy" && recordedRole === "coordinator" ? "اعتماد النائب وإضافة التوقيع" : editingSubmitted ? "حفظ التعديل" : "اعتماد الزيارة"}
                             </button>
                         </div>
                     </div>

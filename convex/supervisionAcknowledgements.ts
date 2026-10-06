@@ -1,6 +1,8 @@
 import { query, mutation } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { sessionQuery, sessionMutation, requireVisit, digest } from "./supervisionAccess";
+import { signable, visitFormData } from "./visits";
+import { requireSignatureImage } from "./visitWorkflow";
 
 export const status = sessionQuery({ args: { visitId: v.id("supervisionVisits") }, handler: async (ctx, args) => {
     await requireVisit(ctx, (ctx as any).supervisionSession, args.visitId);
@@ -8,17 +10,20 @@ export const status = sessionQuery({ args: { visitId: v.id("supervisionVisits") 
     return records.map(({ tokenHash, ...row }) => row).sort((a,b) => b._creationTime - a._creationTime);
 } });
 
-export const create = sessionMutation({ args: { visitId: v.id("supervisionVisits"), token: v.string() }, handler: async (ctx, args) => {
+// `sign` makes it a link the teacher signs the form through: it shows the whole
+// form, and the drawn signature goes into «توقيع المعلم»
+export const create = sessionMutation({ args: { visitId: v.id("supervisionVisits"), token: v.string(), sign: v.optional(v.boolean()) }, handler: async (ctx, args) => {
     const access = (ctx as any).supervisionSession;
     const visit = await requireVisit(ctx, access, args.visitId, true);
-    if (visit.status !== "submitted" || visit.deletedAt) throw new ConvexError("يلزم اختيار زيارة معتمدة");
+    if (args.sign ? !signable(visit) : visit.status !== "submitted" || visit.deletedAt) throw new ConvexError(args.sign ? "وقّع الزيارة أولاً ثم أرسلها للمعلم" : "يلزم اختيار زيارة معتمدة");
     if (!/^[a-f0-9]{64}$/.test(args.token)) throw new ConvexError("أعد إنشاء الرابط");
     const tokenHash = await digest(args.token);
     if (await ctx.db.query("supervisionAcknowledgements").withIndex("by_token", q => q.eq("tokenHash", tokenHash)).first()) throw new ConvexError("أعد إنشاء الرابط");
     const previous = await ctx.db.query("supervisionAcknowledgements").withIndex("by_visit", q => q.eq("visitId", args.visitId)).collect();
     for (const r of previous) if (!r.revoked && !r.acknowledgedAt) await ctx.db.patch(r._id, { revoked: true });
     await ctx.db.insert("supervisionAcknowledgements", { schoolId: visit.schoolId, visitId: visit._id, tokenHash,
-        visitUpdatedAt: visit.updatedAt ?? visit.createdAt, expiresAt: Date.now() + 7 * 86400000, createdBy: access.name, revoked: false });
+        visitUpdatedAt: visit.updatedAt ?? visit.createdAt, expiresAt: Date.now() + 7 * 86400000, createdBy: access.name, revoked: false,
+        ...(args.sign ? { sign: true } : {}) });
 } });
 export const revoke = sessionMutation({ args: { id: v.id("supervisionAcknowledgements") }, handler: async (ctx, args) => {
     const row = await ctx.db.get(args.id);
@@ -33,7 +38,7 @@ async function resolve(ctx: any, token: string) {
     const row = await ctx.db.query("supervisionAcknowledgements").withIndex("by_token", (q: any) => q.eq("tokenHash", hash)).first();
     if (!row || row.revoked || row.expiresAt < Date.now()) return null;
     const visit = await ctx.db.get(row.visitId);
-    if (!visit || visit.deletedAt || visit.status !== "submitted" || (visit.updatedAt ?? visit.createdAt) !== row.visitUpdatedAt) return null;
+    if (!visit || (row.sign ? !signable(visit) : visit.deletedAt || visit.status !== "submitted") || (visit.updatedAt ?? visit.createdAt) !== row.visitUpdatedAt) return null;
     return { row, visit };
 }
 export const read = query({ args: { token: v.string() }, handler: async (ctx, args) => {
@@ -41,14 +46,35 @@ export const read = query({ args: { token: v.string() }, handler: async (ctx, ar
     const { visit, row } = data;
     return { teacherName: visit.teacherName, visitDate: visit.visitDate, lessonTopic: visit.lessonTopic,
         recommendations: [visit.planningRec, visit.executionRec, visit.evalMgmtRec, visit.managementRec, visit.notes].filter(Boolean),
-        acknowledgedAt: row.acknowledgedAt ?? null, comment: row.comment ?? "" };
+        acknowledgedAt: row.acknowledgedAt ?? null, comment: row.comment ?? "",
+        ...(row.sign ? { sign: true, form: await visitFormData(ctx, visit) } : {}) };
 } });
 export const acknowledge = mutation({ args: { token: v.string(), comment: v.string() }, handler: async (ctx, args) => {
     const data = await resolve(ctx, args.token);
     if (!data) throw new ConvexError("الرابط منتهي أو أُلغي أو تم تحديث الزيارة؛ اطلب رابطاً جديداً");
     if (data.row.acknowledgedAt) throw new ConvexError("تم تسجيل الاطلاع بالفعل");
+    if (data.row.sign) throw new ConvexError("هذا رابط توقيع؛ ارسم توقيعك لإتمامه");
     if (args.comment.length > 5000) throw new ConvexError("التعليق أطول من المسموح");
     await ctx.db.patch(data.row._id, { acknowledgedAt: Date.now(), comment: args.comment.trim() });
     await ctx.db.insert("supervisionAuditLog", { schoolId: data.visit.schoolId, visitId: data.visit._id, action: "acknowledged_via_link",
         details: "تم تسجيل الاطلاع عبر رابط المعلم؛ لا يمثل توقيعاً أو موافقة على التقييم", timestamp: Date.now() });
+} });
+
+// ── Signing through the link ─────────────────────────────────────────────
+export const signUploadUrl = mutation({ args: { token: v.string() }, handler: async (ctx, args) => {
+    const data = await resolve(ctx, args.token);
+    if (!data?.row.sign || data.row.acknowledgedAt) throw new ConvexError("الرابط منتهي أو أُلغي أو تم تحديث الزيارة؛ اطلب رابطاً جديداً");
+    return ctx.storage.generateUploadUrl();
+} });
+export const sign = mutation({ args: { token: v.string(), storageId: v.id("_storage"), comment: v.string() }, handler: async (ctx, args) => {
+    const data = await resolve(ctx, args.token);
+    if (!data?.row.sign) throw new ConvexError("الرابط منتهي أو أُلغي أو تم تحديث الزيارة؛ اطلب رابطاً جديداً");
+    if (data.row.acknowledgedAt) throw new ConvexError("تم التوقيع عبر هذا الرابط بالفعل");
+    if (args.comment.length > 5000) throw new ConvexError("التعليق أطول من المسموح");
+    await requireSignatureImage(ctx, args.storageId);
+    const now = Date.now(), comment = args.comment.trim();
+    await ctx.db.patch(data.row._id, { acknowledgedAt: now, comment, signatureId: args.storageId });
+    await ctx.db.patch(data.visit._id, { teacherSign: { method: "link", at: now, signatureId: args.storageId, comment: comment || undefined } });
+    await ctx.db.insert("supervisionAuditLog", { schoolId: data.visit.schoolId, visitId: data.visit._id, action: "teacher_signed",
+        details: `وقّع ${data.visit.teacherName} عبر رابط التوقيع`, timestamp: now });
 } });

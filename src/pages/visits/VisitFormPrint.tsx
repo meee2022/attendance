@@ -5,6 +5,7 @@ import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import { DOMAINS, dayName, formatDate, type Domain, type Rating, type VisitorRole } from "../../../convex/visitMath";
+import { STAGE_LABELS, stageOf } from "../../lib/visitStats";
 
 // «استمارة الإشراف على أداء المعلّم» as the ministry prints it in
 // «النماذج المعتمدة للنائب 2026-2027» (pages 10 and 11), on one sheet. The two
@@ -182,7 +183,7 @@ function FitText({ box, text, max = 15, min = 6 }: { box: Box; text: string; max
     );
 }
 
-function FormEnd({ role, notes, signatureUrl, deputyApproval, deputySignatureUrl }: { role: VisitorRole; notes: string; signatureUrl: string | null; deputyApproval?: { name: string; at: number }; deputySignatureUrl?: string | null }) {
+function FormEnd({ role, notes, signatureUrl, teacherSignatureUrl, deputyApproval, deputySignatureUrl }: { role: VisitorRole; notes: string; signatureUrl: string | null; teacherSignatureUrl?: string | null; deputyApproval?: { name: string; at: number }; deputySignatureUrl?: string | null }) {
     const line = "0.5pt solid #000";
     const label: CSSProperties = { background: "#DDDDDD", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FORM_FONT, fontSize: "14pt", color: "#000" };
     return (
@@ -193,7 +194,13 @@ function FormEnd({ role, notes, signatureUrl, deputyApproval, deputySignatureUrl
             }}>{notes}</div>
             <div style={{ display: "grid", gridTemplateColumns: "119.7fr 159.5fr 159.1fr 105.6fr", height: "20pt", borderInline: line, borderBottom: line }}>
                 <div style={label}>توقيع المعلم</div>
-                <div style={{ borderInlineStart: line }}/>
+                <div style={{ borderInlineStart: line, position: "relative" }}>
+                    {teacherSignatureUrl && (
+                        <div style={{ position: "absolute", inset: "-9pt 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <img src={teacherSignatureUrl} alt="" style={{ maxWidth: "88%", maxHeight: "100%", objectFit: "contain", display: "block" }}/>
+                        </div>
+                    )}
+                </div>
                 <div style={{ ...label, borderInlineStart: line }}>توقيع {VISITOR_TITLE[role]}</div>
                 <div style={{ borderInlineStart: line, position: "relative" }}>
                     {signatureUrl && (
@@ -368,7 +375,7 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
                 </button>
                 {downloadError && <p role="alert" className="w-full text-center text-sm text-red-700">{downloadError}</p>}
                 {visit.status !== "submitted" && (
-                    <span className="text-xs font-bold text-amber-700">{visit.coordinatorApproval ? "بانتظار اعتماد النائب الأكاديمي" : "مسودة — لم تُعتمد بعد"}</span>
+                    <span className="text-xs font-bold text-amber-700">{stageOf(visit) === "draft" ? "مسودة — لم تُعتمد بعد" : STAGE_LABELS[stageOf(visit)]}</span>
                 )}
                 {!standard && (
                     <span className="text-xs font-bold text-amber-700">
@@ -419,7 +426,7 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
 
                     {/* in the flow from here, so the notes can grow */}
                     <div style={{ height: `${p2(NOTES_TOP)}pt` }}/>
-                    <FormEnd role={role} notes={String(visit.notes ?? "")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null} deputyApproval={visit.deputyApproval} deputySignatureUrl={form.deputyApprovalSignatureUrl}/>
+                    <FormEnd role={role} notes={String(visit.notes ?? "")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null} teacherSignatureUrl={form.teacherSignatureUrl} deputyApproval={visit.deputyApproval} deputySignatureUrl={form.deputyApprovalSignatureUrl}/>
                     <div style={{ position: "relative", height: `${FOOTER[1] - FOOTER[0]}pt`, marginTop: "14pt" }}>
                         <PageSlice src={P1_SRC} y0={FOOTER[0]} y1={FOOTER[1]} top={0}/>
                     </div>

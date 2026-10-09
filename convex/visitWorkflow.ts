@@ -1,6 +1,5 @@
 import { v, ConvexError } from "convex/values";
 import { sessionMutation, sessionQuery, requireVisit } from "./supervisionAccess";
-import { signable } from "./visits";
 
 // What happens to a visit around saving it: the visitor's own signature,
 // sending a draft to the deputy or a colleague for review, and sending the
@@ -134,84 +133,6 @@ export const returnVisit = sessionMutation({
     },
 });
 
-// ── The teacher's signature, then the deputy ─────────────────────────────
-// A signature is drawn (a small PNG) or a picture of it: nothing else
-export async function requireSignatureImage(ctx: any, storageId: any) {
-    const file = await ctx.db.system.get(storageId);
-    if (!file || file.size > 2 * 1024 * 1024 || (file.contentType && !/^image\/(png|jpeg)$/.test(file.contentType))) throw new ConvexError("تعذّر حفظ التوقيع — ارسمه أو ارفع صورته (PNG أو JPG حتى 2 ميجا)");
-}
-
-export const recordTeacherSign = sessionMutation({
-    args: {
-        visitId: v.id("supervisionVisits"),
-        method: v.union(v.literal("device"), v.literal("paper"), v.literal("none")),
-        storageId: v.optional(v.id("_storage")),
-        reason: v.optional(v.string()),
-    },
-    handler: async (ctx, args) => {
-        const s = (ctx as any).supervisionSession;
-        const visit = await requireVisit(ctx, s, args.visitId, true);
-        if (!signable(visit)) throw new ConvexError(visit.visitorRole === "coordinator" ? "وقّع الزيارة أولاً ثم خذ توقيع المعلم" : "يوقّع المعلم الزيارة بعد اعتمادها");
-        const reason = args.reason?.trim().slice(0, 300);
-        if (args.method === "device") {
-            if (!args.storageId) throw new ConvexError("ارسم التوقيع أولاً");
-            await requireSignatureImage(ctx, args.storageId);
-        }
-        if (args.method === "none" && !reason) throw new ConvexError("اكتب سبب تعذّر توقيع المعلم");
-        await ctx.db.patch(visit._id, {
-            teacherSign: {
-                method: args.method, at: Date.now(), byName: s.name,
-                signatureId: args.method === "device" ? args.storageId : undefined,
-                reason: args.method === "none" ? reason : undefined,
-            },
-        });
-        await ctx.db.insert("supervisionAuditLog", {
-            schoolId: visit.schoolId, visitId: visit._id, action: args.method === "none" ? "teacher_sign_waived" : "teacher_signed", actorName: s.name,
-            details: args.method === "device" ? `وقّع ${visit.teacherName} على جهاز الزائر`
-                : args.method === "paper" ? `سُجّل توقيع ${visit.teacherName} على النسخة الورقية`
-                : `تعذّر توقيع ${visit.teacherName}: ${reason}`,
-            timestamp: Date.now(),
-        });
-    },
-});
-
-export const clearTeacherSign = sessionMutation({
-    args: { visitId: v.id("supervisionVisits") },
-    handler: async (ctx, args) => {
-        const s = (ctx as any).supervisionSession;
-        const visit = await requireVisit(ctx, s, args.visitId, true);
-        if (!visit.teacherSign) return;
-        await ctx.db.patch(visit._id, { teacherSign: undefined });
-        await ctx.db.insert("supervisionAuditLog", {
-            schoolId: visit.schoolId, visitId: visit._id, action: "teacher_sign_cleared", actorName: s.name,
-            details: `أُزيل توقيع ${visit.teacherName} من الاستمارة`, timestamp: Date.now(),
-        });
-    },
-});
-
-// The coordinator's last step: signed by both, the visit goes to the deputy
-export const sendToDeputy = sessionMutation({
-    args: { visitId: v.id("supervisionVisits") },
-    handler: async (ctx, args) => {
-        const s = (ctx as any).supervisionSession;
-        const visit = await requireVisit(ctx, s, args.visitId, true);
-        if (visit.visitorRole !== "coordinator" || visit.status !== "draft" || visit.deletedAt) throw new ConvexError("تُرسل للنائب زيارات المنسق غير المعتمدة فقط");
-        if (s.role !== "coordinator" || visit.visitorId !== s.visitorId) throw new ConvexError("يرسلها للنائب صاحب الزيارة");
-        if (!visit.coordinatorApproval) throw new ConvexError("وقّع الزيارة أولاً من «مراجعة وتوقيع»");
-        if (!visit.teacherSign) throw new ConvexError("خذ توقيع المعلم أولاً، أو سجّل سبب تعذّره");
-        if (visit.reviewRequest?.toRole === "deputy") return;
-        const settings = await settingsRow(ctx, visit.schoolId);
-        await ctx.db.patch(visit._id, {
-            reviewRequest: { toRole: "deputy", toName: settings?.deputyName || "النائب الأكاديمي", byName: s.name, at: Date.now() },
-            reviewReturn: undefined,
-        });
-        await ctx.db.insert("supervisionAuditLog", {
-            schoolId: visit.schoolId, visitId: visit._id, action: "sent_to_deputy", actorName: s.name,
-            details: `أُرسلت زيارة ${visit.teacherName} للنائب الأكاديمي للاعتماد`, timestamp: Date.now(),
-        });
-    },
-});
-
 // ── Sending the form to the teacher ──────────────────────────────────────
 // Sent from the visitor's own device — the share sheet (WhatsApp, e-mail…) or
 // their mail program — so no mail service is involved. The server only gives
@@ -237,7 +158,7 @@ export const logSend = sessionMutation({
     handler: async (ctx, args) => {
         const s = (ctx as any).supervisionSession;
         const visit = await requireVisit(ctx, s, args.visitId, true);
-        if (!signable(visit)) throw new ConvexError("تُرسل للمعلم الزيارات الموقّعة أو المعتمدة فقط");
+        if (visit.status !== "submitted") throw new ConvexError("تُرسل الزيارات المعتمدة فقط");
         await ctx.db.insert("supervisionEmails", {
             schoolId: visit.schoolId, visitId: visit._id, to: args.via.slice(0, 200), byName: s.name, status: "sent", createdAt: Date.now(), sentAt: Date.now(),
         });

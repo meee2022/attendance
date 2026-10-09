@@ -73,105 +73,20 @@ describe('historical imports keep the actual visitor and prevent duplicate visit
  });
 });
 
-const png = () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
-
-describe("coordinator signs, the teacher signs, then the deputy approves", () => {
-    it("keeps the visit with the coordinator until the teacher has signed, and asks for a new signature when the form changes", async () => {
+describe("coordinator then deputy approval", () => {
+    it("queues coordinator approval, requires the deputy's signature, freezes it, and invalidates approval after changes", async () => {
         const f = await fixture();
         const classId = await f.t.run(ctx => ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true }));
         const args = { visitorRole: "coordinator", visitorName: "منسق اختبار", teacherId: f.teacherId, classId,
             subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-01", followUpType: "full",
             ratings: "{}", planningRec: "توصية", status: "submitted", confirmDuplicate: true };
-        // the coordinator's own signature comes first
-        await expect(f.t.mutation(A.visits.saveVisit, { ...args, sessionToken: f.token })).rejects.toThrow("توقيعك");
-        await f.t.run(async ctx => ctx.db.patch(f.visitorId, { signatureId: await ctx.storage.store(png()) }));
         const result = await f.t.mutation(A.visits.saveVisit, { ...args, sessionToken: f.token });
-        expect(result).toMatchObject({ status: "draft", awaitingDeputy: false, awaitingTeacher: true });
-        let visit = await f.t.run(ctx => ctx.db.get(result.id));
-        expect(visit.reviewRequest).toBeUndefined();
-        expect(visit.coordinatorApproval.name).toBe("منسق اختبار");
-        expect((await f.t.query(A.visits.getVisitForm, { sessionToken: f.token, id: result.id })).form.signatureUrl).toBeTruthy();
-
-        // not to the deputy before the teacher has signed — or a reason is given
-        await expect(f.t.mutation(A.visitWorkflow.sendToDeputy, { sessionToken: f.token, visitId: result.id })).rejects.toThrow("توقيع المعلم");
-        await expect(f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, sessionToken: f.deputy })).rejects.toThrow("لم يرسل");
-        await expect(f.t.mutation(A.visitWorkflow.recordTeacherSign, { sessionToken: f.token, visitId: result.id, method: "none" })).rejects.toThrow("سبب");
-        await expect(f.t.mutation(A.visitWorkflow.recordTeacherSign, { sessionToken: f.token, visitId: result.id, method: "device" })).rejects.toThrow("ارسم");
-        const drawn = await f.t.run(ctx => ctx.storage.store(png()));
-        await f.t.mutation(A.visitWorkflow.recordTeacherSign, { sessionToken: f.token, visitId: result.id, method: "device", storageId: drawn });
-        expect((await f.t.query(A.visits.getVisitForm, { sessionToken: f.token, id: result.id })).form.teacherSignatureUrl).toBeTruthy();
-
-        // a change to the form after the teacher signed takes the signature off
-        await f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, planningRec: "توصية أخرى", sessionToken: f.token });
-        visit = await f.t.run(ctx => ctx.db.get(result.id));
-        expect(visit.teacherSign).toBeUndefined();
-        await f.t.mutation(A.visitWorkflow.recordTeacherSign, { sessionToken: f.token, visitId: result.id, method: "none", reason: "المعلم في إجازة مرضية" });
-        // …and saving it again unchanged keeps what was recorded
-        await f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, planningRec: "توصية أخرى", sessionToken: f.token });
-        visit = await f.t.run(ctx => ctx.db.get(result.id));
-        expect(visit.teacherSign.reason).toBe("المعلم في إجازة مرضية");
-
-        await expect(f.t.mutation(A.visitWorkflow.sendToDeputy, { sessionToken: f.deputy, visitId: result.id })).rejects.toThrow("صاحب الزيارة");
-        await f.t.mutation(A.visitWorkflow.sendToDeputy, { sessionToken: f.token, visitId: result.id });
-        visit = await f.t.run(ctx => ctx.db.get(result.id));
-        expect(visit.reviewRequest.toRole).toBe("deputy");
-        expect(visit.status).toBe("draft");
-        const listed = (await f.t.query(A.visits.listVisits, { sessionToken: f.deputy })).find((x: any) => x._id === result.id);
-        expect(listed.teacherSign).toMatchObject({ method: "none", reason: "المعلم في إجازة مرضية" });
-    });
-
-    it("lets the teacher sign through a private link that shows the whole form", async () => {
-        const f = await fixture(), link = "9".repeat(64);
-        const classId = await f.t.run(async ctx => {
-            await ctx.db.patch(f.visitorId, { signatureId: await ctx.storage.store(png()) });
-            return ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true });
-        });
-        const draft = await f.t.mutation(A.visits.saveVisit, { sessionToken: f.token, visitorRole: "coordinator", visitorName: "منسق اختبار", teacherId: f.teacherId, classId,
-            subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-02", followUpType: "full", ratings: "{}", planningRec: "توصية", status: "draft" });
-        // nothing to sign until the coordinator has signed
-        await expect(f.t.mutation(A.supervisionAcknowledgements.create, { sessionToken: f.token, visitId: draft.id, token: link, sign: true })).rejects.toThrow("وقّع");
-        const before = await f.t.run(ctx => ctx.db.get(draft.id));
-        await f.t.mutation(A.visits.saveVisit, { sessionToken: f.token, id: draft.id, expectedUpdatedAt: before.updatedAt, visitorRole: "coordinator", visitorName: "منسق اختبار", teacherId: f.teacherId, classId,
-            subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-02", followUpType: "full", ratings: "{}", planningRec: "توصية", status: "submitted", confirmDuplicate: true });
-        await f.t.mutation(A.supervisionAcknowledgements.create, { sessionToken: f.token, visitId: draft.id, token: link, sign: true });
-        const view = await f.t.query(A.supervisionAcknowledgements.read, { token: link });
-        expect(view.sign).toBe(true);
-        expect(view.form.visit.teacherName).toBe("معلم اختبار");
-        // a signing link is not completed by a tick
-        await expect(f.t.mutation(A.supervisionAcknowledgements.acknowledge, { token: link, comment: "" })).rejects.toThrow("توقيع");
-        await expect(f.t.mutation(A.supervisionAcknowledgements.signUploadUrl, { token: "8".repeat(64) })).rejects.toThrow();
-        const notImage = await f.t.run(ctx => ctx.storage.store(new Blob([new Uint8Array(2_200_000)], { type: "image/png" })));
-        await expect(f.t.mutation(A.supervisionAcknowledgements.sign, { token: link, storageId: notImage, comment: "" })).rejects.toThrow("التوقيع");
-        const drawn = await f.t.run(ctx => ctx.storage.store(png()));
-        await f.t.mutation(A.supervisionAcknowledgements.sign, { token: link, storageId: drawn, comment: "أشكركم" });
-        await expect(f.t.mutation(A.supervisionAcknowledgements.sign, { token: link, storageId: drawn, comment: "" })).rejects.toThrow("بالفعل");
-        const visit = await f.t.run(ctx => ctx.db.get(draft.id));
-        expect(visit.teacherSign).toMatchObject({ method: "link", signatureId: drawn, comment: "أشكركم" });
-        // the link still opens for the teacher after signing
-        expect((await f.t.query(A.supervisionAcknowledgements.read, { token: link })).acknowledgedAt).toBeTruthy();
-        await f.t.mutation(A.visitWorkflow.sendToDeputy, { sessionToken: f.token, visitId: draft.id });
-    });
-});
-
-describe("coordinator then deputy approval", () => {
-    it("requires the deputy's signature, freezes it, and invalidates approval after changes", async () => {
-        const f = await fixture();
-        const classId = await f.t.run(async ctx => {
-            await ctx.db.patch(f.visitorId, { signatureId: await ctx.storage.store(png()) });
-            return ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true });
-        });
-        const args = { visitorRole: "coordinator", visitorName: "منسق اختبار", teacherId: f.teacherId, classId,
-            subjectName: "العلوم", lessonTopic: "درس", visitDate: "2026-09-01", followUpType: "full",
-            ratings: "{}", planningRec: "توصية", status: "submitted", confirmDuplicate: true };
-        const result = await f.t.mutation(A.visits.saveVisit, { ...args, sessionToken: f.token });
-        await f.t.mutation(A.visitWorkflow.recordTeacherSign, { sessionToken: f.token, visitId: result.id, method: "paper" });
-        await f.t.mutation(A.visitWorkflow.sendToDeputy, { sessionToken: f.token, visitId: result.id });
+        expect(result).toMatchObject({ status: "draft", awaitingDeputy: true });
         let visit = await f.t.run(ctx => ctx.db.get(result.id));
         expect(visit.reviewRequest.toRole).toBe("deputy");
         expect(visit.coordinatorApproval.name).toBe("منسق اختبار");
         expect(visit.submittedAt).toBeUndefined();
-        // signed by its coordinator, the form may go to the teacher before the deputy approves
-        await f.t.mutation(A.visitWorkflow.logSend, { sessionToken: f.token, visitId: result.id, via: "test" });
+        await expect(f.t.mutation(A.visitWorkflow.logSend, { sessionToken: f.token, visitId: result.id, via: "test" })).rejects.toThrow("المعتمدة");
         await expect(f.t.mutation(A.visits.saveVisit, { ...args, id: result.id, expectedUpdatedAt: visit.updatedAt, sessionToken: f.deputy })).rejects.toThrow("توقيع");
         const settingsId = await f.t.run(async ctx => {
             const signature = await ctx.storage.store(new Blob(["signature"], { type: "image/png" }));
@@ -182,7 +97,6 @@ describe("coordinator then deputy approval", () => {
         expect(visit.status).toBe("submitted");
         expect(visit.deputyApproval.name).toBe("نائب الاعتماد");
         expect(visit.reviewRequest).toBeUndefined();
-        expect(visit.teacherSign.method).toBe("paper");
         const printed = await f.t.query(A.visits.getVisitForm, { sessionToken: f.token, id: result.id });
         expect(printed.form.deputyApprovalSignatureUrl).toBeTruthy();
         await f.t.run(ctx => ctx.db.patch(settingsId, { deputyName: "نائب جديد", deputySignatureId: undefined }));
@@ -193,11 +107,7 @@ describe("coordinator then deputy approval", () => {
         visit = await f.t.run(ctx => ctx.db.get(result.id));
         expect(visit.status).toBe("draft");
         expect(visit.deputyApproval).toBeUndefined();
-        // changed after approval: the teacher signs again before it returns to the deputy
-        expect(visit.reviewRequest).toBeUndefined();
-        expect(visit.teacherSign).toBeUndefined();
-        await f.t.mutation(A.visitWorkflow.recordTeacherSign, { sessionToken: f.token, visitId: result.id, method: "paper" });
-        await f.t.mutation(A.visitWorkflow.sendToDeputy, { sessionToken: f.token, visitId: result.id });
+        expect(visit.reviewRequest.toRole).toBe("deputy");
         await f.t.mutation(A.visitWorkflow.returnVisit, { sessionToken: f.deputy, visitId: result.id, note: "راجع التوصيات" });
         visit = await f.t.run(ctx => ctx.db.get(result.id));
         expect(visit.coordinatorApproval).toBeUndefined();

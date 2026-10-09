@@ -28,8 +28,6 @@ export default defineSchema({
         schoolId: v.id("schools"), visitId: v.id("supervisionVisits"), tokenHash: v.string(),
         visitUpdatedAt: v.number(), expiresAt: v.number(), createdBy: v.string(),
         acknowledgedAt: v.optional(v.number()), comment: v.optional(v.string()),
-        // a link the teacher signs the form through, not only reads it
-        sign: v.optional(v.boolean()), signatureId: v.optional(v.id("_storage")),
         revoked: v.boolean(),
     }).index("by_token", ["tokenHash"]).index("by_visit", ["visitId"]),
     supervisionSessions: defineTable({
@@ -517,16 +515,6 @@ export default defineSchema({
         submittedAt: v.optional(v.number()),
         teacherSignedAt: v.optional(v.number()),
         teacherSignedNote: v.optional(v.string()),
-        // «توقيع المعلم»: drawn on the visitor's device, drawn through the
-        // teacher's own link, signed on the printed form, or not obtained — with why
-        teacherSign: v.optional(v.object({
-            method: v.union(v.literal("device"), v.literal("link"), v.literal("paper"), v.literal("none")),
-            at: v.number(),
-            byName: v.optional(v.string()),
-            signatureId: v.optional(v.id("_storage")),
-            reason: v.optional(v.string()),
-            comment: v.optional(v.string()),
-        })),
         createdAt: v.number(),
         // ── references by id: the names above are display text only ──
         teacherId: v.optional(v.id("schoolTeachers")),

@@ -4,7 +4,7 @@ import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation 
 import { api } from "../../../convex/_generated/api";
 import { Download, Pencil, Printer, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { DOMAINS, DOMAIN_LABELS, ROLE_LABELS, dayName, formatDate } from "../../../convex/visitMath";
-import { STAGE_LABELS, applyFilters, pct, scoreTone, stageOf, teacherSignText, type Filters, type VisitRow } from "../../lib/visitStats";
+import { applyFilters, pct, scoreTone, type Filters, type VisitRow } from "../../lib/visitStats";
 import { downloadWorkbook } from "../../lib/excelExport";
 import FiltersBar, { periodPresets } from "./FiltersBar";
 import type { Session } from "./VisitsPage";
@@ -155,9 +155,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                                 {v.teacherName}
                                             </button>
                                             {v.visitNumber ? <span className="block text-[10px] text-slate-400">زيارة رقم {v.visitNumber}</span> : null}
-                                            {stageOf(v) !== "draft" && stageOf(v) !== "approved" && <span className={`block text-[10px] font-bold ${stageOf(v) === "deputy" ? "text-sky-700" : "text-amber-700"}`}>{STAGE_LABELS[stageOf(v)]}</span>}
-                                            {v.reviewRequest && !v.coordinatorApproval && <span className="block text-[10px] font-bold text-sky-700">للمراجعة عند {v.reviewRequest.toName}</span>}
-                                            {v.teacherSign && <span className={`block text-[10px] font-bold ${v.teacherSign.method === "none" ? "text-amber-700" : "text-emerald-700"}`}>{teacherSignText(v.teacherSign)}</span>}
+                                            {v.reviewRequest && <span className="block text-[10px] font-bold text-sky-700">{v.coordinatorApproval ? "بانتظار اعتماد النائب" : `للمراجعة عند ${v.reviewRequest.toName}`}</span>}
                                             {!v.reviewRequest && v.reviewReturn && <span className="block text-[10px] font-bold text-amber-700">أُعيدت بملاحظات</span>}
                                         </td>
                                         <td className="px-2 py-2 text-slate-600">{v.department}</td>
@@ -181,7 +179,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                                                     </IconBtn>
                                                 ) : (
                                                     <>
-                                                        {stageOf(v) !== "draft" && (
+                                                        {v.status === "submitted" && (
                                                             <IconBtn title="الاستمارة (PDF)" onClick={() => onPrint(v._id)}>
                                                                 <Printer className="w-4 h-4"/>
                                                             </IconBtn>

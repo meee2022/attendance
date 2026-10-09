@@ -6,13 +6,9 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
-        "dev",
-        "--",
-        "--port",
-        "5175",
-        "--strictPort"
+        "dev"
       ],
-      "port": 5175
+      "port": 5173
     },
     {
       "name": "preview-harness",

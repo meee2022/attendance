@@ -192,21 +192,21 @@ function FormEnd({ role, notes, signatureUrl, teacherSignatureUrl, deputyApprova
                 borderInline: line, borderBottom: line, minHeight: `${NOTES_MIN}pt`, overflowWrap: "anywhere",
                 padding: "3pt 6pt", fontFamily: FORM_FONT, fontSize: "13pt", lineHeight: 1.25, whiteSpace: "pre-line", textAlign: "right", color: "#000",
             }}>{notes}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "119.7fr 159.5fr 159.1fr 105.6fr", height: "20pt", borderInline: line, borderBottom: line }}>
+            <div style={{ display: "grid", gridTemplateColumns: "119.7fr 159.5fr 159.1fr 105.6fr", height: "36pt", borderInline: line, borderBottom: line }}>
                 <div style={label}>توقيع المعلم</div>
                 <div style={{ borderInlineStart: line, position: "relative" }}>
                     {teacherSignatureUrl && (
-                        <div style={{ position: "absolute", inset: "-9pt 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <img src={teacherSignatureUrl} alt="" style={{ maxWidth: "88%", maxHeight: "100%", objectFit: "contain", display: "block" }}/>
+                        <div style={{ position: "absolute", inset: "3pt 4pt", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <img src={teacherSignatureUrl} alt="توقيع المعلم" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block" }}/>
                         </div>
                     )}
                 </div>
                 <div style={{ ...label, borderInlineStart: line }}>توقيع {VISITOR_TITLE[role]}</div>
                 <div style={{ borderInlineStart: line, position: "relative" }}>
                     {signatureUrl && (
-                        // a signature is taller than the row: centred on the cell, it crosses its lines as a pen would
-                        <div style={{ position: "absolute", inset: "-9pt 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <img src={signatureUrl} alt="" style={{ maxWidth: "88%", maxHeight: "100%", objectFit: "contain", display: "block" }}/>
+                        // Keep the signature inside its cell in both the preview and rasterized PDF.
+                        <div style={{ position: "absolute", inset: "3pt 4pt", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <img src={signatureUrl} alt={`توقيع ${VISITOR_TITLE[role]}`} style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block" }}/>
                         </div>
                     )}
                 </div>

@@ -27,13 +27,35 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
     if (name === "visitWorkflow:reviewers") return [{ key: "deputy", toRole: "deputy", name: "نائب تجريبي", label: "النائب الأكاديمي" }, { key: "vc2", toRole: "coordinator", toVisitorId: "vc2", name: "منسق زميل تجريبي", label: "منسق" }];
     if (name === "visitWorkflow:emailStatus") return { teacherName: "معلم تجريبي", teacherEmail: "teacher@example.com", teacherPhone: null, sends: [] };
     if (name === "visitImports:original") return null;
-    if (name === "visitWorkflow:mySignature") return null;
+    if (name === "visitWorkflow:mySignature") return mySignature;
     return [];
 }
+let mySignature: string | null = new URLSearchParams(location.search).has("signed") ? "/forms/moe-logo.png" : null;
+const changed = () => window.dispatchEvent(new Event("preview-data"));
+const patchVisit = (id: string, patch: any) => { const i = visits.findIndex(v => v._id === id); if (i >= 0) visits[i] = { ...visits[i], ...patch }; changed(); };
 export function useSupervisionMutation(ref: any) { return async (args: any) => {
-    if (getFunctionName(ref) === "supervisionActions:save") {
+    const name = getFunctionName(ref);
+    if (name === "supervisionActions:save") {
         const record = { ...args, _id: args.id || String(Date.now()), updatedAt: Date.now() };
-        actions = [...actions.filter(a => a._id !== record._id), record]; window.dispatchEvent(new Event("preview-data"));
+        actions = [...actions.filter(a => a._id !== record._id), record]; changed();
+    }
+    // the signing steps of a coordinator's visit, kept in the page's memory
+    if (name === "visitWorkflow:uploadUrl") return "/__test-upload";
+    if (name === "visitWorkflow:setMySignature") { mySignature = args.storageId ? "/forms/moe-logo.png" : null; changed(); return null; }
+    if (name === "visitWorkflow:recordTeacherSign") { patchVisit(args.visitId, { teacherSign: { method: args.method, at: Date.now(), reason: args.reason ?? null } }); return null; }
+    if (name === "visitWorkflow:clearTeacherSign") { patchVisit(args.visitId, { teacherSign: null }); return null; }
+    if (name === "visitWorkflow:sendToDeputy") { patchVisit(args.visitId, { reviewRequest: { toRole: "deputy", toName: "نائب تجريبي", byName: session.name, at: Date.now() } }); return null; }
+    if (name === "supervisionAcknowledgements:create") return null;
+    if (name === "visits:saveVisit") {
+        const id = args.id || `v${Date.now()}`, teacher = setup.teachers.find(t => t._id === args.teacherId);
+        const signing = asCoordinator && args.status === "submitted";
+        const row = { ...visits[0], ...args, _id: id, teacherName: teacher?.fullName ?? "", department: teacher?.department ?? "", visitorName: session.name, visitorId: session.visitorId,
+            visitorRole: session.role, status: signing ? "draft" : args.status, averageScore: null, updatedAt: Date.now(), reviewRequest: null, teacherSign: null,
+            coordinatorApproval: signing ? { name: session.name, at: Date.now() } : null };
+        const i = visits.findIndex(v => v._id === id);
+        if (i >= 0) visits[i] = row; else visits.push(row);
+        changed();
+        return { ok: true, id, recordNo: null, status: row.status, awaitingTeacher: signing, awaitingDeputy: false };
     }
     return { ok: true, id: "preview-visit", recordNo: 1 };
 }; }

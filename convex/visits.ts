@@ -159,6 +159,7 @@ export const listVisits = query({
                 reviewReturn: x.reviewReturn ?? null,
                 coordinatorApproval: x.coordinatorApproval ? { name: x.coordinatorApproval.name, at: x.coordinatorApproval.at } : null,
                 deputyApproval: x.deputyApproval ? { name: x.deputyApproval.name, at: x.deputyApproval.at } : null,
+                teacherSign: x.teacherSign ? { method: x.teacherSign.method, at: x.teacherSign.at, reason: x.teacherSign.reason ?? null, comment: x.teacherSign.comment ?? null } : null,
                 streamMode: x.streamMode ?? null,
                 status: x.status,
                 averageScore: x.status === "submitted" ? x.averageScore : null,
@@ -180,12 +181,31 @@ export const listVisits = query({
     },
 });
 
+// The teacher's signature belongs on a form its visitor has signed
+export const signable = (visit: any) => !visit.deletedAt && (visit.status === "submitted" || !!visit.coordinatorApproval);
+
+// What the teacher signed: a later change to any of it needs a new signature
+function contentKey(x: any) {
+    const ratings = typeof x.ratings === "string" ? parseRatings(x.ratings) : x.ratings ?? {};
+    return JSON.stringify([
+        x.teacherId ?? "", x.classId ?? "", x.subjectName ?? "", x.lessonTopic ?? "", x.visitDate ?? "",
+        x.followUpType ?? "full", x.deliveryMode ?? "field", x.streamMode ?? "",
+        Object.keys(ratings).sort().map(k => [k, ratings[k]]),
+        x.planningRec ?? "", x.executionRec ?? "", x.evalMgmtRec ?? "", x.managementRec ?? "", x.notes ?? "",
+    ]);
+}
+
 // One visit as the printed form shows it: frozen wording, frozen names.
 export const getVisitForm = query({
     args: { id: v.id("supervisionVisits") },
     handler: async (ctx, args) => {
         const visit = await requireVisit(ctx, (ctx as any).supervisionSession, args.id);
         if (!visit) return null;
+        return visitFormData(ctx, visit);
+    },
+});
+
+export async function visitFormData(ctx: any, visit: any) {
         const school = await getSchool(ctx);
         const settings = await settingsOf(ctx, school);
 
@@ -223,10 +243,10 @@ export const getVisitForm = query({
                 footerUrl: await imageUrl(ctx, footerId),
                 signatureUrl: await imageUrl(ctx, signatureId),
                 deputyApprovalSignatureUrl: await imageUrl(ctx, visit.deputyApproval?.signatureId),
+                teacherSignatureUrl: signable(visit) ? await imageUrl(ctx, visit.teacherSign?.signatureId) : null,
             },
         };
-    },
-});
+}
 
 export const getVersions = query({
     args: { id: v.id("supervisionVisits") },
@@ -374,13 +394,41 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
         if (coordinatorVisit && args.status === "submitted" && !coordinatorSubmitting) {
             if (access.role !== "deputy") throw new ConvexError("الاعتماد النهائي لزيارة المنسق متاح للنائب الأكاديمي فقط");
             if (!existing?.coordinatorApproval && existing?.status !== "submitted") throw new ConvexError("يجب اعتماد الزيارة من المنسق أولاً");
+            if (existing?.status !== "submitted" && existing?.reviewRequest?.toRole !== "deputy") throw new ConvexError("لم يرسل المنسق الزيارة للاعتماد بعد");
             if (!settings.deputySignatureId || !await imageUrl(ctx, settings.deputySignatureId)) throw new ConvexError("ارفع توقيع النائب من «توقيعي» قبل الاعتماد النهائي ليظهر في الاستمارة");
         }
         const finalStatus = coordinatorSubmitting ? "draft" as const : args.status;
+        // A coordinator's visit is signed by the coordinator, then by the teacher,
+        // and only then sent to the deputy (visitWorkflow.sendToDeputy). A visit
+        // imported from its signed original goes to the deputy as it is.
+        const coordinatorSignatureId = coordinatorSubmitting ? ((await ctx.db.get(args.visitorId!)) as any)?.signatureId : undefined;
+        if (coordinatorSubmitting && !sourceImportId && !await imageUrl(ctx, coordinatorSignatureId)) throw new ConvexError("أضف توقيعك من «توقيعي» أولاً ليظهر في الاستمارة");
+        // what is written on the form, as it will be stored
+        const content = {
+            teacherId: args.teacherId,
+            subjectName: args.subjectName.trim(),
+            classId: args.classId,
+            lessonTopic: args.lessonTopic.trim(),
+            visitDate: args.visitDate,
+            followUpType: args.followUpType ?? "full",
+            deliveryMode: args.deliveryMode ?? "field",
+            // the live-stream boxes only mean something for a remote lesson
+            streamMode: args.deliveryMode === "remote" ? args.streamMode : undefined,
+            ratings: JSON.stringify(ratings),
+            planningRec: args.planningRec?.trim(),
+            executionRec: args.executionRec?.trim(),
+            evalMgmtRec: args.evalMgmtRec?.trim(),
+            managementRec: args.managementRec?.trim(),
+            notes: [args.notes?.trim(), args.oldDateReason?.trim() ? `(إدخال لاحق: ${args.oldDateReason.trim()})` : ""]
+                .filter(Boolean).join("\n") || undefined,
+        };
+        const contentChanged = !!existing && contentKey(existing) !== contentKey(content);
+        const stillWithDeputy = !!existing?.coordinatorApproval && existing?.reviewRequest?.toRole === "deputy" && !contentChanged;
+        const queued = coordinatorSubmitting && (!!sourceImportId || stillWithDeputy);
         const approvalFields = !coordinatorVisit ? {} : coordinatorSubmitting ? {
-            coordinatorApproval: { name: access.name, at: now, signatureId: ((await ctx.db.get(args.visitorId!)) as any)?.signatureId },
+            coordinatorApproval: { name: access.name, at: now, signatureId: coordinatorSignatureId },
             deputyApproval: undefined,
-            reviewRequest: { toRole: "deputy" as const, toName: settings.deputyName, byName: access.name, at: now },
+            reviewRequest: queued ? { toRole: "deputy" as const, toName: settings.deputyName, byName: access.name, at: now } : undefined,
             reviewReturn: undefined,
         } : args.status === "submitted" ? {
             deputyApproval: { name: access.name, at: now, signatureId: settings.deputySignatureId ?? undefined },
@@ -395,31 +443,18 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
             visitorName: args.visitorName.trim(),
             recordedByVisitorId: existing ? existing.recordedByVisitorId : access.visitorId,
             recordedByName: existing ? existing.recordedByName : access.name,
-            teacherId: args.teacherId,
+            ...content,
             teacherName,
             teacherDepartment: (teacher.department ?? "").trim(),
-            subjectName: args.subjectName.trim(),
-            classId: args.classId,
             className: cls?.name ?? existing?.className ?? "",
-            lessonTopic: args.lessonTopic.trim(),
-            visitDate: args.visitDate,
-            followUpType: args.followUpType ?? "full",
-            deliveryMode: args.deliveryMode ?? "field",
-            // the live-stream boxes only mean something for a remote lesson
-            streamMode: args.deliveryMode === "remote" ? args.streamMode : undefined,
-            ratings: JSON.stringify(ratings),
             averageScore: scores.average ?? 0,
             domainAverages: JSON.stringify(scores.domains),
-            planningRec: args.planningRec?.trim(),
-            executionRec: args.executionRec?.trim(),
-            evalMgmtRec: args.evalMgmtRec?.trim(),
-            managementRec: args.managementRec?.trim(),
-            notes: [args.notes?.trim(), args.oldDateReason?.trim() ? `(إدخال لاحق: ${args.oldDateReason.trim()})` : ""]
-                .filter(Boolean).join("\n") || undefined,
             status: finalStatus,
             // submitting ends any review; the reviewer who approves is recorded
             ...(args.status === "submitted" ? { reviewRequest: undefined, reviewReturn: undefined, submittedByName: access.name } : {}),
             ...approvalFields,
+            // the teacher signed what was written then
+            ...(existing?.teacherSign && contentChanged ? { teacherSign: undefined } : {}),
             updatedAt: now,
             updatedBy: args.actorName,
         };
@@ -489,8 +524,8 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
                 coordinatorSubmitting ? "coordinator_approved" : becomingSubmitted ? "submitted" : teacherChanged ? "teacher_changed" : "updated", args.actorName,
                 teacherChanged
                     ? `تغيير معلم الزيارة من ${existing.teacherName} إلى ${teacherName}: ${args.editReason?.trim()}`
-                    : `${becomingSubmitted ? "اعتماد" : "تعديل"} زيارة ${teacherName}`);
-            return { ok: true as const, id: existing._id, recordNo: numbering.recordNo ?? existing.recordNo ?? null, status: finalStatus, awaitingDeputy: coordinatorSubmitting };
+                    : `${coordinatorSubmitting ? "توقيع المنسق على" : becomingSubmitted ? "اعتماد" : "تعديل"} زيارة ${teacherName}`);
+            return { ok: true as const, id: existing._id, recordNo: numbering.recordNo ?? existing.recordNo ?? null, status: finalStatus, awaitingDeputy: queued, awaitingTeacher: coordinatorSubmitting && !queued };
         }
 
         const id = await ctx.db.insert("supervisionVisits", {
@@ -502,8 +537,8 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
         });
         if (sourceImportId) await ctx.db.patch(sourceImportId, { visitId: id });
         await audit(ctx, school._id, id, coordinatorSubmitting ? "coordinator_approved" : becomingSubmitted ? "submitted" : "created", args.actorName,
-            `${coordinatorSubmitting ? "اعتماد المنسق وإرسال للنائب" : becomingSubmitted ? "اعتماد" : "مسودة"} زيارة ${teacherName}`);
-        return { ok: true as const, id, recordNo: numbering.recordNo ?? null, status: finalStatus, awaitingDeputy: coordinatorSubmitting };
+            `${coordinatorSubmitting ? "توقيع المنسق على" : becomingSubmitted ? "اعتماد" : "مسودة"} زيارة ${teacherName}`);
+        return { ok: true as const, id, recordNo: numbering.recordNo ?? null, status: finalStatus, awaitingDeputy: queued, awaitingTeacher: coordinatorSubmitting && !queued };
 }
 
 export const saveVisit = mutation({ args: visitArgs, handler: saveVisitHandler });

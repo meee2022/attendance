@@ -165,7 +165,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                                             </button>
                                         </div>
                                         {v.sourceImportId && <OriginalVisitPdf visitId={v._id}/>}
-                                        <AcknowledgementControl visitId={v._id} updatedAt={v.updatedAt} canManage={(session?.role === "deputy" || session?.role === "admin") || session?.visitorId === v.visitorId}/>
+                                        <AcknowledgementControl visit={v} canManage={(session?.role === "deputy" || session?.role === "admin") || session?.visitorId === v.visitorId}/>
                                         {[["التخطيط", v.planningRec], ["تنفيذ الدرس", v.executionRec],
                                           [v.managementRec ? "التقويم" : "التقويم والإدارة الصفية", v.evalMgmtRec], ["الإدارة الصفية وبيئة التعلم", v.managementRec ?? ""], ["عامة", v.notes]]
                                             .filter(([, t]) => t && t.trim())

@@ -141,7 +141,9 @@ function ProtectedApp() {
           <Route path="/reports"             element={<FeatureRoute featureKey="/reports"><ReportsPage /></FeatureRoute>} />
           <Route path="/messages"            element={<FeatureRoute featureKey="/messages"><MessagesPage /></FeatureRoute>} />
           <Route path="/surveys"             element={<FeatureRoute featureKey="/surveys"><SurveysPage /></FeatureRoute>} />
-          <Route path="/surveys/analysis" element={<FeatureRoute featureKey="/surveys"><SurveyAnalysisPage /></FeatureRoute>} />
+          {/* not tied to the «الاستبانات» switch: the teachers' survey can be off while the
+              deputy analyses files; the page itself is the deputy's and the admin's alone */}
+          <Route path="/surveys/analysis" element={<SurveyAnalysisPage />} />
           <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><VisitsPage /></FeatureRoute>} />
           <Route path="/supervision/acknowledge" element={<TeacherAcknowledgement />} />
           <Route path="/supervision/print/:id" element={<VisitFormPrint />} />

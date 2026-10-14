@@ -2,6 +2,11 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+    surveyAnalyses: defineTable({
+        schoolId: v.id("schools"), title: v.string(), fileName: v.string(),
+        data: v.string(), responseCount: v.number(), questionCount: v.number(),
+        updatedAt: v.number(), updatedBy: v.string(),
+    }).index("by_school", ["schoolId"]),
     teacherTasks: defineTable({
         schoolId: v.id("schools"), title: v.string(), url: v.string(), description: v.string(),
         audience: v.array(v.string()), audienceLabel: v.string(), category: v.string(), academicYear: v.string(),

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
@@ -1346,6 +1347,8 @@ export function AnalyticsTab({ survey }: { survey: Survey }) {
 
 // ── Main Page (Teacher View) ───────────────────────────────────────────────
 export default function SurveysPage() {
+    const session = usePlatformSession();
+    const analysisLink = ["admin", "deputy"].includes(session?.role ?? "") ? <Link to="/surveys/analysis" className="flex items-center justify-between gap-3 p-4 bg-white border border-qatar-gray-border rounded-xl text-qatar-maroon font-bold"><span>تحليل ملفات الاستبانات</span><BarChart3 className="w-5 h-5" aria-hidden="true"/></Link> : null;
     const survey = useQuery(api.surveys.getActiveSurvey);
 
     if (survey === undefined) {
@@ -1359,6 +1362,7 @@ export default function SurveysPage() {
     if (!survey) {
         return (
             <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in duration-500">
+                {analysisLink}
                 <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
                     >
                     <div className="p-5 sm:p-8">
@@ -1383,6 +1387,7 @@ export default function SurveysPage() {
 
     return (
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500 pb-20">
+            {analysisLink}
             {/* Header */}
             <div className="workspace-page-header rounded-2xl overflow-hidden qatar-card-shadow"
                 >

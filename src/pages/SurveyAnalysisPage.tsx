@@ -1,0 +1,317 @@
+// @ts-nocheck
+import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { Upload, Printer, ArrowRight, Trash2, RefreshCw } from "lucide-react";
+import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
+import { api } from "../../convex/_generated/api";
+import { buildSurvey, refreshSurvey, analyze, filterable, analyzeColumn, TYPES } from "../lib/surveyAnalysis";
+import "./surveyAnalysis.css";
+export default function SurveyAnalysisPage() {
+  const session = usePlatformSession();
+  return ["admin", "deputy"].includes(session?.role) ? <ConnectedAnalysis/> : <p className="p-8 text-center">تحليل ملفات الاستبانات متاح لمسؤول المنصة والنائب فقط.</p>;
+}
+function ConnectedAnalysis() {
+  const [params, setParams] = useSearchParams();
+  const id = params.get("id");
+  const list = useQuery(api.surveyAnalyses.list);
+  const row = useQuery(api.surveyAnalyses.get, id ? { id } : "skip");
+  const save = useMutation(api.surveyAnalyses.save), remove = useMutation(api.surveyAnalyses.remove);
+  return <SurveyWorkspace list={list} row={row} id={id} onOpen={id => setParams(id ? {id} : {})} onSave={save} onRemove={remove}/>;
+}
+export function SurveyWorkspace({ list, row, id, onOpen, onSave, onRemove }) {
+  const [draft, setDraft] = useState(null), [busy,setBusy] = useState(false), [message,setMessage] = useState("");
+  const input = useRef(null), target = useRef(null);
+  const saved = row ? JSON.parse(row.data) : null;
+  async function upload(e) {
+    const file = e.target.files?.[0]; e.target.value = "";
+    if (!file) return;
+    setBusy(true); setMessage("");
+    try {
+      const table = await readTable(file);
+      let fresh = buildSurvey(table,file.name);
+      const old = target.current;
+      if (old) fresh = refreshSurvey(JSON.parse(old.data),fresh);
+      // Review before sending any imported answers to the server.
+      setDraft({ survey:fresh, previous:old });
+    } catch(e) { setMessage(e.message || "تعذّر قراءة الملف. راجع العناوين والردود."); }
+    finally { setBusy(false); target.current=null; }
+  }
+  async function persist(survey, previous) {
+    setBusy(true); setMessage("");
+    try {
+      const nextId = await onSave({ data:JSON.stringify(survey), ...(previous ? {id:previous._id,expectedUpdatedAt:previous.updatedAt} : {}) });
+      setDraft(null); onOpen(nextId); setMessage("تم حفظ التحليل.");
+    } catch(e) { setMessage(e.data || e.message || "تعذّر الحفظ. أعد المحاولة."); }
+    finally { setBusy(false); }
+  }
+  const pick = previous => { target.current=previous; input.current?.click(); };
+  return <div className="survey-analysis" dir="rtl">
+    <input ref={input} type="file" accept=".xlsx,.xls,.csv" hidden onChange={upload} aria-label="ملف ردود الاستبانة"/>
+    <Link className="text-button" to="/surveys"><ArrowRight size={16} aria-hidden="true"/> الاستبانات</Link>
+    <header className="page-heading"><div><h1>تحليل الاستبانات</h1><p>ارفع ملف الردود من Microsoft Forms أو Excel، وراجع الأسئلة قبل حفظ التحليل.</p></div><button className="button primary" disabled={busy} onClick={()=>pick(null)}><Upload size={17} aria-hidden="true"/> {busy ? "جارٍ المعالجة…" : "استيراد ملف ردود"}</button></header>
+    {message && <p role="status" className="sv-message">{String(message)}</p>}
+    {draft ? <SurveyDetail key={draft.survey.id} survey={draft.survey} review busy={busy} onSave={s=>persist(s,draft.previous)} onCancel={()=>setDraft(null)}/>
+      : id ? row === undefined ? <p role="status">جارٍ تحميل التحليل…</p> : saved && <><button className="text-button" onClick={()=>onOpen(null)}>كل التحليلات</button><SurveyDetail key={row._id+row.updatedAt} survey={saved} busy={busy} onSave={s=>persist(s,row)} onRefresh={()=>pick(row)}/></>
+      : list === undefined ? <p role="status">جارٍ تحميل الاستبانات…</p> : list.length ? <div className="sv-library">{list.map(s=><article key={s._id}><div><h2><button className="text-button" onClick={()=>onOpen(s._id)}>{s.title}</button></h2><p>{s.responseCount} رد · {s.questionCount} سؤال · تحديث {day(new Date(s.updatedAt).toISOString())}</p></div><button className="button subtle" disabled={busy} onClick={async()=>{if(!window.confirm(`حذف تحليل «${s.title}»؟ لا يمكن التراجع.`))return;setBusy(true);try{await onRemove({id:s._id});}catch(e){setMessage(e.data||e.message);}finally{setBusy(false);}}} aria-label={`حذف ${s.title}`}><Trash2 size={16} aria-hidden="true"/></button></article>)}</div>
+      : <section className="panel sv-empty"><h2>ابدأ بملف الردود</h2><p>في Microsoft Forms، افتح الردود واختر «فتح في Excel»، ثم نزّل الملف وارفعه هنا. يدعم Excel وCSV حتى 5000 رد.</p><button className="button primary" disabled={busy} onClick={()=>pick(null)}>استيراد أول استبانة</button></section>}
+  </div>;
+}
+function SurveyDetail({survey,review,busy,onSave,onCancel,onRefresh}) {
+  const [editing,setEditing] = useState(review), [current,setCurrent] = useState(survey), [filter,setFilter] = useState({column:-1,value:""});
+  const [print,setPrint] = useState(false);
+  const result = useMemo(()=>analyze(current,filter),[current,filter]);
+  const options=filterable(current), col=current.columns[filter.column];
+  const values=col ? analyzeColumn(col,current.rows.map(r=>r[filter.column])).items?.map(x=>x.label) ?? [] : [];
+  const filterLabel=filter.value && col ? `${col.name}: ${filter.value}` : "";
+  function configure(i,type) {
+    setCurrent(s=>({...s,columns:s.columns.map((c,j)=>j===i?{...c,type}:c)})); setFilter({column:-1,value:""});
+  }
+  return <div className="sv-view">
+    <header className="page-heading"><div><h2>{review ? "مراجعة الاستيراد" : survey.title}</h2><p>{survey.fileName} · {survey.rows.length} رد</p></div><div className="heading-actions">{!review && <><button className="button subtle" disabled={busy||editing} onClick={onRefresh}><RefreshCw size={16} aria-hidden="true"/> تحديث بملف أحدث</button><button className="button subtle" onClick={()=>setEditing(!editing)}>{editing ? "إغلاق الإعدادات" : "تعديل التحليل"}</button><button className="button primary" onClick={()=>{setPrint(true);setTimeout(()=>{window.print();setPrint(false);},100);}}><Printer size={16} aria-hidden="true"/> طباعة / حفظ PDF</button></>}</div></header>
+    {editing && <section className="panel sv-setup"><label className="field-label">عنوان الاستبانة<input name="survey-title" autoComplete="off" maxLength={160} value={current.title} onChange={e=>setCurrent(s=>({...s,title:e.target.value}))}/></label><p className="muted">راجع نوع كل سؤال. «لا يُحلّل» يخفيه من التقرير؛ «استبعاد من الحفظ» يحذف بياناته قبل رفعها.</p>{current.columns.map((c,i)=><label key={i}><span>{c.name}</span><select aria-label={`نوع السؤال ${c.name}`} value={c.type} onChange={e=>configure(i,e.target.value)}>{Object.entries(TYPES).map(([k,label])=><option value={k} key={k}>{label}</option>)}<option value="exclude">استبعاد من الحفظ</option></select></label>)}{current.hidden?.length>0 && <p className="muted">استُبعدت بيانات التواصل تلقائيًا: {current.hidden.join("، ")}</p>}<div className="heading-actions"><button className="button primary" disabled={busy||!current.title.trim()||current.columns.every(c=>c.type==="exclude")} onClick={()=>{const kept=current.columns.map((c,i)=>({c,i})).filter(x=>x.c.type!=="exclude");onSave({...current,columns:kept.map(x=>x.c),rows:current.rows.map(r=>kept.map(x=>r[x.i]))});}}>{busy?"جارٍ الحفظ…":review?"حفظ الاستبانة وتحليلها":"حفظ التعديلات"}</button>{review && <button className="button subtle" disabled={busy} onClick={onCancel}>إلغاء الاستيراد</button>}</div></section>}
+    <div className="sv-controls"><label className="field-label">فرز الردود حسب<select value={filter.column} onChange={e=>setFilter({column:Number(e.target.value),value:""})}><option value={-1}>كل الردود</option>{options.map(c=><option key={c.i} value={c.i}>{c.name}</option>)}</select></label>{col && <label className="field-label">القيمة<select value={filter.value} onChange={e=>setFilter({...filter,value:e.target.value})}><option value="">الكل</option>{values.map(v=><option key={v}>{v}</option>)}</select></label>}</div>
+    <Report survey={current} result={result} filterLabel={filterLabel}/>
+    {print && createPortal(<div className="sv-print-root survey-analysis"><Report survey={current} result={result} filterLabel={filterLabel} print/></div>,document.body)}
+  </div>;
+}
+const TOP = 8;
+const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
+const day = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString('ar-QA-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' })
+    : '—';
+
+async function readTable(file) {
+  if (file.size > 8 * 1024 * 1024) throw Error('الملف أكبر من 8 ميجابايت.');
+  if (!/\.(xlsx|xls|csv)$/i.test(file.name)) throw Error('اختاري ملف Excel (‎.xlsx) كما يُنزَّل من النماذج.');
+  const XLSX = await import('xlsx');
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true, codepage: 65001 });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+}
+
+// أعمدة أفقية: فئة لكل سطر، مرتبة تنازليًا، ولون واحد لأن السلسلة واحدة
+function Bars({ items, of }) {
+  // بند «إجابات أخرى» مجموع فئات صغيرة: لا يدخل في مقياس الأعمدة ويُرسم بلون محايد
+  const max = Math.max(...items.filter((x) => !x.other).map((x) => x.count), 1);
+  return (
+    <div className="sv-bars" role="list">
+      {items.map((x) => (
+        <div
+          className={x.other ? 'sv-bar other' : 'sv-bar'}
+          role="listitem"
+          key={x.label}
+          title={`${x.label}: ${x.count} (${pct(x.count, of)}%)`}
+        >
+          <span className="sv-bar-label">{x.label}</span>
+          <span className="sv-bar-track">
+            <i style={{ width: `${Math.min(100, (x.count / max) * 100)}%` }} />
+          </span>
+          <span className="sv-bar-value">
+            <b>{x.count}</b> {!x.noPct && <small>{pct(x.count, of)}%</small>}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Question({ q, print }) {
+  const [all, setAll] = useState(false),
+    [table, setTable] = useState(false);
+  const note = `${q.answered} من ${q.total} أجابوا`;
+  if (q.items) {
+    const rest = q.items.slice(TOP),
+      shown =
+        all || print || q.type === 'grade' || q.items.length <= TOP + 1
+          ? q.items
+          : [
+              ...q.items.slice(0, TOP),
+              {
+                label: `إجابات أخرى (${rest.length})`,
+                count: rest.reduce((n, x) => n + x.count, 0),
+                other: true,
+                noPct: q.type === 'multi',
+              },
+            ];
+    return (
+      <section className="panel sv-q">
+        <header>
+          <div>
+            <h3>{q.name}</h3>
+            <small>
+              {TYPES[q.type]} · {note}
+              {q.type === 'multi' && ' · النسبة من عدد المجيبين، وقد يختار المجيب أكثر من إجابة'}
+            </small>
+          </div>
+          {!print && (
+            <div className="sv-q-tools">
+              {q.items.length > TOP + 1 && q.type !== 'grade' && (
+                <button className="text-button" onClick={() => setAll(!all)}>
+                  {all ? 'الأكثر تكرارًا فقط' : `كل الإجابات (${q.items.length})`}
+                </button>
+              )}
+              <button className="text-button" onClick={() => setTable(!table)}>
+                {table ? 'رسم' : 'جدول'}
+              </button>
+            </div>
+          )}
+        </header>
+        {table && !print ? (
+          <table className="lux-table sv-table">
+            <thead>
+              <tr>
+                <th>الإجابة</th>
+                <th>العدد</th>
+                <th>النسبة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {q.items.map((x) => (
+                <tr key={x.label}>
+                  <td>{x.label}</td>
+                  <td>{x.count}</td>
+                  <td>{pct(x.count, q.answered)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <Bars items={shown} of={q.answered} />
+        )}
+      </section>
+    );
+  }
+  if (q.type === 'name')
+    return (
+      <section className="panel sv-q">
+        <header>
+          <div>
+            <h3>{q.name}</h3>
+            <small>{note}</small>
+          </div>
+        </header>
+        <p className="sv-line">
+          <b>{q.distinct}</b> اسمًا مختلفًا
+          {q.repeated.length > 0 && (
+            <>
+              {' '}
+              · <b>{q.repeated.length}</b> مكرر: {q.repeated.map((x) => `${x.label} (${x.count})`).join('، ')}
+            </>
+          )}
+        </p>
+      </section>
+    );
+  const list = all || print ? q.answers : q.answers.slice(0, 6);
+  return (
+    <section className="panel sv-q">
+      <header>
+        <div>
+          <h3>{q.name}</h3>
+          <small>
+            {TYPES.text} · {q.answers.length} إجابة مكتوبة من {q.total}
+          </small>
+        </div>
+        {!print && q.answers.length > 6 && (
+          <button className="text-button" onClick={() => setAll(!all)}>
+            {all ? 'عرض أقل' : `كل الإجابات (${q.answers.length})`}
+          </button>
+        )}
+      </header>
+      {list.length ? (
+        <ul className="sv-answers">
+          {list.map((a, i) => (
+            <li key={i}>{a}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">لا توجد إجابات مكتوبة.</p>
+      )}
+    </section>
+  );
+}
+
+function Report({ survey, result, filterLabel, print }) {
+  const highlights = result.questions
+    .filter((q) => q.items?.length && q.answered)
+    .map((q) => ({
+      name: q.name,
+      answered: q.answered,
+      top: [...q.items].sort((a, b) => b.count - a.count)[0],
+    }));
+  return (
+    <div className={print ? 'sv-report sv-print' : 'sv-report'} dir="rtl">
+      {print && (
+        <header className="sv-print-head">
+          <h1>{survey.title}</h1>
+          <p>
+            تحليل الاستبيان · {result.responses} ردًّا{filterLabel && ` · ${filterLabel}`} · من{' '}
+            {day(result.from)} إلى {day(result.to)}
+          </p>
+        </header>
+      )}
+      <div className="sv-tiles">
+        <div>
+          <b>{result.responses}</b>
+          <span>{filterLabel ? `ردًّا من ${result.total}` : 'عدد الردود'}</span>
+        </div>
+        <div>
+          <b>{result.questions.length}</b>
+          <span>أسئلة محلَّلة</span>
+        </div>
+        <div>
+          <b>{day(result.from)}</b>
+          <span>أول رد</span>
+        </div>
+        <div>
+          <b>{day(result.to)}</b>
+          <span>آخر رد</span>
+        </div>
+      </div>
+      {highlights.length > 0 && (
+        <section className="panel sv-q sv-highlights">
+          <header>
+            <div>
+              <h3>أبرز النتائج</h3>
+              <small>الإجابة الأكثر تكرارًا في كل سؤال</small>
+            </div>
+          </header>
+          <ul>
+            {highlights.map((h) => (
+              <li key={h.name}>
+                <span>{h.name}</span>
+                <b>{h.top.label}</b>
+                <small>
+                  {h.top.count} · {pct(h.top.count, h.answered)}%
+                </small>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {result.days.length > 1 && (
+        <section className="panel sv-q">
+          <header>
+            <div>
+              <h3>الردود حسب اليوم</h3>
+              <small>بتوقيت قطر</small>
+            </div>
+          </header>
+          <div className="sv-days" role="img" aria-label="عدد الردود في كل يوم">
+            {result.days.map((d) => (
+              <div key={d.label} title={`${d.label}: ${d.count}`}>
+                <b>{d.count}</b>
+                <i style={{ height: `${(d.count / Math.max(...result.days.map((x) => x.count))) * 100}%` }} />
+                <small>{d.label.slice(5).split('-').reverse().join('/')}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {result.questions.map((q) => (
+        <Question key={q.name} q={q} print={print} />
+      ))}
+    </div>
+  );
+}
+

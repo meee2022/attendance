@@ -118,18 +118,20 @@ function SurveysAdminSection() {
         );
     }
 
+    const analysisLink = <a href="/surveys/analysis" className="block rounded-xl border border-qatar-gray-border bg-white p-4 font-bold text-qatar-maroon">تحليل ملفات الاستبانات — استيراد Excel وقراءة النتائج</a>;
     if (!survey) {
         return (
-            <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow flex flex-col items-center py-16 gap-4">
+            <div className="space-y-4">{analysisLink}<div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow flex flex-col items-center py-16 gap-4">
                 <ClipboardList className="w-10 h-10 text-slate-300"/>
                 <p className="font-black text-slate-500">لا توجد استبانة نشطة</p>
                 <p className="text-xs text-slate-400 font-bold">يمكن إنشاؤها من صفحة الاستبانات</p>
-            </div>
+            </div></div>
         );
     }
 
     return (
         <div className="space-y-5">
+            {analysisLink}
             <div className="bg-white rounded-2xl border border-qatar-gray-border qatar-card-shadow overflow-hidden">
                 <div className="px-5 py-3 flex items-center justify-between" style={{background:"linear-gradient(135deg,#5C1523,#7A1E30)"}}>
                     <div className="flex gap-2">

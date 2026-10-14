@@ -19,6 +19,7 @@ import AssessmentsPage from "./pages/AssessmentsPage";
 import StudentsPage from "./pages/StudentsPage";
 import { FileCheck, ClipboardList, Stethoscope } from "lucide-react";
 import SurveysPage from "./pages/SurveysPage";
+import SurveyAnalysisPage from "./pages/SurveyAnalysisPage";
 import VisitsPage from "./pages/visits/VisitsPage";
 import VisitFormPrint from "./pages/visits/VisitFormPrint";
 import GradesPage from "./pages/GradesPage";
@@ -131,6 +132,7 @@ function ProtectedApp() {
           <Route path="/reports"             element={<FeatureRoute featureKey="/reports"><ReportsPage /></FeatureRoute>} />
           <Route path="/messages"            element={<FeatureRoute featureKey="/messages"><MessagesPage /></FeatureRoute>} />
           <Route path="/surveys"             element={<FeatureRoute featureKey="/surveys"><SurveysPage /></FeatureRoute>} />
+          <Route path="/surveys/analysis" element={<FeatureRoute featureKey="/surveys"><SurveyAnalysisPage /></FeatureRoute>} />
           <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><VisitsPage /></FeatureRoute>} />
           <Route path="/supervision/acknowledge" element={<TeacherAcknowledgement />} />
           <Route path="/supervision/print/:id" element={<VisitFormPrint />} />

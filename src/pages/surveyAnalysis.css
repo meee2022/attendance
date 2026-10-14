@@ -1,0 +1,309 @@
+/* ====== تحليل الاستبيانات ====== */
+.survey-analysis { --primary: var(--color-qatar-maroon, #5c1523); --ink: #243247; --muted: #516078; --line: #e2e8f0; --line-strong: #b6c1ce; --ivory: #f5f2ed; --gold: #ad8f50; --r-md: 12px; color: var(--ink); max-width: 1120px; margin: auto; padding-bottom: 40px; overflow-wrap: anywhere; }
+.survey-analysis .page-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:16px; align-items:center; margin:20px 0; }
+.survey-analysis h1 { font-size:24px; font-weight:750; }
+.survey-analysis h2 { font-size:19px; font-weight:700; }
+.survey-analysis .page-heading p,.survey-analysis .muted,.survey-analysis .sv-library p { color:var(--muted); font-size:14px; line-height:1.7; }
+.survey-analysis .heading-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.survey-analysis .button,.survey-analysis .text-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:8px 14px; border-radius:8px; font-size:14px; font-weight:650; cursor:pointer; }
+.survey-analysis .primary { background:var(--primary); color:white; }
+.survey-analysis .subtle { background:var(--ivory); color:var(--ink); }
+.survey-analysis .text-button { color:var(--primary); padding-inline:0; text-align:right; }
+.survey-analysis button:hover,.survey-analysis a:hover { filter:brightness(.92); text-decoration:underline; text-underline-offset:4px; }
+.survey-analysis button:disabled { opacity:.55; cursor:wait; }
+.survey-analysis :is(button,a,input,select):focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+.survey-analysis .panel { background:white; padding:20px; border:1px solid var(--line); border-radius:12px; }
+.survey-analysis .field-label { display:grid; gap:6px; font-size:14px; font-weight:600; }
+.survey-analysis input,.survey-analysis select { background:white; color:var(--ink); border:1px solid var(--line-strong); border-radius:8px; min-height:44px; padding:8px 10px; max-width:100%; width:100%; }
+.survey-analysis .sv-library article { display:flex; justify-content:space-between; gap:14px; align-items:center; padding:18px 0; border-bottom:1px solid var(--line); }
+.survey-analysis .sv-library article>div { min-width:0; }
+.survey-analysis .sv-empty { max-width:680px; margin:32px auto; line-height:1.8; }
+.survey-analysis .sv-empty p { margin:10px 0 20px; }
+.survey-analysis .sv-message { padding:12px; background:var(--ivory); margin-bottom:16px; }
+.survey-analysis .sv-table { width:100%; border-collapse:collapse; }
+.survey-analysis .sv-table th,.survey-analysis .sv-table td { padding:10px; border-bottom:1px solid var(--line); text-align:right; }
+.survey-analysis .sv-bar-value { font-variant-numeric:tabular-nums; }
+.survey-analysis ::selection { background:#edd8df; color:var(--primary); }
+.sv-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.sv-controls .field-label {
+  flex: 1 1 200px;
+  max-width: 320px;
+}
+.sv-setup {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.sv-setup label {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 12px;
+  align-items: center;
+  font-size: 14px;
+}
+.sv-report {
+  display: grid;
+  gap: 16px;
+}
+.sv-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.sv-tiles div {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  display: grid;
+  gap: 2px;
+}
+.sv-tiles b {
+  font-size: 22px;
+  color: var(--primary);
+  line-height: 1.3;
+}
+.sv-tiles span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.sv-q header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sv-q h3 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  white-space: pre-line;
+}
+.sv-q header small {
+  color: var(--muted);
+}
+.sv-q-tools {
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+/* عمود لكل فئة: التسمية، ثم الشريط، ثم العدد والنسبة بلون النص لا بلون الشريط */
+.sv-bars {
+  display: grid;
+  gap: 8px;
+}
+.sv-bar {
+  display: grid;
+  grid-template-columns: minmax(110px, 32%) 1fr 84px;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+}
+.sv-bar-label {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sv-bar-track {
+  background: var(--ivory);
+  border-radius: 4px;
+  height: 16px;
+  overflow: hidden;
+  /* الشريط يبدأ من جهة التسمية (اليمين في العربية) */
+  display: flex;
+  justify-content: flex-start;
+}
+.sv-bar.other .sv-bar-track i {
+  background: var(--line-strong);
+}
+.sv-bar.other .sv-bar-label {
+  color: var(--muted);
+}
+.sv-highlights ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.sv-highlights li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  font-size: 14px;
+}
+.sv-highlights li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.sv-highlights span {
+  color: var(--muted);
+  white-space: pre-line;
+}
+.sv-highlights b {
+  color: var(--primary);
+}
+.sv-highlights small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sv-bar-track i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--primary);
+  border-radius: 4px 0 0 4px;
+}
+.sv-bar:hover .sv-bar-track i {
+  background: var(--primary-dark);
+}
+.sv-bar-value {
+  color: var(--ink);
+  text-align: start;
+  white-space: nowrap;
+}
+.sv-bar-value small {
+  color: var(--muted);
+}
+.sv-days {
+  display: flex;
+  align-items: end;
+  gap: 6px;
+  height: 150px;
+  padding-top: 18px;
+}
+.sv-days div {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.sv-days i {
+  width: min(100%, 34px);
+  min-height: 2px;
+  background: var(--primary);
+  border-radius: 4px 4px 0 0;
+}
+.sv-days b {
+  font-size: 12px;
+  color: var(--ink);
+}
+.sv-days small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sv-answers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.sv-answers li {
+  background: var(--ivory);
+  border-inline-start: 1px solid var(--gold);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.sv-line {
+  margin: 0;
+  line-height: 1.9;
+}
+.sv-table td:nth-child(n + 2),
+.sv-table th:nth-child(n + 2) {
+  text-align: center;
+  width: 90px;
+}
+.sv-print-root {
+  display: none;
+}
+@media (max-width: 700px) {
+  .sv-tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sv-bar {
+    grid-template-columns: 1fr 72px;
+  }
+  .sv-bar-label {
+    grid-column: 1 / -1;
+  }
+  .sv-setup label {
+    grid-template-columns: 1fr;
+  }
+  .sv-q header {
+    flex-direction: column;
+  }
+}
+
+/* ====== التصدير PDF: يُطبع التقرير وحده بمقاس A4 عمودي ====== */
+@page survey-report {
+  size: A4 portrait;
+  margin: 14mm 12mm;
+}
+@media print {
+  body:has(> .sv-print-root) > #root {
+    display: none !important;
+  }
+  body:has(> .sv-print-root) {
+    background: #fff !important;
+  }
+  .sv-print-root {
+    display: block;
+    page: survey-report;
+  }
+  .sv-print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .sv-print-head {
+    border-bottom: 3px solid var(--gold);
+    padding-bottom: 8px;
+  }
+  .sv-print-head h1 {
+    margin: 0;
+    color: var(--primary);
+    font-size: 22pt;
+  }
+  .sv-print-head p {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+  /* البطاقة الطويلة تنقسم بين صفحتين بدل ترك نصف صفحة فارغًا؛ السطر الواحد وعنوان السؤال لا ينقسمان */
+  .sv-print .panel {
+    box-shadow: none;
+    border: 1px solid var(--line);
+  }
+  .sv-print .sv-bar,
+  .sv-print .sv-highlights li {
+    break-inside: avoid;
+  }
+  .sv-print .sv-q header {
+    break-after: avoid;
+  }
+  .sv-print.sv-report {
+    display: block;
+  }
+  .sv-print.sv-report > * {
+    margin-bottom: 12px;
+  }
+  .sv-print .sv-tiles div {
+    break-inside: avoid;
+  }
+  .sv-print .sv-answers li {
+    break-inside: avoid;
+  }
+}

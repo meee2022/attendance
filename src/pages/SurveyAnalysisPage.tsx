@@ -60,6 +60,16 @@ export function SurveyWorkspace({ list, row, id, onOpen, onSave, onRemove }) {
 function SurveyDetail({survey,review,busy,onSave,onCancel,onRefresh}) {
   const [editing,setEditing] = useState(review), [current,setCurrent] = useState(survey), [filter,setFilter] = useState({column:-1,value:""});
   const [print,setPrint] = useState(false);
+  const [pdfBusy,setPdfBusy] = useState(false), [pdfError,setPdfError] = useState("");
+  const downloadPdf = async () => {
+    setPdfBusy(true);setPdfError("");
+    try {
+      const {createSurveyPdf}=await import("../lib/surveyPdf");
+      const blob=await createSurveyPdf(<Report survey={current} result={result} filterLabel={filterLabel} print/>);
+      const url=URL.createObjectURL(blob), a=document.createElement("a");
+      a.href=url;a.download=`${current.title}.pdf`.replace(/[<>:"/\\|?*]/g,"-");a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(e){setPdfError(e.message||"تعذّر إنشاء التقرير؛ أعد المحاولة.");}finally{setPdfBusy(false);}
+  };
   const result = useMemo(()=>analyze(current,filter),[current,filter]);
   const options=filterable(current), col=current.columns[filter.column];
   const values=col ? analyzeColumn(col,current.rows.map(r=>r[filter.column])).items?.map(x=>x.label) ?? [] : [];
@@ -68,7 +78,8 @@ function SurveyDetail({survey,review,busy,onSave,onCancel,onRefresh}) {
     setCurrent(s=>({...s,columns:s.columns.map((c,j)=>j===i?{...c,type}:c)})); setFilter({column:-1,value:""});
   }
   return <div className="sv-view">
-    <header className="page-heading"><div><h2>{review ? "مراجعة الاستيراد" : survey.title}</h2><p>{survey.fileName} · {survey.rows.length} رد</p></div><div className="heading-actions">{!review && <><button className="button subtle" disabled={busy||editing} onClick={onRefresh}><RefreshCw size={16} aria-hidden="true"/> تحديث بملف أحدث</button><button className="button subtle" onClick={()=>setEditing(!editing)}>{editing ? "إغلاق الإعدادات" : "تعديل التحليل"}</button><button className="button primary" onClick={()=>{setPrint(true);setTimeout(()=>{window.print();setPrint(false);},100);}}><Printer size={16} aria-hidden="true"/> طباعة / حفظ PDF</button></>}</div></header>
+    {pdfError && <p role="alert">{pdfError}</p>}
+    <header className="page-heading"><div><h2>{review ? "مراجعة الاستيراد" : survey.title}</h2><p>{survey.fileName} · {survey.rows.length} رد</p></div><div className="heading-actions">{!review && <><button className="button subtle" disabled={busy||editing} onClick={onRefresh}><RefreshCw size={16} aria-hidden="true"/> تحديث بملف أحدث</button><button className="button subtle" onClick={()=>setEditing(!editing)}>{editing ? "إغلاق الإعدادات" : "تعديل التحليل"}</button><button className="button primary" disabled={pdfBusy} onClick={downloadPdf}><Printer size={16} aria-hidden="true"/> {pdfBusy ? "جارٍ تجهيز PDF…" : "تنزيل تقرير PDF"}</button></>}</div></header>
     {editing && <section className="panel sv-setup"><label className="field-label">عنوان الاستبانة<input name="survey-title" autoComplete="off" maxLength={160} value={current.title} onChange={e=>setCurrent(s=>({...s,title:e.target.value}))}/></label><p className="muted">راجع نوع كل سؤال. «لا يُحلّل» يخفيه من التقرير؛ «استبعاد من الحفظ» يحذف بياناته قبل رفعها.</p>{current.columns.map((c,i)=><label key={i}><span>{c.name}</span><select aria-label={`نوع السؤال ${c.name}`} value={c.type} onChange={e=>configure(i,e.target.value)}>{Object.entries(TYPES).map(([k,label])=><option value={k} key={k}>{label}</option>)}<option value="exclude">استبعاد من الحفظ</option></select></label>)}{current.hidden?.length>0 && <p className="muted">استُبعدت بيانات التواصل تلقائيًا: {current.hidden.join("، ")}</p>}<div className="heading-actions"><button className="button primary" disabled={busy||!current.title.trim()||current.columns.every(c=>c.type==="exclude")} onClick={()=>{const kept=current.columns.map((c,i)=>({c,i})).filter(x=>x.c.type!=="exclude");onSave({...current,columns:kept.map(x=>x.c),rows:current.rows.map(r=>kept.map(x=>r[x.i]))});}}>{busy?"جارٍ الحفظ…":review?"حفظ الاستبانة وتحليلها":"حفظ التعديلات"}</button>{review && <button className="button subtle" disabled={busy} onClick={onCancel}>إلغاء الاستيراد</button>}</div></section>}
     <div className="sv-controls"><label className="field-label">فرز الردود حسب<select value={filter.column} onChange={e=>setFilter({column:Number(e.target.value),value:""})}><option value={-1}>كل الردود</option>{options.map(c=><option key={c.i} value={c.i}>{c.name}</option>)}</select></label>{col && <label className="field-label">القيمة<select value={filter.value} onChange={e=>setFilter({...filter,value:e.target.value})}><option value="">الكل</option>{values.map(v=><option key={v}>{v}</option>)}</select></label>}</div>
     <Report survey={current} result={result} filterLabel={filterLabel}/>
@@ -231,7 +242,7 @@ function Question({ q, print }) {
   );
 }
 
-function Report({ survey, result, filterLabel, print }) {
+export function Report({ survey, result, filterLabel, print }) {
   const highlights = result.questions
     .filter((q) => q.items?.length && q.answered)
     .map((q) => ({

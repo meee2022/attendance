@@ -13,6 +13,14 @@ const table = [
     [4, "", "", "", "11-2", "لا", "رياضيات", ""],
 ];
 describe("imported survey analysis", () => {
+    it("accepts a branched Forms export with 195 columns and preserves individual classes", () => {
+        const headings=["الصف",...Array.from({length:194},(_,i)=>`معيار ${i+1}`)];
+        const rows=[["12/7",...Array(194).fill("4")],["12/3",...Array(194).fill("3")]];
+        const s=buildSurvey([headings,...rows],"تفرعات.xlsx");
+        expect(s.columns[0].type).toBe("class");
+        expect(analyze(s,{column:0,value:"12/7"}).responses).toBe(1);
+        expect(analyze(s).questions).toHaveLength(195);
+    });
     it("removes contact metadata, groups grades and deduplicates multi-answer options per respondent", () => {
         const s = buildSurvey(table, "اختبار.xlsx");
         expect(JSON.stringify(s)).not.toContain("55112233");
@@ -22,7 +30,7 @@ describe("imported survey analysis", () => {
         const a = analyze(s);
         expect(a.days).toHaveLength(2);
         expect(a.questions.find(q => q.name === "المجالات").items.map(x=>x.count)).toEqual([3,3]);
-        expect(analyze(s,{column:0,value:"الصف العاشر"}).responses).toBe(2);
+        expect(analyze(s,{column:0,value:"العاشر 1"}).responses).toBe(1);
         const edited = {...s, title:"اسم محفوظ", columns:s.columns.map(c=>({...c,type:c.name==="الرضا"?"skip":c.type}))};
         expect(refreshSurvey(edited,buildSurvey(table,"أحدث.xlsx")).title).toBe("اسم محفوظ");
         expect(()=>refreshSurvey(s,buildSurvey([["سؤال مختلف"],["نعم"],["لا"]],"x.xlsx"))).toThrow("أسئلة الملف مختلفة");

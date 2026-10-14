@@ -94,6 +94,7 @@ export const TYPES = {
   choice: 'اختيار واحد',
   multi: 'اختيار متعدد',
   grade: 'الصف',
+  class: 'الفصل / الشعبة',
   text: 'إجابة مفتوحة',
   name: 'اسم',
   skip: 'لا يُحلَّل',
@@ -111,7 +112,7 @@ export function guessType(header, values) {
   // أرقام الجوال وما يشبهها بيانات تواصل: لا تُحلَّل ولا تُخزَّن
   if (filled.filter((v) => /^\+?[\d٠-٩\s-]{7,}$/.test(v)).length >= n * 0.8) return 'private';
   if (filled.filter((v) => /[;؛]/.test(v)).length >= n * 0.2) return 'multi';
-  if (/الصف|grade/.test(h) && filled.filter((v) => gradeOf(v)).length >= n * 0.6) return 'grade';
+  if (/الصف|grade/.test(h) && filled.filter((v) => gradeOf(v)).length >= n * 0.6) return filled.some(v => /\d+\s*[/\-]\s*\d+/.test(digits(v))) ? 'class' : 'grade';
   const distinct = new Set(filled.map(keyOf)).size;
   if (/^(ال)?اسم /.test(h + ' ') && distinct > n * 0.5) return 'name';
   // إجابات تتكرر بين المجيبين = اختيار؛ إجابة مختلفة لكل مجيب = نص مفتوح
@@ -123,7 +124,7 @@ export function guessType(header, values) {
 export function buildSurvey(table, fileName) {
   const [head = [], ...body] = table;
   const rows = body.filter((r) => r.some((c) => clean(c)));
-  if (head.length > 150) throw Error('الملف يتجاوز 150 عمودًا.');
+  if (head.length > 300) throw Error('الملف يتجاوز 300 عمودًا.');
   if (!head.length || !rows.length) throw Error('الملف لا يحتوي عناوين أسئلة وردودًا.');
   if (rows.length > 5000) throw Error('الملف يتجاوز 5000 رد.');
   const all = head.map((name, i) => ({
@@ -212,7 +213,7 @@ export function analyzeColumn(column, values) {
       // الطالبة الواحدة قد تختار أكثر من إجابة؛ النسبة من عدد المجيبات
       items: tally(filled.flatMap((v) => [...new Set(v.split(/[;؛]/).map(clean).filter(Boolean))])),
     };
-  if (column.type === 'choice') return { ...base, items: tally(filled) };
+  if (column.type === 'choice' || column.type === 'class') return { ...base, items: tally(filled) };
   if (column.type === 'name') {
     const names = tally(filled);
     return { ...base, distinct: names.length, repeated: names.filter((x) => x.count > 1) };
@@ -224,7 +225,7 @@ export function analyzeColumn(column, values) {
 
 // أعمدة تصلح للفرز بها (الصف، الجنسية، نعم/لا…)
 export const filterable = (survey) =>
-  survey.columns.map((c, i) => ({ ...c, i })).filter((c) => ['grade', 'choice'].includes(c.type));
+  survey.columns.map((c, i) => ({ ...c, i })).filter((c) => ['grade', 'class', 'choice'].includes(c.type));
 
 export const matches = (survey, filter) => (row) => {
   if (!filter?.value) return true;

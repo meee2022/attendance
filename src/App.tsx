@@ -20,6 +20,9 @@ import StudentsPage from "./pages/StudentsPage";
 import { FileCheck, ClipboardList, Stethoscope } from "lucide-react";
 import SurveysPage from "./pages/SurveysPage";
 import SurveyAnalysisPage from "./pages/SurveyAnalysisPage";
+import StudentOpinionsPage from "./pages/StudentOpinionsPage";
+import GuardianReport from "./pages/GuardianReport";
+import { UserCheck } from "lucide-react";
 import VisitsPage from "./pages/visits/VisitsPage";
 import VisitFormPrint from "./pages/visits/VisitFormPrint";
 import GradesPage from "./pages/GradesPage";
@@ -51,6 +54,7 @@ const SECONDARY_NAV = [
     { to: "/diagnostics", icon: <Stethoscope className="w-4 h-4" />,    label: "الاختبارات التشخيصية" },
     { to: "/supervision",icon: <ClipboardCheck className="w-4 h-4" />,  label: "الإشراف الصفي" },
     { to: "/surveys",   icon: <ClipboardList className="w-4 h-4" />,   label: "الاستبانات" },
+    { to: "/opinions",  icon: <UserCheck className="w-4 h-4" />,       label: "رأي المعلمين في الطلاب" },
     { to: "/messages",  icon: <MessageSquare className="w-4 h-4" />,   label: "الرسائل" },
 ];
 
@@ -141,6 +145,7 @@ function ProtectedApp() {
           <Route path="/reports"             element={<FeatureRoute featureKey="/reports"><ReportsPage /></FeatureRoute>} />
           <Route path="/messages"            element={<FeatureRoute featureKey="/messages"><MessagesPage /></FeatureRoute>} />
           <Route path="/surveys"             element={<FeatureRoute featureKey="/surveys"><SurveysPage /></FeatureRoute>} />
+          <Route path="/opinions"            element={<FeatureRoute featureKey="/opinions"><StudentOpinionsPage /></FeatureRoute>} />
           {/* not tied to the «الاستبانات» switch: the teachers' survey can be off while the
               deputy analyses files; the page itself is the deputy's and the admin's alone */}
           <Route path="/surveys/analysis" element={<SurveyAnalysisPage />} />
@@ -449,6 +454,8 @@ function BottomNav() {
 function App() {
   const { pathname } = useLocation();
   if (pathname === "/supervision/acknowledge") return <TeacherAcknowledgement/>;
+  // a guardian's report opens from its private link, without signing in
+  if (pathname === "/guardian-report") return <GuardianReport/>;
   return <PlatformBoundary><ProtectedApp/></PlatformBoundary>;
 }
 export default App;

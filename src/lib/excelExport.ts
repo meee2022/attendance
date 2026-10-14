@@ -108,11 +108,14 @@ export async function buildWorkbook(sheets: ExcelSheetSpec[]): Promise<any> {
             r++;
         };
 
-        fullRow(spec.title, { name: FONT, size: 15, bold: true, color: { argb: MAROON } }, 30);
-        for (const line of spec.meta ?? []) {
-            fullRow(line, { name: FONT, size: 10, bold: true, color: { argb: "FF475569" } }, 18);
+        // no title: the header row is row 1, as a mail-merge or bulk-sending tool expects
+        if (spec.title) {
+            fullRow(spec.title, { name: FONT, size: 15, bold: true, color: { argb: MAROON } }, 30);
+            for (const line of spec.meta ?? []) {
+                fullRow(line, { name: FONT, size: 10, bold: true, color: { argb: "FF475569" } }, 18);
+            }
+            r++;
         }
-        r++;
 
         const headerStart = r;
         for (const band of spec.bands ?? []) {

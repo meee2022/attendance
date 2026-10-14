@@ -7,6 +7,32 @@ export default defineSchema({
         data: v.string(), responseCount: v.number(), questionCount: v.number(),
         updatedAt: v.number(), updatedBy: v.string(),
     }).index("by_school", ["schoolId"]),
+    // ── رأي المعلمين في الطلاب ──────────────────────────────────────────
+    // A round asks every teacher of one grade for their view of each student;
+    // once the deputy publishes it, each guardian reads their son's report
+    // through a private link.
+    opinionRounds: defineTable({
+        schoolId: v.id("schools"), title: v.string(), grade: v.number(),
+        open: v.boolean(), published: v.boolean(),
+        createdAt: v.number(), createdBy: v.string(),
+    }).index("by_school", ["schoolId"]),
+    studentOpinions: defineTable({
+        schoolId: v.id("schools"), roundId: v.id("opinionRounds"),
+        studentId: v.id("students"), classId: v.id("classes"),
+        teacherId: v.id("schoolTeachers"), teacherName: v.string(), subjectName: v.string(),
+        academic: v.optional(v.number()),   // 5 ممتاز … 1 ضعيف
+        behavior: v.optional(v.number()),
+        distraction: v.optional(v.union(v.literal("no"), v.literal("sometimes"), v.literal("yes"))),
+        advice: v.optional(v.string()),     // نصيحة لولي الأمر
+        updatedAt: v.number(),
+    }).index("by_round", ["roundId"])
+      .index("by_round_student", ["roundId", "studentId"])
+      .index("by_round_teacher", ["roundId", "teacherId", "subjectName"]),
+    guardianLinks: defineTable({
+        schoolId: v.id("schools"), roundId: v.id("opinionRounds"), studentId: v.id("students"),
+        token: v.string(), expiresAt: v.number(), createdAt: v.number(),
+        openCount: v.number(), firstOpenedAt: v.optional(v.number()), lastOpenedAt: v.optional(v.number()),
+    }).index("by_token", ["token"]).index("by_round", ["roundId"]),
     teacherTasks: defineTable({
         schoolId: v.id("schools"), title: v.string(), url: v.string(), description: v.string(),
         audience: v.array(v.string()), audienceLabel: v.string(), category: v.string(), academicYear: v.string(),

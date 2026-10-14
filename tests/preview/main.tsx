@@ -13,8 +13,11 @@ function Live() {
 }
 import MonthlyReport from "../../src/pages/visits/MonthlyReport";
 import GradesCheck from "./GradesCheck";
+import SurveyCheck from "./SurveyCheck";
 import { sample } from "./PdfCheck";
 import { FormPreview } from "../../src/pages/visits/TeacherAcknowledgement";
+if (new URLSearchParams(location.search).has("survey")) createRoot(document.getElementById("root")!).render(<SurveyCheck/>);
+else
 if (new URLSearchParams(location.search).has("signpreview")) createRoot(document.getElementById("root")!).render(<div dir="rtl" style={{ maxWidth: 720, margin: "auto", padding: 16 }}><FormPreview data={sample}/><p>نهاية المعاينة</p></div>);
 else
 if (new URLSearchParams(location.search).has("grades")) createRoot(document.getElementById("root")!).render(<GradesCheck/>);

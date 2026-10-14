@@ -19,7 +19,32 @@ describe("imported survey analysis", () => {
         const s=buildSurvey([headings,...rows],"تفرعات.xlsx");
         expect(s.columns[0].type).toBe("class");
         expect(analyze(s,{column:0,value:"12/7"}).responses).toBe(1);
-        expect(analyze(s).questions).toHaveLength(195);
+        // «معيار 1» is a name of its own, not a repeated subject: one rating question
+        const a=analyze(s);
+        expect(a.questions).toHaveLength(1);
+        expect(a.ratings.statements).toHaveLength(1);
+        expect(a.ratings.subjects).toHaveLength(194);
+    });
+    it("reads a Forms rating grid across branches as subjects × statements", () => {
+        // two branches of the form (two tracks), each rating its subjects on two questions;
+        // the export names the columns after the subjects, numbered on repeat
+        const head=["ID","Completion time","الشعبة","رياضيات","فيزياء","رياضيات2","فيزياء2","رياضيات3","تاريخ","رياضيات4","تاريخ2","ملاحظات"];
+        const sci=(cls:string,a:string,b:string)=>[1,"",cls,a,b,a,b,"","","","",""];
+        const hum=(cls:string,a:string,b:string)=>[2,"",cls,"","","","",a,b,a,b,""];
+        const s=buildSurvey([head,sci("12/1","4","3"),sci("12/1","2","3"),hum("12/5","3","1"),hum("12/5","3","2")],"تقييم.xlsx");
+        expect(s.columns.filter(c=>c.type==="rating")).toHaveLength(8);
+        const r=analyze(s).ratings;
+        expect(r.max).toBe(4);
+        expect(r.statements.map(x=>x.label)).toEqual(["البند 1","البند 2"]);
+        const math=r.subjects.find(x=>x.name==="رياضيات");
+        expect(math.mean).toBe((4+2+4+2+3+3+3+3)/8);
+        expect(math.raters).toBe(4);
+        // equal means keep alphabetical order
+        expect(r.subjects.map(x=>x.name)).toEqual(["رياضيات","فيزياء","تاريخ"]);
+        // filtering by section keeps only that branch's ratings
+        const f=analyze(s,{column:s.columns.findIndex(c=>c.name==="الشعبة"),value:"12/5"}).ratings;
+        expect(f.subjects.map(x=>x.name)).toEqual(["رياضيات","تاريخ"]);
+        expect(analyze({...s,statements:["يشرح بوضوح"]}).ratings.statements[0].label).toBe("يشرح بوضوح");
     });
     it("removes contact metadata, groups grades and deduplicates multi-answer options per respondent", () => {
         const s = buildSurvey(table, "اختبار.xlsx");

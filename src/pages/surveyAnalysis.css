@@ -307,3 +307,21 @@
     break-inside: avoid;
   }
 }
+
+/* ====== أسئلة التقييم: المواد × البنود ====== */
+.sv-rating-setup { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.sv-bar-track i.good { background: #1f7a4d; }
+.sv-bar-track i.fair { background: #b7791f; }
+.sv-bar-track i.weak { background: #b42318; }
+.sv-grid-wrap { overflow-x: auto; }
+.sv-grid { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.sv-grid th, .sv-grid td { padding: 7px 8px; border: 1px solid var(--line); text-align: center; white-space: nowrap; }
+.sv-grid thead th { background: var(--ivory); font-weight: 700; }
+.sv-grid tbody th, .sv-grid tfoot th { text-align: right; font-weight: 600; white-space: normal; min-width: 130px; }
+.sv-grid tfoot th, .sv-grid tfoot td { font-weight: 700; background: var(--ivory); }
+.sv-grid td.good { background: #e7f4ec; color: #145c39; }
+.sv-grid td.fair { background: #fdf3e1; color: #8a5a12; }
+.sv-grid td.weak { background: #fbe9e7; color: #9b1c12; }
+.sv-grid-mean { font-weight: 700; }
+.sv-statements { margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.sv-statements b { display: inline-block; min-width: 1.6em; color: var(--ink); }

@@ -97,7 +97,15 @@ export const TYPES = {
   class: 'الفصل / الشعبة',
   text: 'إجابة مفتوحة',
   name: 'اسم',
+  rating: 'تقييم بمقياس',
   skip: 'لا يُحلَّل',
+};
+
+// A rating answer: a whole number on a short scale (1–4, 1–5, 0–10)
+const RATING = /^\d{1,2}$/;
+const ratingValue = (v) => {
+  const t = digits(clean(v));
+  return RATING.test(t) && Number(t) <= 10 ? Number(t) : null;
 };
 
 // يخمّن نوع السؤال من عنوانه وإجاباته
@@ -112,6 +120,7 @@ export function guessType(header, values) {
   // أرقام الجوال وما يشبهها بيانات تواصل: لا تُحلَّل ولا تُخزَّن
   if (filled.filter((v) => /^\+?[\d٠-٩\s-]{7,}$/.test(v)).length >= n * 0.8) return 'private';
   if (filled.filter((v) => /[;؛]/.test(v)).length >= n * 0.2) return 'multi';
+  if (filled.every((v) => ratingValue(v) !== null)) return 'rating';
   if (/الصف|grade/.test(h) && filled.filter((v) => gradeOf(v)).length >= n * 0.6) return filled.some(v => /\d+\s*[/\-]\s*\d+/.test(digits(v))) ? 'class' : 'grade';
   const distinct = new Set(filled.map(keyOf)).size;
   if (/^(ال)?اسم /.test(h + ' ') && distinct > n * 0.5) return 'name';
@@ -153,6 +162,7 @@ export function buildSurvey(table, fileName) {
     fileName: clean(fileName),
     uploaded: new Date().toISOString(),
     hidden: all.filter((c) => c.type === 'private').map((c) => c.name),
+    statements: [],
     columns: kept.map(({ name, type }) => ({ name, type })),
     rows: rows.map((r) => kept.map((c) => clean(r[c.i]))),
     times: timeCol ? rows.map((r) => stamp(r[timeCol.i])) : [],
@@ -167,6 +177,7 @@ export function refreshSurvey(old, fresh) {
     ...fresh,
     id: old.id,
     title: old.title,
+    statements: old.statements || [],
     columns: fresh.columns.map((c) => ({ ...c, type: types.get(keyOf(c.name)) || c.type })),
   };
 }
@@ -223,6 +234,84 @@ export function analyzeColumn(column, values) {
   return base;
 }
 
+// ── أسئلة «التقييم» في Microsoft Forms ──────────────────────────────────
+// A rating grid (Likert) is exported as one column per row label — here the
+// subjects — numbered when a label repeats («الرياضيات», «الرياضيات2»…), and
+// the wording of each question is lost. Consecutive rating columns form one
+// question until a subject repeats or other respondents start (another branch
+// of the form); within a branch the questions follow in order, so the n-th
+// question of every branch is the same statement.
+// Forms appends the number with no space; «معيار 1» is a name of its own.
+export const baseName = (name) => clean(name).replace(/(?<=[^\s\d])\d+$/, '');
+
+export function ratingGrid(survey) {
+  const who = (i) => new Set(survey.rows.flatMap((r, ri) => (clean(r[i]) ? [ri] : [])));
+  const together = (a, b) => {
+    let both = 0;
+    for (const x of a) if (b.has(x)) both++;
+    return both >= 0.5 * Math.min(a.size, b.size);
+  };
+  const blocks = [];
+  let block = null;
+  survey.columns.forEach((c, i) => {
+    if (c.type !== 'rating') return;
+    const people = who(i), subject = keyOf(baseName(c.name));
+    if (!block || block.last !== i - 1 || block.subjects.has(subject) || !together(block.who, people)) {
+      block = { who: people, subjects: new Set(), cols: [] };
+      blocks.push(block);
+    }
+    block.subjects.add(subject);
+    block.cols.push(i);
+    block.last = i;
+  });
+  const branches = [];
+  for (const b of blocks) {
+    let branch = branches.find((x) => together(x.who, b.who));
+    if (!branch) branches.push((branch = { who: b.who, count: 0 }));
+    b.statement = branch.count++;
+  }
+  return blocks;
+}
+
+// Each subject's mean on every statement, over the rows kept by the filter
+export function analyzeRatings(survey, keep) {
+  const blocks = ratingGrid(survey);
+  if (!blocks.length) return null;
+  const n = Math.max(...blocks.map((b) => b.statement)) + 1;
+  let max = 0;
+  for (const b of blocks) for (const i of b.cols) for (const r of survey.rows) max = Math.max(max, ratingValue(r[i]) ?? 0);
+  const acc = () => ({ sum: 0, n: 0 });
+  const mean = (a) => (a.n ? a.sum / a.n : null);
+  const subjects = new Map(), statements = Array.from({ length: n }, acc), overall = acc();
+  for (const b of blocks)
+    for (const i of b.cols) {
+      const name = baseName(survey.columns[i].name), key = keyOf(name);
+      if (!subjects.has(key)) subjects.set(key, { name, all: acc(), top: 0, per: Array.from({ length: n }, acc) });
+      const s = subjects.get(key);
+      survey.rows.forEach((r, ri) => {
+        const v = keep[ri] ? ratingValue(r[i]) : null;
+        if (v === null) return;
+        for (const a of [s.all, s.per[b.statement], statements[b.statement], overall]) { a.sum += v; a.n++; }
+        if (v === max) s.top++;
+      });
+    }
+  return {
+    max,
+    mean: mean(overall),
+    statements: statements.map((a, k) => ({ label: clean(survey.statements?.[k]) || `البند ${k + 1}`, mean: mean(a) })),
+    subjects: [...subjects.values()]
+      .filter((s) => s.all.n)
+      .map((s) => ({
+        name: s.name,
+        mean: mean(s.all),
+        per: s.per.map(mean),
+        top: s.top / s.all.n,
+        raters: Math.max(...s.per.map((a) => a.n)),
+      }))
+      .sort((a, b) => b.mean - a.mean || a.name.localeCompare(b.name, 'ar')),
+  };
+}
+
 // أعمدة تصلح للفرز بها (الصف، الجنسية، نعم/لا…)
 export const filterable = (survey) =>
   survey.columns.map((c, i) => ({ ...c, i })).filter((c) => ['grade', 'class', 'choice'].includes(c.type));
@@ -250,6 +339,7 @@ export function analyze(survey, filter) {
     from: times[0] || '',
     to: times.at(-1) || '',
     days: [...perDay].map(([label, count]) => ({ label, count })),
+    ratings: analyzeRatings(survey, keep),
     questions: survey.columns
       .map((c, i) =>
         analyzeColumn(
@@ -257,7 +347,7 @@ export function analyze(survey, filter) {
           rows.map((r) => r[i]),
         ),
       )
-      .filter((q) => q.type !== 'skip' && q.type !== 'exclude'),
+      .filter((q) => !['skip', 'exclude', 'rating'].includes(q.type)),
   };
 }
 

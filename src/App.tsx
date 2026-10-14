@@ -57,10 +57,19 @@ const SECONDARY_NAV = [
 const PUBLIC_NAV = [...PRIMARY_NAV, ...SECONDARY_NAV];
 
 const ADMIN_NAV = [
+    // shown only to the academic deputy and the platform admin
+    { to: "/surveys/analysis", icon: <BarChart3 className="w-5 h-5" />, label: "تحليل الاستبانات", admin: true, staffOnly: true },
     { to: "/settings", icon: <Settings className="w-5 h-5" />, label: "الإعدادات", admin: true },
 ];
 
 const ALL_NAV = [...PUBLIC_NAV, ...ADMIN_NAV];
+
+// A path belongs to the most specific nav item it starts with: /surveys/analysis
+// lights «تحليل الاستبانات», not «الاستبانات» as well
+function navActive(pathname: string, to: string) {
+  if (to === "/") return pathname === "/";
+  return pathname.startsWith(to) && !ALL_NAV.some(n => n.to.length > to.length && n.to.startsWith(to) && pathname.startsWith(n.to));
+}
 
 // Navbar order — also the order used to pick the landing page
 const NAV_ORDER = PUBLIC_NAV.map(n => n.to);
@@ -161,7 +170,7 @@ function ProtectedApp() {
 
 function Navbar() {
   const { pathname } = useLocation();
-  const isActive = (to: string) => to === "/" ? pathname === "/" : pathname.startsWith(to);
+  const isActive = (to: string) => navActive(pathname, to);
   const platformUser = usePlatformSession();
   const isAdminAuthed = (platformUser?.role === "admin" || platformUser?.role === "deputy");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -268,7 +277,7 @@ function Navbar() {
                     <p className="text-[10px] font-black text-slate-400 px-3 py-1 flex items-center gap-1">
                       <Shield className="w-2.5 h-2.5"/>الإدارة {!isAdminAuthed && "(يتطلب PIN)"}
                     </p>
-                    {ADMIN_NAV.map(({ to, icon, label }) => {
+                    {ADMIN_NAV.filter(n => isAdminAuthed || !n.staffOnly).map(({ to, icon, label }) => {
                       const active = isActive(to);
                       return (
                         <Link key={to} to={to} aria-current={isActive(to) ? "page" : undefined} onClick={() => setMoreOpen(false)}
@@ -314,7 +323,7 @@ function Navbar() {
 
 function BottomNav() {
   const { pathname } = useLocation();
-  const isActive = (to: string) => to === "/" ? pathname === "/" : pathname.startsWith(to);
+  const isActive = (to: string) => navActive(pathname, to);
   const platformUser = usePlatformSession();
   const isAdminAuthed = (platformUser?.role === "admin" || platformUser?.role === "deputy");
   const [showAdminDrawer, setShowAdminDrawer] = useState(false);
@@ -370,7 +379,7 @@ function BottomNav() {
                 <Shield className="w-2.5 h-2.5"/>الإدارة {!isAdminAuthed && "(يتطلب PIN)"}
               </p>
               <div className="space-y-1.5">
-                {ADMIN_NAV.map(({ to, icon, label }) => (
+                {ADMIN_NAV.filter(n => isAdminAuthed || !n.staffOnly).map(({ to, icon, label }) => (
                   <Link key={to} to={to} aria-current={isActive(to) ? "page" : undefined} onClick={() => setShowAdminDrawer(false)}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl font-bold text-sm transition-colors ${
                       isActive(to) ? "bg-qatar-maroon text-white" : "bg-slate-50 text-slate-700"

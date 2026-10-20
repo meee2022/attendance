@@ -211,7 +211,7 @@ export default function SupervisionTeachers() {
                     )}
 
                     {tab === "supervisors" && (
-                        <SupervisorsManager supervisors={supervisors} onAdd={addSupervisor} onDelete={deleteSupervisor}/>
+                        <SupervisorsManager supervisors={supervisors} departments={departments} onAdd={addSupervisor} onDelete={deleteSupervisor}/>
                     )}
                 </div>
             </div>
@@ -219,7 +219,7 @@ export default function SupervisionTeachers() {
     );
 }
 
-function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any[]; onAdd: any; onDelete: any }) {
+function SupervisorsManager({ supervisors, departments, onAdd, onDelete }: { supervisors: any[]; departments: string[]; onAdd: any; onDelete: any }) {
     const [name, setName] = useState("");
     const [role, setRole] = useState<"coordinator" | "supervisor" | "deputy">("coordinator");
     const [subjects, setSubjects] = useState<string[]>([]);
@@ -235,9 +235,18 @@ function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any
 
     const byRole: Record<string, any[]> = { coordinator: [], supervisor: [], deputy: [] };
     for (const s of supervisors) byRole[s.role]?.push(s);
+    // a department no coordinator covers: its teachers appear to no coordinator
+    const covered = new Set(supervisors.filter(s => s.role === "coordinator" && s.isActive !== false).flatMap(s => s.subjects.map((x: string) => x.trim())));
+    const orphan = departments.filter(d => d && !covered.has(d.trim()));
+    const options = Array.from(new Set([...SUBJECTS, ...departments.filter(Boolean)]));
 
     return (
         <div className="space-y-4">
+            {orphan.length > 0 && (
+                <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900 leading-relaxed">
+                    أقسام بلا منسق — معلموها لا يظهرون لأي منسق: {orphan.join("، ")}. اضغط «الأقسام» عند المنسق المسؤول وأضفها له.
+                </p>
+            )}
             <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2">
                 <p className="text-xs font-black text-slate-500">إضافة زائر جديد</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -290,12 +299,55 @@ function SupervisorsManager({ supervisors, onAdd, onDelete }: { supervisors: any
                                     <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate">{s.subjects.join(" · ")}</p>
                                 </div>
                               </div>
+                              {s.role !== "deputy" && <DepartmentsEditor person={s} options={options} color={ROLE_COLORS[s.role as "coordinator" | "supervisor"]}/>}
                               {s.role === "coordinator" && <CoordinatorPin person={s}/>}
                             </div>
                         ))}
                     </div>
                 </div>
             ))}
+        </div>
+    );
+}
+
+// The departments a coordinator or supervisor covers: the teachers they see and visit.
+// One person may cover several — «العلوم» with الكيمياء, for instance.
+function DepartmentsEditor({ person, options, color }: { person: any; options: string[]; color: string }) {
+    const update = useMutation(api.supervision.updateSupervisor);
+    const [open, setOpen] = useState(false);
+    const [picked, setPicked] = useState<string[]>(person.subjects);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    const changed = picked.length !== person.subjects.length || picked.some(x => !person.subjects.includes(x));
+    if (!open) return (
+        <button type="button" onClick={() => { setPicked(person.subjects); setError(""); setOpen(true); }}
+            className="flex items-center gap-1 text-xs font-bold text-qatar-maroon hover:underline">
+            <Pencil className="w-3.5 h-3.5"/>الأقسام
+        </button>
+    );
+    return (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <p className="text-[10px] font-black text-slate-500">الأقسام التي يتابعها {person.fullName} — يرى معلميها ويزورهم</p>
+            <div className="flex flex-wrap gap-1">
+                {options.map(d => {
+                    const sel = picked.includes(d);
+                    return <button key={d} type="button" aria-pressed={sel} onClick={() => setPicked(p => sel ? p.filter(x => x !== d) : [...p, d])}
+                        className={`text-[11px] px-2 py-1 rounded font-black border ${sel ? "text-white border-transparent" : "bg-white border-slate-200 text-slate-600"}`}
+                        style={sel ? { background: color } : {}}>{d}</button>;
+                })}
+            </div>
+            {error && <p role="alert" className="text-xs font-bold text-rose-700">{error}</p>}
+            <div className="flex gap-2">
+                <button type="button" disabled={!picked.length || !changed || busy} onClick={async () => {
+                    setBusy(true); setError("");
+                    try { await update({ id: person._id, subjects: picked }); setOpen(false); }
+                    catch (e: any) { setError(typeof e?.data === "string" ? e.data : "تعذّر الحفظ. حاول مجددًا."); }
+                    finally { setBusy(false); }
+                }} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-qatar-maroon text-white text-xs font-black disabled:opacity-40">
+                    <Check className="w-3.5 h-3.5"/>حفظ
+                </button>
+                <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-black text-slate-600">إلغاء</button>
+            </div>
         </div>
     );
 }

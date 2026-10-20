@@ -158,7 +158,11 @@ export const updateSupervisor = mutation({
         }
         const patch: any = {};
         if (args.fullName !== undefined) patch.fullName = args.fullName.trim();
-        if (args.subjects !== undefined) patch.subjects = args.subjects;
+        if (args.subjects !== undefined) {
+            const subjects = [...new Set(args.subjects.map(s => s.trim()).filter(Boolean))];
+            if (!subjects.length || subjects.length > 20) throw new ConvexError("اختر قسمًا واحدًا على الأقل");
+            patch.subjects = subjects;
+        }
         if (args.email !== undefined) patch.email = args.email;
         if (args.pin !== undefined) patch.pin = args.pin;
         if (args.isActive !== undefined) patch.isActive = args.isActive;

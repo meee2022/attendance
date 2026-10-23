@@ -47,17 +47,21 @@ describe("ministry grade sheets", () => {
     it("finds each section's track from its subjects and analyses by track and threshold", () => {
         const s = readGradeSheet(table, "11.xlsx");
         expect(sectionsOf(s).map(x => `${x.cls}:${x.track}`)).toEqual(["11/1:علمي", "11/4:تكنولوجي", "11/6:أدبي", "11/ESE:عام"]);
-        const a = analyzeGrades(s, { threshold: 10, track: "", cls: "" });
-        expect(a.atRisk.map(x => x.name)).toEqual(["طالب علمي ثان", "طالب تكنولوجي"]);
-        expect(a.barred.map(x => x.name)).toEqual(["طالب أدبي"]);
-        expect(a.noMarks.map(x => x.cls)).toEqual(["11/ESE"]);
+        // pass mark 15 of 30: under it «راسب», up to 18 «على الحافة»
+        const a = analyzeGrades(s, { pass: 15, track: "", cls: "" });
+        expect(a.students.filter(x => x.failed.length).map(x => x.name)).toEqual(["طالب علمي ثان", "طالب تكنولوجي"]);
+        expect(a.students.map(x => x.status)).toEqual(["excellent", "fail", "fail", "pass", "barred", "excellent", "none"]);
+        expect(a.students[1].failed.map(f => f.name)).toEqual(["الكيمياء", "الفيزياء"]);
+        expect(a.summary).toMatchObject({ students: 7, rated: 6, failAny: 2, failTwo: 1, barred: 1, none: 1, passAll: 3 });
         const chem = a.subjects.find(x => x.name === "الكيمياء")!;
-        expect(chem.mean).toBe(19);
+        expect(chem).toMatchObject({ mean: 19, fail: 1, passRate: 0.5 });
         expect(chem.bands).toEqual([1, 0, 0, 0, 1]);
-        const tech = analyzeGrades(s, { threshold: 10, track: "تكنولوجي", cls: "" });
+        expect(chem.bySection).toEqual([{ cls: "11/1", track: "علمي", count: 2, mean: 19, fail: 1, passRate: 0.5 }]);
+        const tech = analyzeGrades(s, { pass: 15, track: "تكنولوجي", cls: "" });
         expect(tech.students.map(x => x.cls)).toEqual(["11/4", "11/4"]);
         expect(tech.subjects.map(x => x.name)).toEqual(["الفيزياء", "علوم الحاسب"]);
-        expect(analyzeGrades(s, { threshold: 25, track: "", cls: "11/1" }).atRisk).toHaveLength(1);
+        expect(tech.sections[0]).toMatchObject({ cls: "11/4", failing: 1, passRate: 0.5 });
+        expect(analyzeGrades(s, { pass: 21, track: "", cls: "11/4" }).students.map(x => x.status)).toEqual(["fail", "edge"]);
     });
 
     it("flags a mark above its scale", () => {

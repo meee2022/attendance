@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Download, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
 import { api } from "../../convex/_generated/api";
-import { BANDS, analyzeGrades, checkSheet, readGradeSheet, sectionsOf, type GradeSheet, type Mark } from "../lib/gradeSheet";
+import { BANDS, STATUS_LABELS, analyzeGrades, checkSheet, readGradeSheet, sectionsOf, type GradeSheet, type Mark, type Status } from "../lib/gradeSheet";
 import { downloadWorkbook, type ExcelCell } from "../lib/excelExport";
 import "./surveyAnalysis.css";
 
@@ -98,93 +98,299 @@ function Connected() {
     </div>;
 }
 
+type Analysis = ReturnType<typeof analyzeGrades>;
+type Student = Analysis["students"][number];
+type Tab = "overview" | "subjects" | "sections" | "students";
+// what the students list shows: a status, optionally within one subject
+type StudentFilter = { status: string; subject: string; search: string; sort: string };
+const STATUS_TONE: Record<Status, string> = { barred: "weak", fail: "weak", edge: "fair", pass: "", excellent: "good", none: "" };
+const STUDENT_FILTERS: [string, string][] = [
+    ["", "كل الطلاب"], ["fail", "راسب في مادة أو أكثر"], ["fail2", "راسب في مادتين فأكثر"], ["edge", "على حافة النجاح"],
+    ["barred", "محروم"], ["absent", "غائب عن اختبار"], ["passAll", "ناجح في كل المواد"], ["excellent", "متفوق (90% فأكثر)"], ["none", "بلا درجات"],
+];
+
+// a mark's colour on the screen and in Excel: under the pass mark, just above it, or not sat
+const markTone = (m: Mark, k: number, a: { pass: number; edgeTop: number }) =>
+    typeof m === "string" ? "weak" : k === 0 && typeof m === "number" ? (m < a.pass ? "weak" : m < a.edgeTop ? "fair" : "") : "";
+
 export function Report({ sheet }: { sheet: GradeSheet }) {
     const max = sheet.maxes[0] || 30;
-    const [threshold, setThreshold] = useState(Math.round(max / 3));
-    const [track, setTrack] = useState(""), [cls, setCls] = useState(""), [search, setSearch] = useState("");
+    const [pass, setPass] = useState(max / 2);
+    const [track, setTrack] = useState(""), [cls, setCls] = useState("");
+    const [tab, setTab] = useState<Tab>("overview");
+    const [filter, setFilter] = useState<StudentFilter>({ status: "", subject: "", search: "", sort: "weakest" });
+    const [openSubject, setOpenSubject] = useState(""), [openSection, setOpenSection] = useState("");
+    const top = useRef<HTMLDivElement>(null);
     const sections = useMemo(() => sectionsOf(sheet), [sheet]);
     const tracks = [...new Set(sections.map(s => s.track))];
-    const a = useMemo(() => analyzeGrades(sheet, { threshold, track, cls }), [sheet, threshold, track, cls]);
+    const a = useMemo(() => analyzeGrades(sheet, { pass, track, cls }), [sheet, pass, track, cls]);
     const warnings = useMemo(() => checkSheet(sheet), [sheet]);
-    const shown = a.subjects.filter(s => s.count > 0).sort((x, y) => (y.mean ?? 0) - (x.mean ?? 0));
-    const notEntered = a.subjects.filter(s => s.count === 0).map(s => s.name);
-    const found = search.trim() ? a.students.filter(s => s.name.includes(search.trim()) || s.id === search.trim()).slice(0, 8) : [];
+    // from any card or row straight to the list it names
+    const go = (next: Tab, f?: Partial<StudentFilter>, open?: { subject?: string; section?: string }) => {
+        setTab(next);
+        if (f) setFilter(p => ({ ...p, search: "", subject: "", ...f }));
+        if (open?.subject !== undefined) setOpenSubject(open.subject);
+        if (open?.section !== undefined) setOpenSection(open.section);
+        top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    const counts: Record<Tab, string> = {
+        overview: "", subjects: String(a.subjects.filter(s => s.count).length), sections: String(a.sections.length), students: String(a.students.length),
+    };
 
-    return <div className="sv-report">
+    return <div className="sv-report" ref={top}>
         <div className="sv-controls">
             {tracks.length > 1 && <label className="field-label">المسار<select value={track} onChange={e => { setTrack(e.target.value); setCls(""); }}>
                 <option value="">كل المسارات</option>{tracks.map(t => <option key={t}>{t}</option>)}</select></label>}
             <label className="field-label">الشعبة<select value={cls} onChange={e => setCls(e.target.value)}>
                 <option value="">كل الشعب</option>{sections.filter(s => !track || s.track === track).map(s => <option key={s.cls} value={s.cls}>{s.cls}{tracks.length > 1 ? ` (${s.track})` : ""}</option>)}</select></label>
-            <label className="field-label">حد التعثّر (من {max})<input type="number" min={1} max={max} step={0.5} value={threshold} onChange={e => setThreshold(Number(e.target.value) || 1)}/></label>
-            <div style={{ alignSelf: "end" }}><button className="button subtle" onClick={() => void exportSheet(sheet, a, threshold, track)}><Download size={16} aria-hidden="true"/>Excel ملوّن</button></div>
+            <label className="field-label">حد النجاح (من {max})<input type="number" min={1} max={max} step={0.5} value={pass} onChange={e => setPass(Number(e.target.value) || 1)}/></label>
+            <div style={{ alignSelf: "end" }}><button className="button subtle" onClick={() => void exportTracks(sheet, a, track)}><Download size={16} aria-hidden="true"/>Excel ملوّن بالمسارات</button></div>
+        </div>
+        <p className="muted" style={{ marginTop: -8 }}>
+            راسب: دون {fmt(pass)} من {max} في «{sheet.components[0]}» · على حافة النجاح: من {fmt(pass)} إلى أقل من {fmt(a.edgeTop)} · {sheet.period}
+        </p>
+
+        <div className="sv-tabs" role="tablist" aria-label="أقسام التحليل">
+            {([["overview", "نظرة عامة"], ["subjects", "المواد"], ["sections", "الشعب"], ["students", "الطلاب"]] as [Tab, string][]).map(([k, label]) =>
+                <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "is-active" : ""} onClick={() => setTab(k)}>
+                    {label}{counts[k] && <small>{counts[k]}</small>}
+                </button>)}
         </div>
 
-        <div className="sv-tiles">
-            <div><b>{a.students.length}</b><span>عدد الطلاب · الشعب: {a.sections.length}</span></div>
-            <div><b>{fmt(a.mean)} <small style={{ fontSize: 13 }}>من {max}</small></b><span>المتوسط العام ({pct(a.mean === null ? null : a.mean / max)})</span></div>
-            <div><b>{a.atRisk.length}</b><span>متعثرون: دون {threshold} في مادة أو أكثر</span></div>
-            <div><b>{a.barred.length} · {a.absent.length}</b><span>محرومون · غائبون عن اختبار</span></div>
+        {tab === "overview" && <Overview sheet={sheet} a={a} warnings={warnings} go={go}/>}
+        {tab === "subjects" && <Subjects a={a} open={openSubject} setOpen={setOpenSubject} go={go}/>}
+        {tab === "sections" && <Sections sheet={sheet} a={a} tracks={tracks} open={openSection} setOpen={setOpenSection} go={go}/>}
+        {tab === "students" && <Students sheet={sheet} a={a} tracks={tracks} filter={filter} setFilter={setFilter}/>}
+    </div>;
+}
+
+// ── نظرة عامة ────────────────────────────────────────────────────────────
+function Overview({ sheet, a, warnings, go }: { sheet: GradeSheet; a: Analysis; warnings: string[]; go: any }) {
+    const s = a.summary, max = a.max;
+    const marked = a.subjects.filter(x => x.count);
+    const bestSub = [...marked].sort((x, y) => (y.mean ?? 0) - (x.mean ?? 0))[0];
+    const worstSub = [...marked].sort((x, y) => (x.mean ?? 0) - (y.mean ?? 0))[0];
+    const mostFail = [...marked].sort((x, y) => y.fail - x.fail)[0];
+    const secs = a.sections.filter(x => x.mean !== null);
+    const bestSec = [...secs].sort((x, y) => (y.mean ?? 0) - (x.mean ?? 0))[0];
+    const worstSec = [...secs].sort((x, y) => (x.mean ?? 0) - (y.mean ?? 0))[0];
+    const notEntered = a.subjects.filter(x => !x.count).map(x => x.name);
+    const card = (value: string | number, label: string, onClick?: () => void, t = "") =>
+        <button className={`sv-card ${t}`} onClick={onClick} disabled={!onClick}><b>{value}</b><span>{label}</span></button>;
+    return <>
+        <div className="sv-cards">
+            {card(s.students, `طالب في ${a.sections.length} شعبة`, () => go("students", { status: "" }))}
+            {card(`${fmt(a.mean)} / ${max}`, `المتوسط العام · ${pct(a.mean === null ? null : a.mean / max)}`)}
+            {card(`${s.passAll}`, `ناجحون في كل المواد · ${pct(s.rated ? s.passAll / s.rated : null)}`, () => go("students", { status: "passAll" }), "good")}
+            {card(s.failAny, "راسبون في مادة أو أكثر", () => go("students", { status: "fail" }), "weak")}
+            {card(s.failTwo, "راسبون في مادتين فأكثر", () => go("students", { status: "fail2" }), "weak")}
+            {card(s.edge, "على حافة النجاح", () => go("students", { status: "edge" }), "fair")}
+            {card(s.barred, "محرومون", () => go("students", { status: "barred" }), "weak")}
+            {card(s.absent, "غائبون عن اختبار", () => go("students", { status: "absent" }), "fair")}
+            {card(s.excellent, "متفوقون (90% فأكثر)", () => go("students", { status: "excellent" }), "good")}
         </div>
 
-        {(warnings.length > 0 || notEntered.length > 0 || a.noMarks.length > 0) && <section className="panel sv-q">
-            <header><div><h3>قبل القراءة</h3><small>ما يحتاج مراجعة في الكشف</small></div></header>
-            <ul className="sv-answers">
-                {notEntered.length > 0 && <li>لم تُرصد درجاتها بعد: <b>{notEntered.join("، ")}</b></li>}
-                {a.subjects.filter(s => s.count > 0 && s.partial.length).map(s => <li key={s.name}>«{s.name}» مرصودة لعدد قليل فقط في: {s.partial.join("، ")}</li>)}
-                {a.noMarks.length > 0 && <li>طلاب بلا أي درجة ({a.noMarks.length}): {[...new Set(a.noMarks.map(s => s.cls))].map((c, k) => <span key={c}>{k ? "، " : ""}<bdi dir="ltr">{c}</bdi></span>)}</li>}
-                {warnings.map(w => <li key={w}>درجة أعلى من الحد: {w}</li>)}
+        <section className="panel sv-q">
+            <header><div><h3>توزيع الطلاب حسب الحالة</h3><small>اضغط أي حالة لعرض طلابها</small></div></header>
+            <div className="sv-bars" role="list">
+                {(["excellent", "pass", "edge", "fail", "barred", "none"] as Status[]).map(st => {
+                    const n = a.students.filter(x => x.status === st).length;
+                    if (!n) return null;
+                    return <button key={st} role="listitem" className="sv-bar" style={{ textAlign: "right" }} onClick={() => go("students", { status: st === "pass" ? "passAll" : st })}>
+                        <span className="sv-bar-label">{STATUS_LABELS[st]}</span>
+                        <span className="sv-bar-track"><i className={STATUS_TONE[st] === "weak" ? "weak" : STATUS_TONE[st] === "fair" ? "fair" : STATUS_TONE[st] === "good" ? "good" : ""} style={{ width: `${(n / a.students.length) * 100}%` }}/></span>
+                        <span className="sv-bar-value"><b>{n}</b> <small>{pct(n / a.students.length)}</small></span>
+                    </button>;
+                })}
+            </div>
+            <p className="muted" style={{ marginTop: 8 }}>كل طالب في حالة واحدة بالترتيب: محروم، ثم راسب، ثم على الحافة، ثم ناجح أو متفوق.</p>
+        </section>
+
+        {marked.length > 0 && <section className="panel sv-q">
+            <header><div><h3>أبرز النتائج</h3><small>اضغط للانتقال إلى التفاصيل</small></div></header>
+            <ul className="sv-findings">
+                {mostFail?.fail > 0 && <li><button className="text-button" onClick={() => go("subjects", undefined, { subject: mostFail.name })}>
+                    أكثر مادة رسوبًا: <b>{mostFail.name}</b> — {mostFail.fail} طالب ({pct(1 - (mostFail.passRate ?? 1))})</button></li>}
+                <li><button className="text-button" onClick={() => go("subjects", undefined, { subject: worstSub.name })}>أدنى متوسط: <b>{worstSub.name}</b> — {fmt(worstSub.mean)} من {max}</button></li>
+                <li><button className="text-button" onClick={() => go("subjects", undefined, { subject: bestSub.name })}>أعلى متوسط: <b>{bestSub.name}</b> — {fmt(bestSub.mean)} من {max}</button></li>
+                {secs.length > 1 && <li><button className="text-button" onClick={() => go("sections", undefined, { section: worstSec.cls })}>أضعف شعبة: <b><bdi>{worstSec.cls}</bdi></b> — متوسط {fmt(worstSec.mean)} · راسبون {worstSec.failing}</button></li>}
+                {secs.length > 1 && <li><button className="text-button" onClick={() => go("sections", undefined, { section: bestSec.cls })}>أقوى شعبة: <b><bdi>{bestSec.cls}</bdi></b> — متوسط {fmt(bestSec.mean)}</button></li>}
             </ul>
         </section>}
 
-        <section className="panel sv-q">
-            <header><div><h3>المواد</h3><small>درجة «{sheet.components[0]}» من {max} · مرتبة من الأعلى متوسطًا</small></div></header>
-            <div className="sv-grid-wrap"><table className="sv-grid">
-                <thead><tr><th>المادة</th><th>المرصود</th><th>المتوسط</th><th>النسبة</th><th>أعلى</th><th>أدنى</th><th style={{ minWidth: 160 }}>التوزيع</th><th>دون {threshold}</th><th>غائب</th><th>محروم</th></tr></thead>
-                <tbody>{shown.map(s => <tr key={s.name}>
-                    <th>{s.name}</th><td>{s.count}</td><td className={tone(s.mean === null ? null : s.mean / max)}>{fmt(s.mean)}</td><td>{pct(s.mean === null ? null : s.mean / max)}</td>
-                    <td>{fmt(s.high)}</td><td>{fmt(s.low)}</td><td><Distribution bands={s.bands}/></td>
-                    <td className={s.below ? "weak" : ""}>{s.below || "—"}</td><td>{s.absent || "—"}</td><td>{s.barred || "—"}</td>
-                </tr>)}</tbody>
-            </table></div>
-            <p className="muted" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>{BANDS.map((b, k) => <span key={b.label}><i style={{ display: "inline-block", width: 10, height: 10, background: BAND_COLORS[k], borderRadius: 2, marginInlineEnd: 4 }}/>{b.label}</span>)}</p>
-        </section>
-
-        {a.sections.length > 1 && <section className="panel sv-q">
-            <header><div><h3>الشعب حسب المواد</h3><small>متوسط كل شعبة في كل مادة من {max}</small></div></header>
-            <div className="sv-grid-wrap"><table className="sv-grid">
-                <thead><tr><th>الشعبة</th>{tracks.length > 1 && <th>المسار</th>}{a.subjects.filter(s => s.count > 0).map(s => <th key={s.name} style={{ whiteSpace: "normal", minWidth: 64 }}>{s.name}</th>)}<th>المتوسط</th></tr></thead>
-                <tbody>{a.sections.map(sec => <tr key={sec.cls}>
-                    <th>{sec.cls} <small className="muted">({sec.count})</small></th>{tracks.length > 1 && <td>{sec.track}</td>}
-                    {a.subjects.map((s, k) => s.count > 0 && <td key={s.name} className={tone(sec.means[k] === null ? null : sec.means[k]! / max)}>{fmt(sec.means[k])}</td>)}
-                    <td className={`sv-grid-mean ${tone(sec.mean === null ? null : sec.mean / max)}`}>{fmt(sec.mean)}</td>
-                </tr>)}</tbody>
-            </table></div>
+        {(warnings.length > 0 || notEntered.length > 0 || s.none > 0 || a.subjects.some(x => x.count && x.partial.length)) && <section className="panel sv-q">
+            <header><div><h3>قبل القراءة</h3><small>ما يحتاج مراجعة في الكشف</small></div></header>
+            <ul className="sv-answers">
+                {notEntered.length > 0 && <li>لم تُرصد درجاتها بعد: <b>{notEntered.join("، ")}</b></li>}
+                {a.subjects.filter(x => x.count && x.partial.length).map(x => <li key={x.name}>«{x.name}» مرصودة لعدد قليل فقط في: {x.partial.join("، ")}</li>)}
+                {s.none > 0 && <li>طلاب بلا أي درجة: {s.none} — {[...new Set(a.students.filter(x => x.status === "none").map(x => x.cls))].map((c, k) => <span key={c}>{k ? "، " : ""}<bdi dir="ltr">{c}</bdi></span>)}</li>}
+                {warnings.map(w => <li key={w}>درجة أعلى من الحد: {w}</li>)}
+            </ul>
         </section>}
+        <p className="muted">{sheet.title} · {sheet.fileName}</p>
+    </>;
+}
 
-        <StudentList title={`الطلاب المتعثرون (${a.atRisk.length})`} note={`دون ${threshold} من ${max} في مادة أو أكثر — الأكثر موادًا أولًا`} rows={a.atRisk} sheet={sheet} pick={s => s.below}/>
-        {a.barred.length > 0 && <StudentList title={`المحرومون (${a.barred.length})`} note="محرومون من الاختبار في مادة أو أكثر" rows={a.barred} sheet={sheet} pick={s => s.barred}/>}
-        {a.absent.length > 0 && <StudentList title={`الغائبون عن الاختبار (${a.absent.length})`} note="غابوا عن اختبار مادة أو أكثر" rows={a.absent} sheet={sheet} pick={s => s.absent}/>}
+// ── المواد ───────────────────────────────────────────────────────────────
+function Subjects({ a, open, setOpen, go }: { a: Analysis; open: string; setOpen: (s: string) => void; go: any }) {
+    const max = a.max;
+    const rows = a.subjects.filter(s => s.count).sort((x, y) => (y.fail - x.fail) || (x.mean ?? 0) - (y.mean ?? 0));
+    return <section className="panel sv-q">
+        <header><div><h3>المواد</h3><small>مرتبة من الأكثر رسوبًا · اضغط المادة لتفاصيل الشعب والراسبين</small></div></header>
+        <div className="sv-grid-wrap"><table className="sv-grid">
+            <thead><tr><th>المادة</th><th>المرصود</th><th>المتوسط</th><th>نسبة النجاح</th><th>راسب</th><th>على الحافة</th><th>غائب</th><th>محروم</th><th>أعلى</th><th>أدنى</th><th style={{ minWidth: 150 }}>التوزيع</th></tr></thead>
+            <tbody>{rows.map(s => <Fragment key={s.name}>
+                <tr className="sv-row" onClick={() => setOpen(open === s.name ? "" : s.name)} aria-expanded={open === s.name}>
+                    <th>{open === s.name ? "▾" : "◂"} {s.name}</th><td>{s.count}</td>
+                    <td className={tone(s.mean === null ? null : s.mean / max)}>{fmt(s.mean)}</td>
+                    <td className={tone(s.passRate)}>{pct(s.passRate)}</td>
+                    <td className={s.fail ? "weak" : ""}>{s.fail || "—"}</td><td className={s.edge ? "fair" : ""}>{s.edge || "—"}</td>
+                    <td>{s.absent || "—"}</td><td>{s.barred || "—"}</td><td>{fmt(s.high)}</td><td>{fmt(s.low)}</td><td><Distribution bands={s.bands}/></td>
+                </tr>
+                {open === s.name && <tr><td colSpan={11} className="sv-detail">
+                    <div className="sv-detail-grid">
+                        <table className="sv-grid">
+                            <thead><tr><th>الشعبة</th><th>المرصود</th><th>المتوسط</th><th>نسبة النجاح</th><th>راسب</th></tr></thead>
+                            <tbody>{s.bySection.map(x => <tr key={x.cls}><th><bdi>{x.cls}</bdi></th><td>{x.count}</td><td className={tone(x.mean === null ? null : x.mean / max)}>{fmt(x.mean)}</td><td className={tone(x.passRate)}>{pct(x.passRate)}</td><td className={x.fail ? "weak" : ""}>{x.fail || "—"}</td></tr>)}</tbody>
+                        </table>
+                        <div>
+                            <p><b>الراسبون في {s.name} ({s.fail})</b></p>
+                            <ul className="sv-names">{a.students.flatMap(st => st.failed.filter(f => f.s === s.s).map(f => ({ st, mark: f.mark }))).sort((x, y) => (x.mark as number) - (y.mark as number))
+                                .map(({ st, mark }) => <li key={st.index}>{st.name} <small>— <bdi>{st.cls}</bdi> — {fmt(mark as number)}</small></li>)}</ul>
+                            {s.fail > 0 && <button className="text-button" onClick={() => go("students", { status: "fail", subject: s.name })}>فتحهم في قائمة الطلاب</button>}
+                        </div>
+                    </div>
+                </td></tr>}
+            </Fragment>)}</tbody>
+        </table></div>
+        <p className="muted" style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>{BANDS.map((b, k) => <span key={b.label}><i style={{ display: "inline-block", width: 10, height: 10, background: BAND_COLORS[k], borderRadius: 2, marginInlineEnd: 4 }}/>{b.label}</span>)}</p>
+    </section>;
+}
 
-        <section className="panel sv-q">
-            <header><div><h3>المتفوقون</h3><small>أعلى نسبة في كل المواد المرصودة (4 مواد على الأقل)</small></div></header>
-            <ol className="sv-answers" style={{ listStyle: "none" }}>{a.top.map((s, k) => <li key={s.id + s.name}><b>{k + 1}.</b> {s.name} — {s.cls} — <b>{pct(s.percent)}</b></li>)}</ol>
-        </section>
+// ── الشعب ────────────────────────────────────────────────────────────────
+function Sections({ sheet, a, tracks, open, setOpen, go }: { sheet: GradeSheet; a: Analysis; tracks: string[]; open: string; setOpen: (s: string) => void; go: any }) {
+    const max = a.max;
+    const subs = a.subjects.map((s, k) => ({ s, k })).filter(x => x.s.count);
+    return <section className="panel sv-q">
+        <header><div><h3>الشعب</h3><small>متوسط كل شعبة في كل مادة من {max} · اضغط الشعبة لكشف طلابها</small></div></header>
+        <div className="sv-grid-wrap"><table className="sv-grid">
+            <thead><tr><th>الشعبة</th>{tracks.length > 1 && <th>المسار</th>}<th>الطلاب</th><th>المتوسط</th><th>نجاح الكل</th><th>راسبون</th><th>محرومون</th>
+                {subs.map(({ s }) => <th key={s.name} style={{ whiteSpace: "normal", minWidth: 64 }}>{s.name}</th>)}</tr></thead>
+            <tbody>{a.sections.map(sec => <Fragment key={sec.cls}>
+                <tr className="sv-row" onClick={() => setOpen(open === sec.cls ? "" : sec.cls)} aria-expanded={open === sec.cls}>
+                    <th>{open === sec.cls ? "▾" : "◂"} <bdi>{sec.cls}</bdi></th>{tracks.length > 1 && <td>{sec.track}</td>}<td>{sec.count}</td>
+                    <td className={`sv-grid-mean ${tone(sec.mean === null ? null : sec.mean / max)}`}>{fmt(sec.mean)}</td>
+                    <td className={tone(sec.passRate)}>{pct(sec.passRate)}</td><td className={sec.failing ? "weak" : ""}>{sec.failing || "—"}</td><td>{sec.barred || "—"}</td>
+                    {subs.map(({ s, k }) => <td key={s.name} className={tone(sec.means[k] === null ? null : sec.means[k]! / max)}>{fmt(sec.means[k])}</td>)}
+                </tr>
+                {open === sec.cls && <tr><td colSpan={99} className="sv-detail">
+                    <SectionSheet sheet={sheet} a={a} students={a.students.filter(st => st.cls === sec.cls)}/>
+                    <button className="text-button" onClick={() => go("students", { status: "fail" }, {})}>الراسبون في كل الشعب</button>
+                </td></tr>}
+            </Fragment>)}</tbody>
+        </table></div>
+    </section>;
+}
 
-        <section className="panel sv-q">
-            <header><div><h3>درجات طالب</h3><small>ابحث بالاسم أو الرقم الشخصي</small></div></header>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="اسم الطالب أو رقمه" aria-label="بحث عن طالب"/>
-            {found.map(s => <div key={s.id + s.name} style={{ marginTop: 12 }}>
-                <p><b>{s.name}</b> · {s.cls}{s.track && tracks.length > 1 ? ` · ${s.track}` : ""} · النسبة {pct(s.percent)}</p>
-                <div className="sv-grid-wrap"><table className="sv-grid">
-                    <thead><tr><th>المادة</th>{sheet.components.map((c, k) => <th key={c}>{c} (من {sheet.maxes[k]})</th>)}</tr></thead>
-                    <tbody>{sheet.subjects.map((name, si) => s.marks[si].some(m => m !== null) && <tr key={name}>
-                        <th>{name}</th>{s.marks[si].map((m, k) => <td key={k} className={typeof m === "string" || (k === 0 && typeof m === "number" && m < threshold) ? "weak" : ""}>{markText(m) || "—"}</td>)}
-                    </tr>)}</tbody>
-                </table></div>
-            </div>)}
-        </section>
-    </div>;
+// One section's students and their marks, weakest first — the coloured sheet on the screen
+function SectionSheet({ sheet, a, students }: { sheet: GradeSheet; a: Analysis; students: Student[] }) {
+    const subs = sheet.subjects.map((name, s) => ({ name, s })).filter(x => students.some(st => st.marks[x.s][0] !== null));
+    const rows = [...students].sort((x, y) => (y.failed.length - x.failed.length) || (x.percent ?? 2) - (y.percent ?? 2));
+    return <div className="sv-grid-wrap"><table className="sv-grid">
+        <thead><tr><th>الطالب</th><th>النسبة</th><th>الحالة</th>{subs.map(x => <th key={x.name} style={{ whiteSpace: "normal", minWidth: 60 }}>{x.name}</th>)}</tr></thead>
+        <tbody>{rows.map(st => <tr key={st.index}>
+            <th>{st.name}</th><td>{pct(st.percent)}</td><td className={STATUS_TONE[st.status]}>{STATUS_LABELS[st.status]}</td>
+            {subs.map(x => { const m = st.marks[x.s][0]; return <td key={x.name} className={markTone(m, 0, a)}>{markText(m) || "—"}</td>; })}
+        </tr>)}</tbody>
+    </table></div>;
+}
+
+// ── الطلاب ───────────────────────────────────────────────────────────────
+function Students({ sheet, a, tracks, filter, setFilter }: { sheet: GradeSheet; a: Analysis; tracks: string[]; filter: StudentFilter; setFilter: (f: StudentFilter) => void }) {
+    const [open, setOpen] = useState<number | null>(null);
+    const [limit, setLimit] = useState(60);
+    const sub = filter.subject ? sheet.subjects.indexOf(filter.subject) : -1;
+    const q = filter.search.trim();
+    // within one subject the status is read from that subject's mark
+    const inSubject = (st: Student) => {
+        const m = st.marks[sub]?.[0] ?? null;
+        if (m === null) return false;
+        switch (filter.status) {
+            case "fail": case "fail2": return typeof m === "number" && m < a.pass;
+            case "edge": return typeof m === "number" && m >= a.pass && m < a.edgeTop;
+            case "barred": return m === "محروم";
+            case "absent": return m === "غائب";
+            case "passAll": return typeof m === "number" && m >= a.pass;
+            case "excellent": return typeof m === "number" && m / a.max >= 0.9;
+            default: return true;
+        }
+    };
+    const byStatus = (st: Student) => {
+        switch (filter.status) {
+            case "fail": return st.failed.length > 0;
+            case "fail2": return st.failed.length >= 2;
+            case "edge": return st.status === "edge";
+            case "barred": return st.barred.length > 0;
+            case "absent": return st.absent.length > 0;
+            case "passAll": return st.status === "pass" || st.status === "edge" || st.status === "excellent";
+            case "excellent": return st.status === "excellent";
+            case "none": return st.status === "none";
+            default: return true;
+        }
+    };
+    const rows = a.students
+        .filter(st => (sub >= 0 ? inSubject(st) : byStatus(st)) && (!q || st.name.includes(q) || st.id === q))
+        .sort((x, y) => filter.sort === "name" ? x.name.localeCompare(y.name, "ar")
+            : filter.sort === "best" ? (y.percent ?? -1) - (x.percent ?? -1)
+            : filter.sort === "section" ? x.cls.localeCompare(y.cls, "ar", { numeric: true }) || x.name.localeCompare(y.name, "ar")
+            : filter.sort === "mostFailed" ? y.failed.length - x.failed.length || (x.percent ?? 2) - (y.percent ?? 2)
+            : sub >= 0 ? (Number(x.marks[sub][0]) || -1) - (Number(y.marks[sub][0]) || -1)
+            : (x.percent ?? 2) - (y.percent ?? 2));
+    const label = STUDENT_FILTERS.find(f => f[0] === filter.status)?.[1] ?? "";
+    const set = (p: Partial<StudentFilter>) => { setFilter({ ...filter, ...p }); setLimit(60); };
+
+    return <section className="panel sv-q">
+        <div className="sv-controls" style={{ marginBottom: 12 }}>
+            <label className="field-label">بحث<input value={filter.search} onChange={e => set({ search: e.target.value })} placeholder="اسم الطالب أو رقمه"/></label>
+            <label className="field-label">الحالة<select value={filter.status} onChange={e => set({ status: e.target.value })}>
+                {STUDENT_FILTERS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+            <label className="field-label">في مادة<select value={filter.subject} onChange={e => set({ subject: e.target.value })}>
+                <option value="">كل المواد</option>{a.subjects.filter(s => s.count).map(s => <option key={s.name}>{s.name}</option>)}</select></label>
+            <label className="field-label">الترتيب<select value={filter.sort} onChange={e => set({ sort: e.target.value })}>
+                <option value="weakest">الأضعف أولًا</option><option value="mostFailed">الأكثر رسوبًا</option><option value="best">الأعلى نسبة</option>
+                <option value="section">حسب الشعبة</option><option value="name">الاسم</option></select></label>
+        </div>
+        <header><div><h3>{label}{filter.subject ? ` — ${filter.subject}` : ""} ({rows.length})</h3>
+            <small>اضغط الطالب لعرض كل درجاته</small></div>
+            <button className="button subtle" onClick={() => void exportList(sheet, a, rows, `${label}${filter.subject ? ` - ${filter.subject}` : ""}`)}><Download size={16} aria-hidden="true"/>Excel لهذه القائمة</button>
+        </header>
+        <div className="sv-grid-wrap"><table className="sv-grid">
+            <thead><tr><th>#</th><th>الطالب</th><th>الشعبة</th>{tracks.length > 1 && <th>المسار</th>}{sub >= 0 && <th>{filter.subject}</th>}<th>النسبة</th><th>الحالة</th><th style={{ textAlign: "right" }}>الرسوب والملاحظات</th></tr></thead>
+            <tbody>{rows.slice(0, limit).map((st, n) => <Fragment key={st.index}>
+                <tr className="sv-row" onClick={() => setOpen(open === st.index ? null : st.index)} aria-expanded={open === st.index}>
+                    <td>{n + 1}</td><th>{st.name}</th><td><bdi>{st.cls}</bdi></td>{tracks.length > 1 && <td>{st.track}</td>}
+                    {sub >= 0 && <td className={markTone(st.marks[sub][0], 0, a)}>{markText(st.marks[sub][0])}</td>}
+                    <td>{pct(st.percent)}</td><td className={STATUS_TONE[st.status]}>{STATUS_LABELS[st.status]}</td>
+                    <td style={{ textAlign: "right", whiteSpace: "normal" }}>
+                        {st.failed.length > 0 && <span className="sv-tag weak">راسب: {st.failed.map(f => `${f.name} (${fmt(f.mark as number)})`).join("، ")}</span>}
+                        {st.edge.length > 0 && <span className="sv-tag fair">على الحافة: {st.edge.map(f => `${f.name} (${fmt(f.mark as number)})`).join("، ")}</span>}
+                        {st.barred.length > 0 && <span className="sv-tag weak">محروم: {st.barred.map(f => f.name).join("، ")}</span>}
+                        {st.absent.length > 0 && <span className="sv-tag fair">غائب: {st.absent.map(f => f.name).join("، ")}</span>}
+                    </td>
+                </tr>
+                {open === st.index && <tr><td colSpan={99} className="sv-detail">
+                    <p>الرقم الشخصي: <bdi>{st.id}</bdi> · عدد المواد المرصودة {st.entered}</p>
+                    <div className="sv-grid-wrap"><table className="sv-grid">
+                        <thead><tr><th>المادة</th>{sheet.components.map((c, k) => <th key={c}>{c} (من {sheet.maxes[k]})</th>)}</tr></thead>
+                        <tbody>{sheet.subjects.map((name, si) => st.marks[si].some(m => m !== null) && <tr key={name}>
+                            <th>{name}</th>{st.marks[si].map((m, k) => <td key={k} className={markTone(m, k, a)}>{markText(m) || "—"}</td>)}</tr>)}</tbody>
+                    </table></div>
+                </td></tr>}
+            </Fragment>)}</tbody>
+        </table></div>
+        {rows.length > limit && <button className="text-button" onClick={() => setLimit(limit + 100)}>عرض المزيد ({rows.length - limit})</button>}
+        {!rows.length && <p className="muted">لا يوجد طلاب بهذه الحالة.</p>}
+    </section>;
 }
 
 function Distribution({ bands }: { bands: number[] }) {
@@ -194,75 +400,87 @@ function Distribution({ bands }: { bands: number[] }) {
     </span>;
 }
 
-function StudentList({ title, note, rows, sheet, pick }: { title: string; note: string; rows: any[]; sheet: GradeSheet; pick: (s: any) => string[] }) {
-    const [all, setAll] = useState(false);
-    const list = all ? rows : rows.slice(0, 15);
-    if (!rows.length) return null;
-    return <section className="panel sv-q">
-        <header><div><h3>{title}</h3><small>{note}</small></div>
-            {rows.length > 15 && <button className="text-button" onClick={() => setAll(!all)}>{all ? "عرض أقل" : `الكل (${rows.length})`}</button>}</header>
-        <div className="sv-grid-wrap"><table className="sv-grid">
-            <thead><tr><th>الطالب</th><th>الشعبة</th><th>العدد</th><th style={{ textAlign: "right" }}>المواد</th></tr></thead>
-            <tbody>{list.map(s => <tr key={s.id + s.name}>
-                <th>{s.name}</th><td>{s.cls}</td><td>{pick(s).length}</td>
-                <td style={{ textAlign: "right", whiteSpace: "normal" }}>{pick(s).map(name => {
-                    const m = s.marks[sheet.subjects.indexOf(name)][0];
-                    return `${name} (${markText(m)})`;
-                }).join("، ")}</td>
-            </tr>)}</tbody>
-        </table></div>
-    </section>;
-}
+// ── Excel ────────────────────────────────────────────────────────────────
+const excelTone = (a: Analysis) => (row: ExcelCell[], i: number, width: number, from: number) => {
+    if (i < from) return undefined;
+    const v = row[i];
+    if (v === "غائب" || v === "محروم") return "bad" as const;
+    if ((i - from) % width !== 0 || typeof v !== "number") return undefined;
+    return v < a.pass ? "bad" as const : v < a.edgeTop ? "warn" as const : undefined;
+};
 
-// The sheets the deputy made by hand: one per track, the original columns,
-// marks under the threshold and «غائب»/«محروم» in red — and a summary sheet.
-async function exportSheet(sheet: GradeSheet, a: ReturnType<typeof analyzeGrades>, threshold: number, track: string) {
+// The sheets the deputy made by hand: one per track in the original columns,
+// failing and missed marks in red and marks just above the pass mark in amber
+async function exportTracks(sheet: GradeSheet, a: Analysis, track: string) {
     const sections = sectionsOf(sheet);
     const tracks = [...new Set(sections.map(s => s.track))];
-    const groups = (track ? [track] : tracks).map(t => ({ t, students: sheet.students.filter(st => sections.find(s => s.cls === st.cls)?.track === t) }));
-    const sheets = groups.map(g => ({ ...g, subjects: sheet.subjects.map((name, s) => ({ name, s })).filter(x => g.students.some(st => st.marks[x.s].some(m => m !== null))) }))
+    const width = sheet.components.length;
+    const paint = excelTone(a);
+    const sheets: any[] = (track ? [track] : tracks)
+        .map(t => {
+            const students = sheet.students.filter(st => sections.find(s => s.cls === st.cls)?.track === t);
+            return { t, students, subjects: sheet.subjects.map((name, s) => ({ name, s })).filter(x => students.some(st => st.marks[x.s].some(m => m !== null))) };
+        })
         // a group with no marks at all (11/ESE) has nothing to show
-        .filter(g => g.subjects.length).map(g => {
-        const subjects = g.subjects;
-        const width = sheet.components.length;
-        return {
+        .filter(g => g.subjects.length)
+        .map(g => ({
             name: tracks.length > 1 ? `${sheet.grade} (${g.t})` : String(sheet.grade || "الكشف"),
             title: `${sheet.title} — الصف ${sheet.grade}${tracks.length > 1 ? ` — ${g.t}` : ""}`,
-            meta: [sheet.period ? `الفترة: ${sheet.period}` : "", `باللون الأحمر: دون ${threshold} في «${sheet.components[0]}»، والغائب والمحروم`].filter(Boolean),
-            bands: [[{ label: "", span: 3 }, ...subjects.map(x => ({ label: x.name, span: width }))]],
+            meta: [sheet.period ? `الفترة: ${sheet.period}` : "", `الأحمر: راسب (دون ${fmt(a.pass)}) وغائب ومحروم · البرتقالي: على حافة النجاح`].filter(Boolean),
+            bands: [[{ label: "", span: 3 }, ...g.subjects.map(x => ({ label: x.name, span: width }))]],
             columns: [
-                { header: "الرقم", width: 14, align: "center" as const },
-                { header: "الاسم", width: 30, bold: true },
-                { header: "الشعبة", width: 8, align: "center" as const },
-                ...subjects.flatMap(() => sheet.components.map(c => ({ header: c, width: 9, align: "center" as const }))),
+                { header: "الرقم", width: 14, align: "center" }, { header: "الاسم", width: 30, bold: true }, { header: "الشعبة", width: 8, align: "center" },
+                ...g.subjects.flatMap(() => sheet.components.map(c => ({ header: c, width: 9, align: "center" }))),
             ],
-            rows: g.students.map(st => [st.id, st.name, st.cls, ...subjects.flatMap(x => st.marks[x.s].map(m => (m === null ? "" : m) as ExcelCell))]),
-            tone: (row: ExcelCell[], i: number) => {
-                if (i < 3) return undefined;
-                const v = row[i];
-                if (v === "غائب" || v === "محروم") return "bad" as const;
-                return (i - 3) % width === 0 && typeof v === "number" && v < threshold ? "bad" as const : undefined;
-            },
-            freezeColumns: 2,
-            orientation: "landscape" as const,
-        };
-    });
-    const max = sheet.maxes[0] || 30;
+            rows: g.students.map(st => [st.id, st.name, st.cls, ...g.subjects.flatMap(x => st.marks[x.s].map(m => (m === null ? "" : m) as ExcelCell))]),
+            tone: (row: ExcelCell[], i: number) => paint(row, i, width, 3),
+            freezeColumns: 2, orientation: "landscape",
+        }));
     sheets.push({
-        name: "ملخص المواد",
-        title: `ملخص المواد — الصف ${sheet.grade}${track ? ` — ${track}` : ""}`,
-        meta: [`«${sheet.components[0]}» من ${max}`],
-        bands: undefined as any,
+        name: "ملخص المواد", title: `ملخص المواد — الصف ${sheet.grade}${track ? ` — ${track}` : ""}`, meta: [`«${sheet.components[0]}» من ${a.max} · حد النجاح ${fmt(a.pass)}`],
         columns: [
             { header: "المادة", width: 28, bold: true }, { header: "المرصود", width: 9, align: "center" }, { header: "المتوسط", width: 9, align: "center" },
-            { header: "النسبة", width: 9, align: "center" }, { header: "أعلى", width: 8, align: "center" }, { header: "أدنى", width: 8, align: "center" },
-            ...BANDS.map(b => ({ header: b.label, width: 9, align: "center" as const })),
-            { header: `دون ${threshold}`, width: 9, align: "center" }, { header: "غائب", width: 8, align: "center" }, { header: "محروم", width: 8, align: "center" },
-        ] as any,
-        rows: a.subjects.filter(s => s.count > 0).map(s => [s.name, s.count, s.mean === null ? "" : Number(s.mean.toFixed(2)), s.mean === null ? "" : `${Math.round((s.mean / max) * 100)}%`, s.high, s.low, ...s.bands, s.below, s.absent, s.barred]),
-        tone: ((row: ExcelCell[], i: number) => i === 11 && Number(row[i]) > 0 ? "bad" : undefined) as any,
-        freezeColumns: 1,
-        orientation: "landscape",
+            { header: "نسبة النجاح", width: 10, align: "center" }, { header: "راسب", width: 8, align: "center" }, { header: "على الحافة", width: 9, align: "center" },
+            { header: "غائب", width: 8, align: "center" }, { header: "محروم", width: 8, align: "center" }, { header: "أعلى", width: 8, align: "center" }, { header: "أدنى", width: 8, align: "center" },
+            ...BANDS.map(b => ({ header: b.label, width: 9, align: "center" })),
+        ],
+        rows: a.subjects.filter(s => s.count).map(s => [s.name, s.count, s.mean === null ? "" : Number(s.mean.toFixed(2)), pct(s.passRate), s.fail, s.edge, s.absent, s.barred, s.high, s.low, ...s.bands]),
+        tone: (row: ExcelCell[], i: number) => i === 4 && Number(row[i]) > 0 ? "bad" : i === 5 && Number(row[i]) > 0 ? "warn" : undefined,
+        freezeColumns: 1, orientation: "landscape",
     });
-    await downloadWorkbook(`تحليل درجات الصف ${sheet.grade}${track ? ` - ${track}` : ""} - ${sheet.period || "الكشف"}`, sheets as any);
+    sheets.push({
+        name: "الشعب", title: `الشعب — الصف ${sheet.grade}`, meta: [`المتوسط من ${a.max}`],
+        columns: [
+            { header: "الشعبة", width: 10, bold: true, align: "center" }, { header: "المسار", width: 10, align: "center" }, { header: "الطلاب", width: 8, align: "center" },
+            { header: "المتوسط", width: 9, align: "center" }, { header: "نجاح الكل", width: 10, align: "center" }, { header: "راسبون", width: 9, align: "center" }, { header: "محرومون", width: 9, align: "center" },
+            ...a.subjects.filter(s => s.count).map(s => ({ header: s.name, width: 11, align: "center" })),
+        ],
+        rows: a.sections.map(sec => [sec.cls, sec.track, sec.count, sec.mean === null ? "" : Number(sec.mean.toFixed(2)), pct(sec.passRate), sec.failing, sec.barred,
+            ...a.subjects.map((s, k) => s.count ? (sec.means[k] === null ? "" : Number(sec.means[k]!.toFixed(1))) : undefined).filter(x => x !== undefined)]),
+        tone: (row: ExcelCell[], i: number) => i === 5 && Number(row[i]) > 0 ? "bad" : undefined,
+        freezeColumns: 1, orientation: "landscape",
+    });
+    await downloadWorkbook(`تحليل درجات الصف ${sheet.grade}${track ? ` - ${track}` : ""} - ${sheet.period || "الكشف"}`, sheets);
+}
+
+// The list on the screen — the failing students, the barred… — for follow-up
+async function exportList(sheet: GradeSheet, a: Analysis, rows: Student[], label: string) {
+    const width = sheet.components.length;
+    const subjects = sheet.subjects.map((name, s) => ({ name, s })).filter(x => rows.some(st => st.marks[x.s].some(m => m !== null)));
+    const paint = excelTone(a);
+    await downloadWorkbook(`${label} - الصف ${sheet.grade}`, [{
+        name: label.slice(0, 31) || "القائمة",
+        title: `${label} — الصف ${sheet.grade} — ${sheet.period}`,
+        meta: [`${rows.length} طالب · حد النجاح ${fmt(a.pass)} من ${a.max}`],
+        bands: [[{ label: "", span: 6 }, ...subjects.map(x => ({ label: x.name, span: width }))]],
+        columns: [
+            { header: "الرقم", width: 14, align: "center" }, { header: "الاسم", width: 30, bold: true }, { header: "الشعبة", width: 8, align: "center" },
+            { header: "النسبة", width: 8, align: "center" }, { header: "الحالة", width: 12, align: "center" }, { header: "مواد الرسوب", width: 30 },
+            ...subjects.flatMap(() => sheet.components.map(c => ({ header: c, width: 9, align: "center" as const }))),
+        ],
+        rows: rows.map(st => [st.id, st.name, st.cls, pct(st.percent), STATUS_LABELS[st.status], st.failed.map(f => f.name).join("، "),
+            ...subjects.flatMap(x => st.marks[x.s].map(m => (m === null ? "" : m) as ExcelCell))]),
+        tone: (row: ExcelCell[], i: number) => i === 4 && (row[i] === "راسب" || row[i] === "محروم") ? "bad" : paint(row, i, width, 6),
+        freezeColumns: 2, orientation: "landscape",
+    } as any]);
 }

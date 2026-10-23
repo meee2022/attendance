@@ -329,3 +329,30 @@
 .sv-grid-mean { font-weight: 700; }
 .sv-statements { margin: 12px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; line-height: 1.8; }
 .sv-statements b { display: inline-block; min-width: 1.6em; color: var(--ink); }
+
+/* ====== تحليل الدرجات: التبويبات والبطاقات والتفاصيل ====== */
+.sv-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 2px solid var(--line); }
+.sv-tabs button { padding: 10px 16px; font-size: 15px; font-weight: 700; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; gap: 6px; align-items: baseline; }
+.sv-tabs button.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.sv-tabs small { font-size: 12px; color: var(--muted); font-weight: 600; }
+.sv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.sv-card { text-align: right; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 2px; border-inline-start: 4px solid var(--line-strong); }
+.sv-card:not(:disabled):hover { border-color: var(--primary); text-decoration: none !important; }
+.survey-analysis .sv-card:disabled { cursor: default; opacity: 1; }
+.sv-card b { font-size: 22px; color: var(--ink); line-height: 1.3; }
+.sv-card span { font-size: 13px; color: var(--muted); }
+.sv-card.good { border-inline-start-color: #1f7a4d; } .sv-card.good b { color: #145c39; }
+.sv-card.weak { border-inline-start-color: #b42318; } .sv-card.weak b { color: #9b1c12; }
+.sv-card.fair { border-inline-start-color: #c08a2d; } .sv-card.fair b { color: #8a5a12; }
+.sv-findings { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.sv-findings .text-button { min-height: 32px; color: var(--ink); }
+.sv-findings b { color: var(--primary); }
+.sv-row { cursor: pointer; }
+.sv-row:hover th, .sv-row:hover td { background-color: #faf7f2; }
+.sv-detail { background: #fbfaf8; text-align: right !important; white-space: normal !important; padding: 12px !important; }
+.sv-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.sv-names { margin: 6px 0; padding: 0; list-style: none; columns: 2; font-size: 13px; line-height: 1.9; }
+.sv-tag { display: inline-block; margin: 2px 0 2px 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.sv-tag.weak { background: #fbe9e7; color: #9b1c12; }
+.sv-tag.fair { background: #fdf3e1; color: #8a5a12; }
+@media (max-width: 700px) { .sv-detail-grid { grid-template-columns: 1fr; } .sv-names { columns: 1; } }

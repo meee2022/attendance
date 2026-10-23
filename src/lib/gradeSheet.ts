@@ -88,11 +88,17 @@ export function readGradeSheet(table: unknown[][], fileName: string): GradeSheet
 }
 
 // ── Analysis ─────────────────────────────────────────────────────────────
-export type Options = { threshold: number; track: string; cls: string };
+// «pass» is the pass mark of the main component (half the scale unless set);
+// a mark within a tenth of the scale above it is «على الحافة»
+export type Options = { pass: number; track: string; cls: string };
 export const BANDS = [
     { label: "ممتاز", min: 0.9 }, { label: "جيد جداً", min: 0.8 }, { label: "جيد", min: 0.7 },
     { label: "مقبول", min: 0.5 }, { label: "دون 50%", min: 0 },
 ] as const;
+export type Status = "barred" | "fail" | "edge" | "pass" | "excellent" | "none";
+export const STATUS_LABELS: Record<Status, string> = {
+    barred: "محروم", fail: "راسب", edge: "على حافة النجاح", pass: "ناجح", excellent: "متفوق", none: "بلا درجات",
+};
 const num = (m: Mark): m is number => typeof m === "number";
 const mean = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 // a subject counts for a section when most of its students have an entry
@@ -117,22 +123,45 @@ export function sectionsOf(sheet: GradeSheet) {
 
 export function analyzeGrades(sheet: GradeSheet, o: Options) {
     const max = sheet.maxes[0] || 30;
+    const edgeTop = o.pass + max / 10;
     const sections = sectionsOf(sheet);
     const trackOfCls = new Map(sections.map(s => [s.cls, s.track]));
     const keep = sheet.students.flatMap((st, i) => (!o.track || trackOfCls.get(st.cls) === o.track) && (!o.cls || st.cls === o.cls) ? [i] : []);
     const shownSections = sections.filter(s => (!o.track || s.track === o.track) && (!o.cls || s.cls === o.cls));
 
+    // ── every student: their marks, what they failed, where they stand ──
+    const students = keep.map(i => {
+        const st = sheet.students[i];
+        const marks = sheet.subjects.map((name, s) => ({ name, s, mark: st.marks[s][0] })).filter(x => x.mark !== null);
+        const nums = marks.map(x => x.mark).filter(num);
+        const failed = marks.filter(x => num(x.mark) && x.mark < o.pass);
+        const edge = marks.filter(x => num(x.mark) && x.mark >= o.pass && x.mark < edgeTop);
+        const barred = marks.filter(x => x.mark === "محروم");
+        const absent = marks.filter(x => x.mark === "غائب");
+        const percent = nums.length ? nums.reduce((a, b) => a + b, 0) / (nums.length * max) : null;
+        const status: Status = !marks.length ? "none" : barred.length ? "barred" : failed.length ? "fail"
+            : edge.length ? "edge" : percent !== null && percent >= 0.9 ? "excellent" : "pass";
+        return { ...st, index: i, track: trackOfCls.get(st.cls) ?? "", entered: marks.length, percent, failed, edge, barred, absent, status };
+    });
+
+    // ── every subject, with its sections ──
     const subjects = sheet.subjects.map((name, s) => {
         const marks = keep.map(i => sheet.students[i].marks[s][0]).filter(m => m !== null);
         const nums = marks.filter(num);
-        const enrolled = keep.filter(i => sheet.students[i].marks[s][0] !== null).length;
+        const fail = nums.filter(m => m < o.pass).length;
         return {
             name, s,
-            entered: marks.length, absent: marks.filter(m => m === "غائب").length, barred: marks.filter(m => m === "محروم").length,
+            entered: marks.length, count: nums.length,
+            absent: marks.filter(m => m === "غائب").length, barred: marks.filter(m => m === "محروم").length,
             mean: mean(nums), high: nums.length ? Math.max(...nums) : null, low: nums.length ? Math.min(...nums) : null,
-            below: nums.filter(m => m < o.threshold).length,
+            fail, edge: nums.filter(m => m >= o.pass && m < edgeTop).length,
+            passRate: nums.length ? (nums.length - fail) / nums.length : null,
             bands: BANDS.map((b, k) => nums.filter(m => m / max >= b.min && (k === 0 || m / max < BANDS[k - 1].min)).length),
-            count: nums.length, enrolled,
+            bySection: shownSections.map(sec => {
+                const n = keep.filter(i => sheet.students[i].cls === sec.cls).map(i => sheet.students[i].marks[s][0]).filter(num);
+                const f = n.filter(m => m < o.pass).length;
+                return { cls: sec.cls, track: sec.track, count: n.length, mean: mean(n), fail: f, passRate: n.length ? (n.length - f) / n.length : null };
+            }).filter(x => x.count),
             // a subject entered for only a few of its section's students is not marked yet
             partial: shownSections.filter(sec => {
                 const ids = keep.filter(i => sheet.students[i].cls === sec.cls);
@@ -142,42 +171,43 @@ export function analyzeGrades(sheet: GradeSheet, o: Options) {
         };
     }).filter(x => x.entered > 0);
 
+    // ── every section ──
     const bySection = shownSections.map(sec => {
         const ids = keep.filter(i => sheet.students[i].cls === sec.cls);
         const means = subjects.map(sub => {
             const nums = ids.map(i => sheet.students[i].marks[sub.s][0]).filter(num);
             return nums.length >= Math.max(3, ids.length / 2) ? mean(nums) : null;
         });
+        const mine = students.filter(st => st.cls === sec.cls);
+        const rated = mine.filter(st => st.status !== "none");
         const all = ids.flatMap(i => sheet.students[i].marks.map(m => m[0]).filter(num));
-        return { ...sec, means, mean: mean(all) };
-    });
-
-    const students = keep.map(i => {
-        const st = sheet.students[i];
-        const marks = sheet.subjects.map((name, s) => ({ name, mark: st.marks[s][0] })).filter(x => x.mark !== null);
-        const nums = marks.map(x => x.mark).filter(num);
         return {
-            ...st, track: trackOfCls.get(st.cls) ?? "",
-            entered: marks.length,
-            percent: nums.length ? (nums.reduce((a, b) => a + b, 0) / (nums.length * max)) : null,
-            below: marks.filter(x => num(x.mark) && x.mark < o.threshold).map(x => x.name),
-            absent: marks.filter(x => x.mark === "غائب").map(x => x.name),
-            barred: marks.filter(x => x.mark === "محروم").map(x => x.name),
+            ...sec, means, mean: mean(all),
+            failing: mine.filter(st => st.failed.length).length,
+            barred: mine.filter(st => st.barred.length).length,
+            passRate: rated.length ? rated.filter(st => st.status === "pass" || st.status === "edge" || st.status === "excellent").length / rated.length : null,
         };
     });
 
     const all = keep.flatMap(i => sheet.students[i].marks.map(m => m[0]).filter(num));
+    const rated = students.filter(s => s.status !== "none");
+    const count = (st: Status) => students.filter(s => s.status === st).length;
     return {
-        max,
+        max, pass: o.pass, edgeTop,
         sections: bySection,
         subjects,
         students,
         mean: mean(all),
-        atRisk: students.filter(s => s.below.length).sort((a, b) => b.below.length - a.below.length || (a.percent ?? 0) - (b.percent ?? 0)),
-        barred: students.filter(s => s.barred.length),
-        absent: students.filter(s => s.absent.length),
-        top: students.filter(s => s.percent !== null && s.entered >= 4 && !s.barred.length).sort((a, b) => b.percent! - a.percent!).slice(0, 10),
-        noMarks: students.filter(s => !s.entered),
+        summary: {
+            students: students.length, rated: rated.length,
+            passAll: count("pass") + count("edge") + count("excellent"),
+            failAny: students.filter(s => s.failed.length).length,
+            failTwo: students.filter(s => s.failed.length >= 2).length,
+            edge: count("edge"), excellent: count("excellent"),
+            barred: students.filter(s => s.barred.length).length,
+            absent: students.filter(s => s.absent.length).length,
+            none: count("none"),
+        },
     };
 }
 

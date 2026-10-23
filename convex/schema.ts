@@ -7,6 +7,12 @@ export default defineSchema({
         data: v.string(), responseCount: v.number(), questionCount: v.number(),
         updatedAt: v.number(), updatedBy: v.string(),
     }).index("by_school", ["schoolId"]),
+    // A ministry «كشف درجات الشعبة» imported for analysis (src/lib/gradeSheet.ts)
+    gradeAnalyses: defineTable({
+        schoolId: v.id("schools"), title: v.string(), fileName: v.string(), period: v.string(), grade: v.number(),
+        data: v.string(), studentCount: v.number(), subjectCount: v.number(),
+        updatedAt: v.number(), updatedBy: v.string(),
+    }).index("by_school", ["schoolId"]),
     // ── رأي المعلمين في الطلاب ──────────────────────────────────────────
     // A round asks every teacher of one grade for their view of each student;
     // once the deputy publishes it, each guardian reads their son's report

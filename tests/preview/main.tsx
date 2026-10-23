@@ -14,10 +14,13 @@ function Live() {
 import MonthlyReport from "../../src/pages/visits/MonthlyReport";
 import GradesCheck from "./GradesCheck";
 import SurveyCheck from "./SurveyCheck";
+import GradeCheck from "./GradeCheck";
 import StudentOpinionsPage from "../../src/pages/StudentOpinionsPage";
 import { ReportView } from "../../src/pages/GuardianReport";
 import { sample } from "./PdfCheck";
 import { FormPreview } from "../../src/pages/visits/TeacherAcknowledgement";
+if (new URLSearchParams(location.search).has("gradesheet")) createRoot(document.getElementById("root")!).render(<GradeCheck/>);
+else
 if (new URLSearchParams(location.search).has("opinions")) createRoot(document.getElementById("root")!).render(<div style={{ padding: 12 }}><StudentOpinionsPage/></div>);
 else
 if (new URLSearchParams(location.search).has("guardian")) createRoot(document.getElementById("root")!).render(<ReportView data={{ school: "مدرسة ابن تيمية الثانوية للبنين", title: "استطلاع رأي المدرسين في طلاب الصف الثاني عشر", studentName: "طالب تجريبي", className: "12-1",

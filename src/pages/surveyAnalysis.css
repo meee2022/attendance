@@ -51,6 +51,10 @@
   display: grid;
   gap: 16px;
 }
+/* a wide table scrolls inside its card instead of widening the page */
+.sv-report > * {
+  min-width: 0;
+}
 .sv-tiles {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -316,7 +320,7 @@
 .sv-grid-wrap { overflow-x: auto; }
 .sv-grid { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .sv-grid th, .sv-grid td { padding: 7px 8px; border: 1px solid var(--line); text-align: center; white-space: nowrap; }
-.sv-grid thead th { background: var(--ivory); font-weight: 700; }
+.sv-grid thead th { background: var(--ivory); font-weight: 700; overflow-wrap: normal; }
 .sv-grid tbody th, .sv-grid tfoot th { text-align: right; font-weight: 600; white-space: normal; min-width: 130px; }
 .sv-grid tfoot th, .sv-grid tfoot td { font-weight: 700; background: var(--ivory); }
 .sv-grid td.good { background: #e7f4ec; color: #145c39; }

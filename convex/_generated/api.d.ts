@@ -14,6 +14,7 @@ import type * as attendance from "../attendance.js";
 import type * as classHelpers from "../classHelpers.js";
 import type * as diagnostics from "../diagnostics.js";
 import type * as followUp from "../followUp.js";
+import type * as gradeAnalyses from "../gradeAnalyses.js";
 import type * as grades from "../grades.js";
 import type * as guardianReports from "../guardianReports.js";
 import type * as messages from "../messages.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   classHelpers: typeof classHelpers;
   diagnostics: typeof diagnostics;
   followUp: typeof followUp;
+  gradeAnalyses: typeof gradeAnalyses;
   grades: typeof grades;
   guardianReports: typeof guardianReports;
   messages: typeof messages;

@@ -21,6 +21,7 @@ import { FileCheck, ClipboardList, Stethoscope } from "lucide-react";
 import SurveysPage from "./pages/SurveysPage";
 import SurveyAnalysisPage from "./pages/SurveyAnalysisPage";
 import StudentOpinionsPage from "./pages/StudentOpinionsPage";
+import GradeAnalysisPage from "./pages/GradeAnalysisPage";
 import GuardianReport from "./pages/GuardianReport";
 import { UserCheck } from "lucide-react";
 import VisitsPage from "./pages/visits/VisitsPage";
@@ -63,6 +64,7 @@ const PUBLIC_NAV = [...PRIMARY_NAV, ...SECONDARY_NAV];
 const ADMIN_NAV = [
     // shown only to the academic deputy and the platform admin
     { to: "/surveys/analysis", icon: <BarChart3 className="w-5 h-5" />, label: "تحليل الاستبانات", admin: true, staffOnly: true },
+    { to: "/grade-analysis", icon: <GraduationCap className="w-5 h-5" />, label: "تحليل الدرجات", admin: true, staffOnly: true },
     { to: "/settings", icon: <Settings className="w-5 h-5" />, label: "الإعدادات", admin: true },
 ];
 
@@ -149,6 +151,7 @@ function ProtectedApp() {
           {/* not tied to the «الاستبانات» switch: the teachers' survey can be off while the
               deputy analyses files; the page itself is the deputy's and the admin's alone */}
           <Route path="/surveys/analysis" element={<SurveyAnalysisPage />} />
+          <Route path="/grade-analysis" element={<GradeAnalysisPage />} />
           <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><VisitsPage /></FeatureRoute>} />
           <Route path="/supervision/acknowledge" element={<TeacherAcknowledgement />} />
           <Route path="/supervision/print/:id" element={<VisitFormPrint />} />

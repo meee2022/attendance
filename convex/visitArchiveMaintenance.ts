@@ -3,7 +3,8 @@
 import {internalMutation,internalAction,internalQuery} from './_generated/server';
 import {internal} from './_generated/api';
 import {v,ConvexError} from 'convex/values';
-import {saveVisitHandler} from './visits';
+import {saveVisitHandler,settingsOf,activeCriteria} from './visits';
+import {computeScores} from './visitMath';
 const I=internal as any;
 // Apply an explicitly reviewed roster atomically; reject concurrent roster edits.
 export const reconcileRoster=internalMutation({args:{schoolId:v.id('schools'),expected:v.string(),rows:v.string(),deactivate:v.array(v.id('schoolTeachers'))},handler:async(ctx,args)=>{
@@ -80,3 +81,46 @@ export const commit=internalMutation({
   return {...result,outcome:result.ok?'imported':'duplicate'};
  }
 });
+// Visits kept in the school's Excel workbook before the platform. Each row is
+// already matched to a teacher, class and visitor and was reviewed against the
+// workbook; it is written as an approved visit. A row already present (same
+// teacher, visitor role, date and lesson) is skipped, so a batch can be re-run.
+// The visit numbers of each touched teacher and role then follow the dates.
+const EXCEL_IMPORT='استيراد أرشيف الزيارات من ملف Excel';
+export const importExcelVisits=internalMutation({args:{rows:v.string()},handler:async(ctx,args)=>{
+ const school=await ctx.db.query('schools').first();if(!school)throw new ConvexError('لا توجد مدرسة');
+ const settings=await settingsOf(ctx,school),criteria=await activeCriteria(ctx,school._id);
+ const refs=criteria.map((c:any)=>({_id:c._id,domain:c.domain}));
+ const all=await ctx.db.query('supervisionVisits').withIndex('by_school',q=>q.eq('schoolId',school._id)).collect();
+ let recordNo=all.filter(x=>(x.academicYear??settings.academicYear)===settings.academicYear).reduce((m,x)=>Math.max(m,x.recordNo??0),0);
+ const out:any[]=[],touched=new Set<string>();
+ for(const r of JSON.parse(args.rows)){
+  const teacher=await ctx.db.get(r.teacherId) as any,cls=await ctx.db.get(r.classId) as any;
+  if(!teacher||teacher.schoolId!==school._id||!cls||cls.schoolId!==school._id)throw new ConvexError(`معلم أو صف غير متاح: ${r.row}`);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(r.visitDate)||r.ratings.length!==criteria.length)throw new ConvexError(`صف غير مكتمل: ${r.row}`);
+  if(r.visitorId){const s=await ctx.db.get(r.visitorId) as any;if(!s||s.schoolId!==school._id||s.role!==r.visitorRole)throw new ConvexError(`الزائر غير متاح: ${r.row}`);}
+  const lessonTopic=r.lessonTopic.trim();
+  if(all.some(x=>!x.deletedAt&&x.teacherId===r.teacherId&&x.visitorRole===r.visitorRole&&x.visitDate===r.visitDate&&x.lessonTopic===lessonTopic)){out.push({row:r.row,outcome:'exists'});continue;}
+  const ratings=Object.fromEntries(criteria.map((c:any,i:number)=>[c._id,r.ratings[i]??'not_measured']));
+  const scores=computeScores(ratings,refs),now=Date.now();
+  const visit={schoolId:school._id,visitorRole:r.visitorRole,visitorId:r.visitorId??undefined,visitorName:r.visitorName.trim(),recordedByName:EXCEL_IMPORT,
+   teacherId:teacher._id,teacherName:teacher.fullName.replace(/\s+/g,' ').trim(),teacherDepartment:(teacher.department??'').trim(),subjectName:(teacher.department??'').trim(),
+   classId:cls._id,className:cls.name,lessonTopic,visitDate:r.visitDate,followUpType:'full' as const,deliveryMode:'field' as const,visitNumber:0,
+   ratings:JSON.stringify(ratings),averageScore:scores.average??0,domainAverages:JSON.stringify(scores.domains),
+   planningRec:r.planningRec?.trim()||undefined,executionRec:r.executionRec?.trim()||undefined,evalMgmtRec:r.evalMgmtRec?.trim()||undefined,notes:r.notes?.trim()||undefined,
+   status:'submitted' as const,submittedAt:now,submittedByName:EXCEL_IMPORT,recordNo:++recordNo,academicYear:settings.academicYear,createdAt:now,updatedAt:now,updatedBy:EXCEL_IMPORT,
+   snapshot:JSON.stringify({schoolName:settings.schoolNameOnForm,academicYear:settings.academicYear,deputyName:settings.deputyName,principalName:settings.principalName,
+    headerImageId:settings.headerImageId,footerImageId:settings.footerImageId,deputySignatureId:settings.deputySignatureId,visitorSignatureId:null,
+    criteria:criteria.map((c:any)=>({_id:c._id,domain:c.domain,text:c.text,order:c.order}))})};
+  const id=await ctx.db.insert('supervisionVisits',visit);all.push({...visit,_id:id} as any);touched.add(`${teacher._id}|${r.visitorRole}`);
+  await ctx.db.insert('supervisionAuditLog',{schoolId:school._id,visitId:id,action:'submitted',actorName:EXCEL_IMPORT,details:`استيراد زيارة ${visit.teacherName} بتاريخ ${r.visitDate} من ملف Excel (الصف ${r.row})`,timestamp:now});
+  out.push({row:r.row,outcome:'imported',recordNo});
+ }
+ for(const key of touched){
+  const [teacherId,role]=key.split('|');
+  const chain=all.filter(x=>!x.deletedAt&&x.status==='submitted'&&x.visitorRole===role&&(x.teacherId?x.teacherId===teacherId:false))
+   .sort((a,b)=>a.visitDate.localeCompare(b.visitDate)||a.createdAt-b.createdAt);
+  for(const [i,x] of chain.entries())if(x.visitNumber!==i+1){await ctx.db.patch(x._id,{visitNumber:i+1});x.visitNumber=i+1;}
+ }
+ return out;
+}});

@@ -370,3 +370,27 @@ describe("PDF visit imports", () => {
         await expect(f.t.query(A.visitImports.original, { sessionToken: f.token, visitId: f.otherVisit })).rejects.toThrow();
     });
 });
+
+describe("the Excel archive of visits before the platform", () => {
+    it("is written as approved visits, skips a row already there, and numbers each teacher's visits by date", async () => {
+        const f = await fixture();
+        const { classId, criterionIds } = await f.t.run(async ctx => {
+            const ids = [];
+            for (const [i, domain] of (["planning", "execution", "evaluation", "management"] as const).entries())
+                ids.push(await ctx.db.insert("supervisionCriteria", { schoolId: f.schoolId, domain, text: `بند ${i}`, order: i, isActive: true }));
+            return { classId: await ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true }), criterionIds: ids };
+        });
+        const row = { row: 5, teacherId: f.teacherId, classId, visitorRole: "coordinator", visitorId: f.visitorId, visitorName: "منسق اختبار",
+            visitDate: "2026-08-31", lessonTopic: "درس قديم", ratings: [3, 2, null, 0], planningRec: "توصية", notes: "ملاحظة" };
+        const rows = JSON.stringify([row]);
+        const I = (await import("../convex/_generated/api")).internal as any;
+        expect(await f.t.mutation(I.visitArchiveMaintenance.importExcelVisits, { rows })).toEqual([{ row: 5, outcome: "imported", recordNo: 1 }]);
+        expect(await f.t.mutation(I.visitArchiveMaintenance.importExcelVisits, { rows })).toEqual([{ row: 5, outcome: "exists" }]);
+        const visits = await f.t.run(ctx => ctx.db.query("supervisionVisits").withIndex("by_teacher_id", q => q.eq("schoolId", f.schoolId).eq("teacherId", f.teacherId)).collect());
+        const old = visits.find(v => v.lessonTopic === "درس قديم")!;
+        expect(old).toMatchObject({ status: "submitted", visitNumber: 1, className: "10-1", averageScore: 5 / 9 });
+        expect(JSON.parse(old.ratings)[criterionIds[2]]).toBe("not_measured");
+        // the visit already there, on a later date, moves to number 2
+        expect(visits.find(v => v._id === f.visitId)!.visitNumber).toBe(2);
+    });
+});

@@ -25,7 +25,7 @@ async function getSchool(ctx: any) {
     return sch;
 }
 
-async function settingsOf(ctx: any, school: any) {
+export async function settingsOf(ctx: any, school: any) {
     const s = await ctx.db.query("supervisionSettings")
         .withIndex("by_school", (q: any) => q.eq("schoolId", school._id))
         .first();
@@ -46,7 +46,7 @@ async function settingsOf(ctx: any, school: any) {
     };
 }
 
-async function activeCriteria(ctx: any, schoolId: any) {
+export async function activeCriteria(ctx: any, schoolId: any) {
     const all = await ctx.db.query("supervisionCriteria")
         .withIndex("by_school", (q: any) => q.eq("schoolId", schoolId))
         .collect();

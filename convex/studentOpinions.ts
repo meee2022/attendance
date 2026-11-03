@@ -124,8 +124,10 @@ export const overview = staffQuery({ args: { roundId: v.id("opinionRounds") }, h
     const { classes, students } = await gradeStudents(ctx, round.schoolId, round.grade);
     const opinions = await ctx.db.query("studentOpinions").withIndex("by_round", q => q.eq("roundId", round._id)).collect();
     const links = await ctx.db.query("guardianLinks").withIndex("by_round", q => q.eq("roundId", round._id)).collect();
+    const school: any = await ctx.db.get(round.schoolId);
     return {
         round,
+        school: school?.name ?? "",
         classes: classes.map((c: any) => ({ _id: c._id, name: c.name })),
         students: students.map((s: any) => ({ _id: s._id, fullName: s.fullName, classId: s.classId, className: s.className, nationalId: s.nationalId ?? "", guardianPhone: s.guardianPhone ?? "" })),
         opinions: opinions.map(o => ({ studentId: o.studentId, classId: o.classId, teacherId: o.teacherId, teacherName: o.teacherName, subjectName: o.subjectName,

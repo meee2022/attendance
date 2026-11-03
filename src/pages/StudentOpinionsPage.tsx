@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
-import { Check, Download, ExternalLink, Link2, Loader2, UserCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Check, Download, ExternalLink, Link2, Loader2, Printer, UserCheck } from "lucide-react";
+import { ReportView } from "./GuardianReport";
 import { useQuery, useMutation, usePlatformSession } from "../lib/platformSession";
 import { api } from "../../convex/_generated/api";
 import { PageHeader } from "../components/ui";
@@ -173,6 +175,66 @@ function Sheet({ round, teacherId, subject, classId }: { round: any; teacherId: 
 }
 
 // ── The deputy's follow-up ───────────────────────────────────────────────
+// A student's report as the guardian sees it: subjects and what was written, no teacher names
+const reportOf = (data: any, s: any, rows: any[]) => ({
+    school: data.school, title: data.round.title, studentName: s.fullName, className: s.className,
+    subjects: rows.filter(o => o.academic != null || o.behavior != null || o.distraction != null || o.advice)
+        .map(o => ({ subject: o.subjectName, academic: o.academic, behavior: o.behavior, distraction: o.distraction, advice: o.advice }))
+        .sort((a, b) => a.subject.localeCompare(b.subject, "ar")),
+});
+
+// The reports, one per page, printed on their own — «حفظ بصيغة PDF» in the print window gives the file
+function PrintReports({ reports, onDone }: { reports: any[]; onDone: () => void }) {
+    useEffect(() => {
+        const done = () => onDone();
+        window.addEventListener("afterprint", done);
+        const t = setTimeout(() => window.print(), 300);
+        return () => { clearTimeout(t); window.removeEventListener("afterprint", done); };
+    }, [onDone]);
+    return createPortal(<div className="op-print-root">
+        <style>{`@media screen { .op-print-root { display: none } }
+            @media print { body:has(> .op-print-root) > #root { display: none !important } .op-print-root main { min-height: 0 !important }
+            .op-print-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact } .op-print-page { break-after: page } .op-print-page:last-child { break-after: auto } }`}</style>
+        {reports.map((r, k) => <div key={k} className="op-print-page"><ReportView data={r}/></div>)}
+    </div>, document.body);
+}
+
+// Every opinion, and a row per student, for the school's own records
+function exportOpinions(data: any, students: any[], byStudent: Map<string, any[]>) {
+    const ids = new Set(students.map(s => s._id));
+    const stu = new Map<string, any>(data.students.map((s: any) => [s._id, s]));
+    const rows = data.opinions.filter((o: any) => ids.has(o.studentId))
+        .map((o: any) => ({ o, s: stu.get(o.studentId) }))
+        .sort((a: any, b: any) => a.s.className.localeCompare(b.s.className, "ar", { numeric: true }) || a.s.fullName.localeCompare(b.s.fullName, "ar") || a.o.subjectName.localeCompare(b.o.subjectName, "ar"));
+    const tone = (v: any) => v === "ضعيف" || v === "نعم" ? "bad" : v === "مقبول" || v === "أحياناً" ? "warn" : v === "ممتاز" ? "good" : undefined;
+    return downloadWorkbook(`آراء المعلمين - ${data.round.title}`, [{
+        name: "كل الآراء", title: data.round.title, meta: [`${rows.length} رأيًا عن ${new Set(rows.map((r: any) => r.o.studentId)).size} طالب`],
+        columns: [
+            { header: "الطالب", width: 30, bold: true }, { header: "الشعبة", width: 9, align: "center" }, { header: "المادة", width: 22 }, { header: "المعلم", width: 26 },
+            { header: "المستوى الأكاديمي", width: 13, align: "center" }, { header: "السلوك", width: 11, align: "center" }, { header: "المشتتات", width: 10, align: "center" }, { header: "نصيحة لولي الأمر", width: 50 },
+        ],
+        rows: rows.map(({ o, s }: any) => [s.fullName, s.className, o.subjectName, o.teacherName, LEVELS[o.academic] ?? "", LEVELS[o.behavior] ?? "", DISTRACTION[o.distraction] ?? "", o.advice]),
+        tone: (row: any[], i: number) => i >= 4 && i <= 6 ? tone(row[i]) : undefined,
+        freezeColumns: 1, orientation: "landscape",
+    }, {
+        name: "ملخص الطلاب", title: `ملخص الطلاب — ${data.round.title}`, meta: ["المتوسط من 5: ممتاز 5 … ضعيف 1"],
+        columns: [
+            { header: "الطالب", width: 30, bold: true }, { header: "الشعبة", width: 9, align: "center" }, { header: "عدد المواد", width: 10, align: "center" },
+            { header: "متوسط أكاديمي", width: 12, align: "center" }, { header: "متوسط السلوك", width: 12, align: "center" },
+            { header: "يحتاج متابعة في", width: 36 }, { header: "مشتتات في", width: 28 },
+        ],
+        rows: students.map(s => {
+            const r = byStudent.get(s._id) ?? [];
+            const m = (k: string) => { const xs = r.map((o: any) => o[k]).filter((x: any) => x != null); return xs.length ? Number((xs.reduce((a: number, b: number) => a + b, 0) / xs.length).toFixed(1)) : ""; };
+            return [s.fullName, s.className, r.length, m("academic"), m("behavior"),
+                r.filter((o: any) => (o.academic != null && o.academic <= 2) || (o.behavior != null && o.behavior <= 2)).map((o: any) => o.subjectName).join("، "),
+                r.filter((o: any) => o.distraction === "yes").map((o: any) => o.subjectName).join("، ")];
+        }),
+        tone: (row: any[], i: number) => (i === 5 || i === 6) && row[i] ? "bad" : undefined,
+        freezeColumns: 1, orientation: "landscape",
+    }] as any);
+}
+
 function useOverview(round: any) {
     return useQuery((api as any).studentOpinions.overview, { roundId: round._id }) as any;
 }
@@ -185,6 +247,7 @@ function FollowUp({ round }: { round: any }) {
     const [classId, setClassId] = useState("");
     const [open, setOpen] = useState("");
     const [onlyFlagged, setOnlyFlagged] = useState(false);
+    const [printing, setPrinting] = useState<any[] | null>(null);
     const byStudent = useMemo(() => {
         const m = new Map<string, any[]>();
         for (const o of data?.opinions ?? []) m.set(o.studentId, [...(m.get(o.studentId) ?? []), o]);
@@ -221,7 +284,18 @@ function FollowUp({ round }: { round: any }) {
                 <label className="text-sm text-slate-700">الشعبة<select className={input} value={classId} onChange={e => setClassId(e.target.value)}>
                     <option value="">كل الشعب</option>{data.classes.map((c: any) => <option key={c._id} value={c._id}>{c.name}</option>)}</select></label>
                 <label className="text-sm text-slate-700 flex items-center gap-2 pb-2"><input type="checkbox" checked={onlyFlagged} onChange={e => setOnlyFlagged(e.target.checked)}/>يحتاجون متابعة فقط</label>
+                <div className="w-full flex flex-wrap gap-2">
+                    <button disabled={!students.some((s: any) => byStudent.get(s._id)?.length)} onClick={() => setPrinting(students.filter((s: any) => byStudent.get(s._id)?.length).map((s: any) => reportOf(data, s, byStudent.get(s._id)!)))}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-qatar-maroon text-white text-sm font-bold disabled:opacity-40">
+                        <Printer className="w-4 h-4"/>تقارير أولياء الأمور ({students.filter((s: any) => byStudent.get(s._id)?.length).length}) — صفحة لكل طالب
+                    </button>
+                    <button onClick={() => void exportOpinions(data, students, byStudent)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-qatar-maroon text-qatar-maroon text-sm font-bold">
+                        <Download className="w-4 h-4"/>Excel لآراء المعلمين
+                    </button>
+                    <p className="w-full text-xs text-slate-500">يشمل ما يظهر في القائمة (الشعبة المختارة أو الكل). من نافذة الطباعة اختر «حفظ بصيغة PDF» لتحصل على ملف.</p>
+                </div>
             </div>
+            {printing && <PrintReports reports={printing} onDone={() => setPrinting(null)}/>}
             <ul className="divide-y divide-slate-100">
                 {students.map((s: any) => {
                     const rows = byStudent.get(s._id) ?? [];
@@ -244,6 +318,8 @@ function FollowUp({ round }: { round: any }) {
                                     <td className="p-2">{LEVELS[o.academic] ?? "—"}</td><td className="p-2">{LEVELS[o.behavior] ?? "—"}</td>
                                     <td className="p-2">{DISTRACTION[o.distraction] ?? "—"}</td><td className="p-2">{o.advice || "—"}</td></tr>)}</tbody>
                             </table> : <p className="text-xs text-slate-400">لم يكتب أي معلم عن هذا الطالب بعد.</p>}
+                            {rows.length > 0 && <button onClick={() => setPrinting([reportOf(data, s, rows)])} className="mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-qatar-maroon underline underline-offset-4">
+                                <Printer className="w-4 h-4"/>طباعة تقرير هذا الطالب لولي الأمر</button>}
                         </div>}
                     </li>;
                 })}

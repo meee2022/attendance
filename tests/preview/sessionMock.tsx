@@ -10,6 +10,8 @@ export const setup = { today: "2026-09-25", departments: ["العلوم", "ال�
     classes: [{ _id: "class1", name: "العاشر 1", grade: 10 }], criteria: [{ _id: "c1", domain: "planning", text: "معيار تجريبي للمعاينة فقط", order: 1 }] };
 export const visits: any[] = [{ _id: "v1", teacherId: "t1", teacherName: setup.teachers[0].fullName, department: "العلوم", visitorRole: "coordinator", visitorName: "زائر تجريبي", className: "العاشر 1", subjectName: "العلوم", lessonTopic: "درس تجريبي", visitDate: "2026-09-10", followUpType: "full", status: "submitted", averageScore: .67, ratings: '{"c1":2}', domainAverages: '{}', planningRec: "ملاحظة تجريبية لعرض متابعة التوصيات.", executionRec: "", evalMgmtRec: "", notes: "", createdAt: 1, updatedAt: 1 }];
 visits.push({ ...visits[0], _id: "v2", status: "draft", averageScore: null, visitorId: "vc1", reviewRequest: { toRole: "deputy", toName: "نائب تجريبي", byName: "منسق تجريبي", note: "راجع توصيات التنفيذ من فضلك", at: 1 } });
+// ?pending: the coordinator has signed it and sent it on to the deputy
+if (new URLSearchParams(location.search).has("pending")) Object.assign(visits[visits.length - 1], { note: undefined, coordinatorApproval: { name: "منسق تجريبي", at: 1 }, teacherSign: { method: "paper", at: 1 } });
 let actions: any[] = [{ _id: "a1", teacherId: "t1", visitId: "v1", kind: "improvement", title: "إجراء تجريبي: إعداد نشاط للتحقق من تحقق أهداف الدرس ومراجعة أثره في الزيارة التالية", owner: "المعلم والمنسق", dueDate: "2026-09-20", evidence: "", status: "open", updatedAt: 1 },
     { _id: "a2", teacherId: "t2", kind: "visit", title: "موعد زيارة صفية تجريبي", owner: "النائب الأكاديمي", dueDate: "2026-10-05", evidence: "", status: "open", updatedAt: 1 }];
 export const useSupervisionSession = () => session;

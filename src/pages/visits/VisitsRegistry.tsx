@@ -14,11 +14,13 @@ import { isReviewer } from "./VisitWorkflow";
 // of record stays clean. Deleting asks for a reason and only moves the visit to
 // the bin, from where it can be brought back.
 
-type View = "submitted" | "draft" | "deleted";
+// «قيد الاعتماد»: signed by the coordinator, on its way to the teacher or the deputy
+type View = "submitted" | "pending" | "draft" | "deleted";
+const viewOf = (v: VisitRow): View => v.status === "submitted" ? "submitted" : v.coordinatorApproval ? "pending" : "draft";
 
 export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint, onOpenTeacher, initialView = "submitted" }: {
     setup: any;
-    initialView?: "submitted" | "draft";
+    initialView?: "submitted" | "pending" | "draft";
     visits: VisitRow[];
     session: Session;
     onEdit: (id: string) => void;
@@ -26,7 +28,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
     onOpenTeacher: (teacherId: string) => void;
 }) {
     const year = periodPresets(setup)[0];
-    const [filters, setFilters] = useState<Filters>({ department: "", teacherId: "", role: "", from: initialView === "draft" ? "" : year.from, to: initialView === "draft" ? "" : year.to });
+    const [filters, setFilters] = useState<Filters>({ department: "", teacherId: "", role: "", from: initialView === "submitted" ? year.from : "", to: initialView === "submitted" ? year.to : "" });
     const [view, setView] = useState<View>(initialView);
     const [search, setSearch] = useState("");
     const [deleting, setDeleting] = useState<VisitRow | null>(null);
@@ -41,7 +43,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
     // @ts-ignore
     const restoreVisit = useMutation(api.visits.restoreVisit);
 
-    const source = view === "deleted" ? (deleted ?? []) : visits.filter(v => v.status === view);
+    const source = view === "deleted" ? (deleted ?? []) : visits.filter(v => viewOf(v) === view);
     const rows = useMemo(() => {
         const q = search.trim();
         return applyFilters(source, filters).filter(v => !q
@@ -50,8 +52,9 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
     }, [source, filters, search]);
 
     const counts = {
-        submitted: applyFilters(visits, filters).filter(v => v.status === "submitted").length,
-        draft: applyFilters(visits, filters).filter(v => v.status === "draft").length,
+        submitted: applyFilters(visits, filters).filter(v => viewOf(v) === "submitted").length,
+        pending: applyFilters(visits, filters).filter(v => viewOf(v) === "pending").length,
+        draft: applyFilters(visits, filters).filter(v => viewOf(v) === "draft").length,
     };
 
     const confirmDelete = async () => {
@@ -104,6 +107,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2 flex-wrap">
                     {([
                         ["submitted", `المعتمدة (${counts.submitted})`],
+                        ["pending", `قيد الاعتماد (${counts.pending})`],
                         ["draft", `المسودات (${counts.draft})`],
                         ...((session.role === "deputy" || session.role === "admin") ? [["deleted", "سلة المحذوفات"]] : []),
                     ] as [View, string][]).map(([k, label]) => (
@@ -128,7 +132,7 @@ export default function VisitsRegistry({ setup, visits, session, onEdit, onPrint
 
                 {rows.length === 0 ? (
                     <p className="p-8 text-center text-sm font-bold text-slate-400">
-                        {view === "deleted" ? "السلة فارغة." : view === "draft" ? "لا توجد مسودات." : "لا توجد زيارات تطابق المرشحات."}
+                        {view === "deleted" ? "السلة فارغة." : view === "draft" ? "لا توجد مسودات." : view === "pending" ? "لا توجد زيارات قيد الاعتماد." : "لا توجد زيارات تطابق المرشحات."}
                     </p>
                 ) : (
                     <div className="overflow-auto">

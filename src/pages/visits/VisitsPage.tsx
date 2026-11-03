@@ -61,7 +61,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
     const [tab, setTab] = useState<Tab>("dashboard");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [dirty, setDirty] = useState(false);
-    const [registryView, setRegistryView] = useState<"submitted" | "draft">("submitted");
+    const [registryView, setRegistryView] = useState<"submitted" | "pending" | "draft">("submitted");
     const [followupTeacher, setFollowupTeacher] = useState("");
     const [teacherFocus, setTeacherFocus] = useState<string>("");
 
@@ -139,7 +139,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
                 editingId && !visits.some(v => v._id === editingId) ? <LoadingSpinner label="جاري فتح مسودة الزيارة…"/> : <VisitForm key={editingId ?? "new"} setup={setup} session={session} editingId={editingId}
                     onNewVisit={() => { setDirty(false); setEditingId(null); }}
                     visits={visits} onDirtyChange={setDirty}
-                    onDone={() => { setDirty(false); setEditingId(null); setRegistryView("submitted"); setTab("registry"); }}/>
+                    onDone={(view = "submitted") => { setDirty(false); setEditingId(null); setRegistryView(view); setTab("registry"); }}/>
             )}
             {tab === "registry" && (
                 <VisitsRegistry initialView={registryView} setup={setup} visits={visits} session={session}

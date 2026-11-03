@@ -154,7 +154,7 @@ export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (i
     const session = useSupervisionSession() as Session | null;
     if (!session) return null;
     const mine = visits.filter(v => isReviewer(v, session) || (session.role === "deputy" && v.visitorRole === "coordinator" && v.status === "submitted" && !v.deputyApproval));
-    const unfinished = visits.filter(v => session.role === "coordinator" && v.visitorId === session.visitorId && ["teacher", "ready"].includes(stageOf(v)));
+    const unfinished = visits.filter(v => session.role === "coordinator" && v.visitorId === session.visitorId && ["teacher", "ready", "deputy"].includes(stageOf(v)));
     if (!mine.length && !unfinished.length) return null;
     return (
         <div className="bg-white rounded-2xl border border-sky-200 shadow-sm p-4 space-y-2">
@@ -168,7 +168,7 @@ export function ReviewInbox({ visits, onOpen }: { visits: VisitRow[]; onOpen: (i
                     <span className="text-xs font-black text-sky-800 mr-auto">{v.coordinatorApproval ? "اعتماد النائب" : "مراجعة"}</span>
                 </button>
             ))}
-            {unfinished.length > 0 && <h3 className="font-bold text-slate-700 text-sm">زياراتك التي لم تُرسل للنائب بعد ({unfinished.length})</h3>}
+            {unfinished.length > 0 && <h3 className="font-bold text-slate-700 text-sm">زياراتك قيد الاعتماد ({unfinished.length})</h3>}
             {unfinished.map(v => (
                 <button key={v._id} onClick={() => onOpen(v._id)}
                     className="w-full flex items-center gap-3 p-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-right text-sm">

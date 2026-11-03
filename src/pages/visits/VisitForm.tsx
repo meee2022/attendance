@@ -88,7 +88,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     session: Session;
     editingId: string | null;
     visits: VisitRow[];
-    onDone: () => void;
+    onDone: (view?: "submitted" | "pending") => void;
     onDirtyChange?: (dirty: boolean) => void;
     onNewVisit?: () => void;
 }) {
@@ -296,7 +296,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                         className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-slate-200 font-black text-sm text-slate-700 hover:border-qatar-maroon">
                         زيارة جديدة
                     </button>
-                    <button onClick={onDone}
+                    <button onClick={() => onDone(saved.status === "submitted" ? "submitted" : "pending")}
                         className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-slate-200 font-black text-sm text-slate-700 hover:border-qatar-maroon">
                         سجل الزيارات
                     </button>
@@ -333,7 +333,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                         : " — الزيارة معتمدة: لا يتغير التاريخ، ويمكنك تصحيح المعلم مع ذكر السبب، وتُحفظ النسخة السابقة.") : " — مسودة"}
                 </div>
             )}
-            {editing && !editingSubmitted && <ReviewBanner visit={editing} session={session} onReturned={onDone}/>}
+            {editing && !editingSubmitted && <ReviewBanner visit={editing} session={session} onReturned={() => onDone()}/>}
             {editing && !editingSubmitted && <VisitSteps visit={editing} session={session}/>}
             {editing?.teacherSign && editing.teacherSign.method !== "none" && (
                 <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">

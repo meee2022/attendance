@@ -28,23 +28,26 @@ export function ReportView({ data }: { data: any }) {
     const weak = subjects.filter(s => (s.academic != null && s.academic <= 2) || (s.behavior != null && s.behavior <= 2)).map(s => s.subject);
     const distracted = subjects.filter(s => s.distraction === "yes").map(s => s.subject);
 
-    return <main dir="rtl" className="min-h-screen bg-[#f5f2ed] py-6 px-4 print:bg-white print:p-0">
-        <style>{`@media print { .no-print { display:none } @page { size: A4; margin: 12mm } }`}</style>
-        <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm overflow-hidden print:shadow-none print:rounded-none">
-            <header className="px-5 sm:px-8 py-5 text-white flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4" style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
-                <img src="/forms/moe-logo.png" alt="وزارة التربية والتعليم والتعليم العالي" className="h-10 sm:h-12 self-start sm:self-auto bg-white rounded-lg p-1.5 shrink-0"/>
+    // On paper the subjects are one table, so a report of a dozen subjects keeps to one A4 page;
+    // on the guardian's phone they stay cards
+    return <main dir="rtl" className="min-h-screen bg-[#f5f2ed] py-6 px-4 print:min-h-0 print:bg-white print:p-0">
+        <style>{`@media print { .no-print { display:none } @page { size: A4; margin: 10mm }
+            .gr-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact } }`}</style>
+        <div className="gr-sheet max-w-3xl mx-auto bg-white rounded-2xl shadow-sm overflow-hidden print:max-w-none print:shadow-none print:rounded-none">
+            <header className="px-5 sm:px-8 py-5 print:px-5 print:py-3 text-white flex flex-col sm:flex-row sm:items-center print:flex-row print:items-center gap-3 sm:gap-4" style={{ background: "linear-gradient(135deg,#5C1523,#7A1E30)" }}>
+                <img src="/forms/moe-logo.png" alt="وزارة التربية والتعليم والتعليم العالي" className="h-10 sm:h-12 print:h-10 self-start sm:self-auto bg-white rounded-lg p-1.5 shrink-0"/>
                 <div className="min-w-0">
                     <p className="text-xs text-white/75">{data.school}</p>
                     <h1 className="text-lg sm:text-xl font-bold leading-snug">{data.title}</h1>
                 </div>
             </header>
-            <div className="px-5 sm:px-8 py-5 space-y-5">
+            <div className="px-5 sm:px-8 py-5 space-y-5 print:px-1 print:py-3 print:space-y-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[#ad8f50]/40 pb-3">
                     <p className="text-lg font-bold text-slate-900">{data.studentName}</p>
                     <p className="text-sm text-slate-500">الشعبة {data.className} · عدد المواد {subjects.length}</p>
                 </div>
 
-                {subjects.length > 0 && <section className="rounded-xl bg-[#f5f2ed] p-4 space-y-1.5 text-sm leading-relaxed">
+                {subjects.length > 0 && <section className="rounded-xl bg-[#f5f2ed] p-4 print:p-3 space-y-1.5 print:space-y-0.5 text-sm print:text-[12px] leading-relaxed">
                     <h2 className="font-bold text-[#5C1523]">الخلاصة</h2>
                     {strong.length > 0 && <p>مستوى متميز (ممتاز أو جيد جداً) في: <b>{strong.join("، ")}</b></p>}
                     {weak.length > 0 && <p className="text-rose-800">يحتاج متابعة في: <b>{weak.join("، ")}</b></p>}
@@ -52,7 +55,20 @@ export function ReportView({ data }: { data: any }) {
                     {!weak.length && !distracted.length && <p className="text-emerald-800">لا توجد ملاحظات تستدعي القلق — بارك الله فيه.</p>}
                 </section>}
 
-                {subjects.length ? <ul className="space-y-3">
+                {subjects.length > 0 && <table className="hidden print:table w-full border-collapse text-[11.5px] leading-snug">
+                    <thead><tr className="bg-[#5C1523] text-white">
+                        {["المادة", "المستوى الأكاديمي", "السلوك", "مشتتات داخل الصف", "نصيحة المعلم"].map(h => <th key={h} className="border border-[#5C1523] px-2 py-1.5 text-right font-bold">{h}</th>)}
+                    </tr></thead>
+                    <tbody>{subjects.map(s => <tr key={s.subject} className="break-inside-avoid">
+                        <td className="border border-slate-300 px-2 py-1.5 font-bold text-slate-900">{s.subject}</td>
+                        <td className={`border border-slate-300 px-2 py-1.5 text-center font-bold whitespace-nowrap ${tone(s.academic)}`}>{LEVELS[s.academic] ?? "—"}</td>
+                        <td className={`border border-slate-300 px-2 py-1.5 text-center font-bold whitespace-nowrap ${tone(s.behavior)}`}>{LEVELS[s.behavior] ?? "—"}</td>
+                        <td className={`border border-slate-300 px-2 py-1.5 text-center font-bold whitespace-nowrap ${distractionTone(s.distraction)}`}>{DISTRACTION[s.distraction] ?? "—"}</td>
+                        <td className="border border-slate-300 px-2 py-1.5 text-slate-700">{s.advice || "—"}</td>
+                    </tr>)}</tbody>
+                </table>}
+
+                {subjects.length ? <ul className="space-y-3 print:hidden">
                     {subjects.map(s => <li key={s.subject} className="rounded-xl border border-slate-200 p-4 space-y-3 break-inside-avoid">
                         <h3 className="font-bold text-slate-900">{s.subject}</h3>
                         <div className="flex flex-wrap gap-2 text-xs font-bold">
@@ -64,7 +80,7 @@ export function ReportView({ data }: { data: any }) {
                     </li>)}
                 </ul> : <p className="text-center text-slate-500 py-6">لم تُسجَّل آراء المعلمين لهذا الطالب بعد.</p>}
 
-                <p className="text-xs text-slate-500 leading-relaxed">هذا التقرير خاص بولي أمر الطالب. للاستفسار يُرجى التواصل مع إدارة المدرسة.</p>
+                <p className="text-xs print:text-[10px] text-slate-500 leading-relaxed">هذا التقرير خاص بولي أمر الطالب. للاستفسار يُرجى التواصل مع إدارة المدرسة.</p>
                 <button onClick={() => window.print()} className="no-print inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-[#5C1523] text-[#5C1523] text-sm font-bold">
                     <Printer className="w-4 h-4"/>طباعة التقرير</button>
             </div>

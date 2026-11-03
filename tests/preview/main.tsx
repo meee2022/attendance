@@ -24,7 +24,8 @@ else
 if (new URLSearchParams(location.search).has("opinions")) createRoot(document.getElementById("root")!).render(<div style={{ padding: 12 }}><StudentOpinionsPage/></div>);
 else
 if (new URLSearchParams(location.search).has("guardian")) createRoot(document.getElementById("root")!).render(<ReportView data={{ school: "مدرسة ابن تيمية الثانوية للبنين", title: "استطلاع رأي المدرسين في طلاب الصف الثاني عشر", studentName: "طالب تجريبي", className: "12-1",
-    subjects: [{ subject: "الأحياء", academic: 5, behavior: 5, distraction: "no", advice: "الاستمرار على مستواه المتميز" }, { subject: "الرياضيات", academic: 2, behavior: 3, distraction: "yes", advice: "متابعة حل الواجبات والمذاكرة اليومية في المنزل" }, { subject: "اللغة العربية", academic: 4, behavior: 4, distraction: "sometimes", advice: "" }] }}/>);
+    subjects: new URLSearchParams(location.search).has("many") ? ["التربية الإسلامية", "اللغة العربية", "اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء", "العلوم الاجتماعية", "الحوسبة وتكنولوجيا المعلومات", "المهارات الحياتية", "التربية البدنية", "الفنون البصرية"]
+        .map((subject, i) => ({ subject, academic: 5 - (i % 5), behavior: 5 - ((i + 2) % 5), distraction: ["no", "sometimes", "yes"][i % 3], advice: "متابعة حل الواجبات والمذاكرة اليومية في المنزل، وتشجيعه على المشاركة داخل الصف والحد من استخدام الجوال" })) : [{ subject: "الأحياء", academic: 5, behavior: 5, distraction: "no", advice: "الاستمرار على مستواه المتميز" }, { subject: "الرياضيات", academic: 2, behavior: 3, distraction: "yes", advice: "متابعة حل الواجبات والمذاكرة اليومية في المنزل" }, { subject: "اللغة العربية", academic: 4, behavior: 4, distraction: "sometimes", advice: "" }] }}/>);
 else
 if (new URLSearchParams(location.search).has("survey")) createRoot(document.getElementById("root")!).render(<SurveyCheck/>);
 else

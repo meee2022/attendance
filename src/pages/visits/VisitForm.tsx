@@ -16,6 +16,7 @@ import {
     type Domain, type Rating, type ValidationIssue,
 } from "../../../convex/visitMath";
 import { pct, scoreTone, stageOf, type VisitRow } from "../../lib/visitStats";
+import { indicatorsOf } from "../../lib/visitGuide";
 import type { Session } from "./VisitsPage";
 
 // The ministry form, laid out for a tablet held in the back of a classroom:
@@ -488,9 +489,19 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                         return (
                                             <div key={c._id}
                                                 className={`grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2 items-center px-3 py-2 ${idx ? "border-t border-slate-100" : ""} ${current === undefined ? "bg-white" : "bg-slate-50"}`}>
-                                                <p className="text-sm text-slate-800 leading-relaxed">
-                                                    <span className="text-slate-400 font-bold ml-1">{n}.</span>{c.text}
-                                                </p>
+                                                <div>
+                                                    <p className="text-sm text-slate-800 leading-relaxed">
+                                                        <span className="text-slate-400 font-bold ml-1">{n}.</span>{c.text}
+                                                    </p>
+                                                    {indicatorsOf(c.text).length > 0 && (
+                                                        <details className="mt-0.5">
+                                                            <summary className="text-[11px] font-bold text-qatar-maroon cursor-pointer select-none w-fit">مؤشرات البند (الدليل التفسيري)</summary>
+                                                            <ul className="mt-1 mr-4 list-disc space-y-0.5 text-xs text-slate-600 leading-relaxed">
+                                                                {indicatorsOf(c.text).map(t => <li key={t}>{t}</li>)}
+                                                            </ul>
+                                                        </details>
+                                                    )}
+                                                </div>
                                                 <div className="grid grid-cols-5 gap-1 lg:w-[380px]" role="radiogroup" aria-label={`تقدير المعيار ${n}`}>
                                                     {RATING_SCALE.map(r => {
                                                         const active = current === r.value;

@@ -335,9 +335,10 @@ function FollowUp({ round }: { round: any }) {
 }
 
 // ── Links for the guardians ──────────────────────────────────────────────
-export const reportUrl = (token: string) => `${window.location.origin}/guardian-report#${token}`;
-export const guardianMessage = (s: any, title: string, url: string) =>
-    `السلام عليكم ولي أمر الطالب ${s.fullName}\nنضع بين أيديكم تقرير آراء معلمي ابنكم (${s.className}) — ${title}:\n${url}\nمع تحيات مدرسة ابن تيمية الثانوية للبنين`;
+export const reportUrl = (token: string) => `${window.location.origin}/r#${token}`;
+// Short, since it goes by SMS: whom it is for, what it is, the link, who sent it
+export const guardianMessage = (s: any, _title: string, url: string) =>
+    `ولي أمر الطالب ${s.fullName}\nتقرير آراء معلمي ابنكم:\n${url}\nمدرسة ابن تيمية`;
 
 function Guardians({ round }: { round: any }) {
     const data = useOverview(round);

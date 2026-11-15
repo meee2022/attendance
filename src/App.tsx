@@ -457,8 +457,9 @@ function BottomNav() {
 function App() {
   const { pathname } = useLocation();
   if (pathname === "/supervision/acknowledge") return <TeacherAcknowledgement/>;
-  // a guardian's report opens from its private link, without signing in
-  if (pathname === "/guardian-report") return <GuardianReport/>;
+  // a guardian's report opens from its private link, without signing in;
+  // «/r» is the short form sent by SMS
+  if (pathname === "/guardian-report" || pathname === "/r") return <GuardianReport/>;
   return <PlatformBoundary><ProtectedApp/></PlatformBoundary>;
 }
 export default App;

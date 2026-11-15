@@ -372,6 +372,14 @@ function Guardians({ round }: { round: any }) {
         freezeColumns: 1,
         orientation: "landscape",
     } as any]);
+    // The SMS service's own upload sheet: «Phone Number» and «Message Body», nothing else
+    const sms = data.students.filter((s: any) => linkOf.has(s._id) && s.guardianPhone.replace(/\D/g, ""));
+    const exportSms = () => downloadWorkbook(`رسائل أولياء الأمور - ${round.title}`, [{
+        name: "Sheet1",
+        title: "",
+        columns: [{ header: "Phone Number", width: 16 }, { header: "Message Body", width: 90 }],
+        rows: sms.map((s: any) => [s.guardianPhone.replace(/\D/g, ""), guardianMessage(s, round.title, reportUrl((linkOf.get(s._id) as any).token))]),
+    } as any]);
 
     return <div className="space-y-4">
         {!round.published && <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900 flex flex-wrap items-center gap-3">
@@ -394,8 +402,11 @@ function Guardians({ round }: { round: any }) {
             }}>{busy ? <Loader2 className="w-4 h-4 animate-spin"/> : <Link2 className="w-4 h-4"/>}إنشاء الروابط</button>
             <button disabled={!linkOf.size} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-qatar-maroon text-qatar-maroon text-sm font-bold disabled:opacity-40" onClick={() => void exportExcel()}>
                 <Download className="w-4 h-4"/>Excel للإرسال</button>
+            <button disabled={!sms.length} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-qatar-maroon text-qatar-maroon text-sm font-bold disabled:opacity-40" onClick={() => void exportSms()}>
+                <Download className="w-4 h-4"/>ملف خدمة الرسائل ({sms.length})</button>
             {note && <p role="status" className="w-full text-sm text-slate-600">{note}</p>}
-            <p className="w-full text-xs text-slate-500">الملف فيه لكل طالب: الاسم والشعبة والرقم الشخصي ورقم ولي الأمر ونص الرسالة بالرابط. الطلاب الجدد أو الروابط المنتهية يأخذون رابطًا جديدًا عند الضغط مرة أخرى.</p>
+            <p className="w-full text-xs text-slate-500">الملف فيه لكل طالب: الاسم والشعبة والرقم الشخصي ورقم ولي الأمر ونص الرسالة بالرابط. الطلاب الجدد أو الروابط المنتهية يأخذون رابطًا جديدًا عند الضغط مرة أخرى.
+                «ملف خدمة الرسائل» بقالب الخدمة نفسه (رقم الهاتف ونص الرسالة) لمن له رابط ورقم ولي أمر{data.students.length - sms.length ? `؛ ${data.students.length - sms.length} طالب بلا رابط أو رقم لا يدخلون فيه` : ""}.</p>
         </div>
         <ul className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
             {data.students.map((s: any) => {

@@ -188,8 +188,14 @@ function PrintReports({ reports, onDone }: { reports: any[]; onDone: () => void 
     useEffect(() => {
         const done = () => onDone();
         window.addEventListener("afterprint", done);
-        const t = setTimeout(() => window.print(), 300);
-        return () => { clearTimeout(t); window.removeEventListener("afterprint", done); };
+        // the logo must have loaded, or the page prints its empty white frame
+        let live = true;
+        const t = setTimeout(async () => {
+            const images = [...document.querySelectorAll<HTMLImageElement>(".op-print-root img")];
+            await Promise.all(images.map(i => i.complete || new Promise(r => { i.onload = i.onerror = r; })));
+            if (live) window.print();
+        }, 300);
+        return () => { live = false; clearTimeout(t); window.removeEventListener("afterprint", done); };
     }, [onDone]);
     return createPortal(<div className="op-print-root">
         <style>{`@media screen { .op-print-root { display: none } }

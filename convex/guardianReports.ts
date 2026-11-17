@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { schoolNameOf } from "./studentOpinions";
 
 // The guardian's side of «رأي المعلمين في الطلاب» (studentOpinions.ts): a
 // private token link, no sign-in. It shows only a published round, only to
@@ -24,11 +25,10 @@ export const report = query({ args: { token: v.string() }, handler: async (ctx, 
     const student: any = await ctx.db.get(found.link.studentId);
     if (!student) return null;
     const cls: any = await ctx.db.get(student.classId);
-    const school: any = await ctx.db.get(found.round.schoolId);
     const rows = await ctx.db.query("studentOpinions")
         .withIndex("by_round_student", q => q.eq("roundId", found.round._id).eq("studentId", student._id)).collect();
     return {
-        school: school?.name ?? "",
+        school: await schoolNameOf(ctx, found.round.schoolId),
         title: found.round.title,
         studentName: student.fullName,
         className: cls?.name ?? "",

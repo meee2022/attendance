@@ -11,6 +11,13 @@ const DAY = 86_400_000;
 const distractionV = v.union(v.literal("no"), v.literal("sometimes"), v.literal("yes"));
 const session = (ctx: any) => ctx.platformSession;
 
+// The school's Arabic name as printed on its forms; the school record itself
+// carries an English placeholder
+export async function schoolNameOf(ctx: any, schoolId: any) {
+    const s = await ctx.db.query("supervisionSettings").withIndex("by_school", (q: any) => q.eq("schoolId", schoolId)).first();
+    return s?.schoolNameOnForm || "مدرسة ابن تيمية الثانوية للبنين";
+}
+
 async function roundOf(ctx: any, id: any) {
     const round = await ctx.db.get(id);
     if (!round || round.schoolId !== session(ctx).schoolId) throw new ConvexError("الاستطلاع غير متاح");
@@ -124,10 +131,9 @@ export const overview = staffQuery({ args: { roundId: v.id("opinionRounds") }, h
     const { classes, students } = await gradeStudents(ctx, round.schoolId, round.grade);
     const opinions = await ctx.db.query("studentOpinions").withIndex("by_round", q => q.eq("roundId", round._id)).collect();
     const links = await ctx.db.query("guardianLinks").withIndex("by_round", q => q.eq("roundId", round._id)).collect();
-    const school: any = await ctx.db.get(round.schoolId);
     return {
         round,
-        school: school?.name ?? "",
+        school: await schoolNameOf(ctx, round.schoolId),
         classes: classes.map((c: any) => ({ _id: c._id, name: c.name })),
         students: students.map((s: any) => ({ _id: s._id, fullName: s.fullName, classId: s.classId, className: s.className, nationalId: s.nationalId ?? "", guardianPhone: s.guardianPhone ?? "" })),
         opinions: opinions.map(o => ({ studentId: o.studentId, classId: o.classId, teacherId: o.teacherId, teacherName: o.teacherName, subjectName: o.subjectName,

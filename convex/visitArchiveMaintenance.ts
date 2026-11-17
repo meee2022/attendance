@@ -124,3 +124,9 @@ export const importExcelVisits=internalMutation({args:{rows:v.string()},handler:
  }
  return out;
 }});
+// The school record carried the English placeholder of the first setup; the
+// name every page and report shows is the Arabic one.
+export const renameSchool=internalMutation({args:{name:v.string()},handler:async(ctx,{name})=>{
+ const school=await ctx.db.query('schools').first();if(!school||!name.trim())throw new ConvexError('لا توجد مدرسة');
+ await ctx.db.patch(school._id,{name:name.trim()});return {from:school.name,to:name.trim()};
+}});

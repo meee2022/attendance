@@ -9,7 +9,7 @@ export const seedDatabase = mutation({
         if (existingSchool) return "Already seeded.";
 
         const schoolId = await ctx.db.insert("schools", {
-            name: "Qatar School for Boys",
+            name: "مدرسة ابن تيمية الثانوية للبنين",
             code: "QSB-001",
             createdAt: new Date().toISOString(),
         });

@@ -94,6 +94,8 @@ const EXPECTED: Record<Domain, number> = { planning: 3, execution: 13, evaluatio
 const TABLE_X: [number, number] = [24.5, 570.1];
 const NOTES_TOP = 277.7;
 const NOTES_MIN = 47.2;
+// the notes grow with their text up to here; the rest goes to the appendix
+const NOTES_MAX = 110;
 // the vision and mission lines at the foot of the page
 const FOOTER: [number, number] = [770, 810];
 const SHEET_MARGIN = 10;
@@ -161,38 +163,67 @@ const Tick = ({ box }: { box: Box }) => (
     <Cell box={box} size={12} style={{ fontFamily: `"Segoe UI Symbol", "DejaVu Sans", Arial, sans-serif`, padding: 0 }}>✓</Cell>
 );
 
-// A cell of free text that shrinks until it fits, the way «تقليص للملاءمة»
-// does, instead of spilling over the lines of the form
-function FitText({ box, text, max = 15, min = 6 }: { box: Box; text: string; max?: number; min?: number }) {
+const CUT_NOTE = " … (التتمة في ملحق الاستمارة)";
+
+// Free text that shrinks to fit its cell, the way «تقليص للملاءمة» does, but
+// never below `min`: past that it shows what fits and the full text goes to
+// the appendix page, so nothing is printed too small to read.
+function ClampText({ text, max, min, maxHeight, onCut, style }: {
+    text: string; max: number; min: number; maxHeight?: number; onCut: (cut: boolean) => void; style: CSSProperties;
+}) {
     const ref = useRef<HTMLDivElement>(null);
+    const [shown, setShown] = useState(text);
     usePrintLayout(() => {
         const el = ref.current;
-        if (!el) return;
+        if (!el?.parentElement) return;
+        // measured on a hidden copy, so the cell itself never flickers
+        const probe = el.cloneNode(false) as HTMLDivElement;
+        Object.assign(probe.style, { position: "absolute", visibility: "hidden", top: "0", left: "0", height: "auto", minHeight: "0", boxSizing: "border-box", width: `${el.offsetWidth}px` });
+        el.parentElement.appendChild(probe);
+        const limit = maxHeight ? maxHeight * 96 / 72 : el.offsetHeight;
+        const fits = (t: string, size: number) => {
+            probe.style.fontSize = `${size}pt`;
+            probe.textContent = t;
+            return probe.offsetHeight <= limit + 0.5;
+        };
         let size = max;
-        el.style.fontSize = `${size}pt`;
-        while (size > min && el.scrollHeight > el.clientHeight + 1) {
-            size -= 0.5;
-            el.style.fontSize = `${size}pt`;
+        while (size > min && !fits(text, size)) size -= 0.5;
+        let next = text;
+        if (!fits(text, size)) {
+            const words = text.split(/(\s+)/);
+            const upTo = (n: number) => words.slice(0, n).join("").trimEnd() + CUT_NOTE;
+            let lo = 0, hi = words.length;
+            while (lo < hi) {
+                const mid = Math.ceil((lo + hi) / 2);
+                if (fits(upTo(mid), size)) lo = mid; else hi = mid - 1;
+            }
+            next = upTo(lo);
         }
-    }, [text, max, min]);
-    if (!text.trim()) return null;
-    return (
-        <div ref={ref} style={{
-            ...at(box), fontFamily: FORM_FONT, fontSize: `${max}pt`, lineHeight: 1.15, padding: "2pt 4pt",
-            textAlign: "right", whiteSpace: "pre-line", overflow: "hidden", overflowWrap: "anywhere", boxSizing: "border-box", color: "#000", direction: "rtl",
-        }}>{text}</div>
-    );
+        probe.remove();
+        el.style.fontSize = `${size}pt`;
+        setShown(next);
+        onCut(next !== text);
+    }, [text, max, min, maxHeight]);
+    return <div ref={ref} style={{ ...style, fontSize: `${max}pt` }}>{shown}</div>;
 }
 
-function FormEnd({ role, notes, signatureUrl, teacherSignatureUrl, deputyApproval, deputySignatureUrl }: { role: VisitorRole; notes: string; signatureUrl: string | null; teacherSignatureUrl?: string | null; deputyApproval?: { name: string; at: number }; deputySignatureUrl?: string | null }) {
+function FitText({ box, text, onCut }: { box: Box; text: string; onCut: (cut: boolean) => void }) {
+    if (!text.trim()) return null;
+    return <ClampText text={text} max={15} min={11} onCut={onCut} style={{
+        ...at(box), fontFamily: FORM_FONT, lineHeight: 1.15, padding: "2pt 4pt",
+        textAlign: "right", whiteSpace: "pre-line", overflow: "hidden", overflowWrap: "anywhere", boxSizing: "border-box", color: "#000", direction: "rtl",
+    }}/>;
+}
+
+function FormEnd({ role, notes, onNotesCut, signatureUrl, teacherSignatureUrl, deputyApproval, deputySignatureUrl }: { role: VisitorRole; notes: string; onNotesCut: (cut: boolean) => void; signatureUrl: string | null; teacherSignatureUrl?: string | null; deputyApproval?: { name: string; at: number }; deputySignatureUrl?: string | null }) {
     const line = "0.5pt solid #000";
     const label: CSSProperties = { background: "#DDDDDD", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FORM_FONT, fontSize: "14pt", color: "#000" };
     return (
         <div style={{ position: "relative", marginRight: `${PAGE_W - TABLE_X[1]}pt`, width: `${TABLE_X[1] - TABLE_X[0]}pt`, direction: "rtl" }}>
-            <div style={{
-                borderInline: line, borderBottom: line, minHeight: `${NOTES_MIN}pt`, overflowWrap: "anywhere",
-                padding: "3pt 6pt", fontFamily: FORM_FONT, fontSize: "13pt", lineHeight: 1.25, whiteSpace: "pre-line", textAlign: "right", color: "#000",
-            }}>{notes}</div>
+            <ClampText text={notes} max={13} min={11} maxHeight={NOTES_MAX} onCut={onNotesCut} style={{
+                borderInline: line, borderBottom: line, minHeight: `${NOTES_MIN}pt`, overflowWrap: "anywhere", overflow: "hidden",
+                padding: "3pt 6pt", fontFamily: FORM_FONT, lineHeight: 1.25, whiteSpace: "pre-line", textAlign: "right", color: "#000",
+            }}/>
             <div style={{ display: "grid", gridTemplateColumns: "119.7fr 159.5fr 159.1fr 105.6fr", height: "36pt", borderInline: line, borderBottom: line }}>
                 <div style={label}>توقيع المعلم</div>
                 <div style={{ borderInlineStart: line, position: "relative" }}>
@@ -274,6 +305,9 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
         return () => { active = false; };
     }, [autoPrint, data]);
     const { visit, criteria, form } = data;
+    // the boxes whose text did not fit at a readable size
+    const [cut, setCut] = useState<Record<string, boolean>>({});
+    const markCut = (key: string) => (on: boolean) => setCut(s => (Boolean(s[key]) === on ? s : { ...s, [key]: on }));
     const downloadPdf = async () => {
         if (downloading) return;
         setDownloading(true);
@@ -311,6 +345,11 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
         evaluation: String(visit.evalMgmtRec ?? ""),
         management: String(visit.managementRec ?? ""),
     };
+    const appendix: [string, string][] = ([
+        ["توصيات التخطيط", recs.planning, "planning"], ["توصيات تنفيذ الدرس", recs.execution, "execution"],
+        ["توصيات التقويم", recs.evaluation, "evaluation"], ["توصيات الإدارة الصفية وبيئة التعلم", recs.management, "management"],
+        ["ملاحظات وتوصيات عامة", String(visit.notes ?? ""), "notes"],
+    ] as const).filter(([, , key]) => cut[key]).map(([title, text]) => [title, text]);
     const ticks = placed.flatMap(({ c, row }) => {
         const r = visit.ratings[c._id];
         const col = RATING_X.find(([v]) => v === r);
@@ -362,7 +401,7 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
                     .form-page { margin: 0 !important; box-shadow: none !important; }
                 }
                 .vfp { background: #e2e8f0; min-height: 100vh; padding-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; }
+                .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; contain: strict; break-inside: avoid; }
                 .form-page:last-child { break-after: auto; page-break-after: auto; }
                 .form-sheet { position: absolute; left: 0; right: auto; top: ${SHEET_MARGIN}pt; width: ${PAGE_W}pt; transform-origin: top left; }
             `}</style>
@@ -420,19 +459,36 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
 
                     {ticks}
 
-                    <FitText box={[...REC_X, P1_ROWS[0], P1_ROWS[3]]} text={recs.planning}/>
-                    <FitText box={[...REC_X, P1_ROWS[3], P1_ROWS[16]]} text={recs.execution}/>
-                    <FitText box={[...REC_X, P1_ROWS[16], p2(P2_ROWS[1])]} text={recs.evaluation}/>
-                    <FitText box={[...REC_X, p2(P2_ROWS[1]), p2(P2_ROWS[5])]} text={recs.management}/>
+                    <FitText box={[...REC_X, P1_ROWS[0], P1_ROWS[3]]} text={recs.planning} onCut={markCut("planning")}/>
+                    <FitText box={[...REC_X, P1_ROWS[3], P1_ROWS[16]]} text={recs.execution} onCut={markCut("execution")}/>
+                    <FitText box={[...REC_X, P1_ROWS[16], p2(P2_ROWS[1])]} text={recs.evaluation} onCut={markCut("evaluation")}/>
+                    <FitText box={[...REC_X, p2(P2_ROWS[1]), p2(P2_ROWS[5])]} text={recs.management} onCut={markCut("management")}/>
 
                     {/* in the flow from here, so the notes can grow */}
                     <div style={{ height: `${p2(NOTES_TOP)}pt` }}/>
-                    <FormEnd role={role} notes={String(visit.notes ?? "")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null} teacherSignatureUrl={form.teacherSignatureUrl} deputyApproval={visit.deputyApproval} deputySignatureUrl={form.deputyApprovalSignatureUrl}/>
+                    <FormEnd role={role} notes={String(visit.notes ?? "")} onNotesCut={markCut("notes")} signatureUrl={role !== "supervisor" ? form.signatureUrl : null} teacherSignatureUrl={form.teacherSignatureUrl} deputyApproval={visit.deputyApproval} deputySignatureUrl={form.deputyApprovalSignatureUrl}/>
                     <div style={{ position: "relative", height: `${FOOTER[1] - FOOTER[0]}pt`, marginTop: "14pt" }}>
                         <PageSlice src={P1_SRC} y0={FOOTER[0]} y1={FOOTER[1]} top={0}/>
                     </div>
                 </div>
             </div>}
+            {visit.formKind !== "support" && appendix.length > 0 && (
+                <div className="form-page">
+                    <div style={{ position: "absolute", inset: "28pt 36pt", direction: "rtl", fontFamily: FORM_FONT, color: "#000" }}>
+                        <img src="/forms/moe-logo.png" alt="وزارة التربية والتعليم والتعليم العالي" style={{ height: "40pt", display: "block" }}/>
+                        <p style={{ margin: "12pt 0 2pt", fontSize: "18pt", fontWeight: 700, textAlign: "center" }}>ملحق استمارة الإشراف على أداء المعلّم: التوصيات كاملة</p>
+                        <p style={{ margin: "0 0 14pt", fontSize: "13pt", textAlign: "center" }}>
+                            {visit.teacherName} · {visit.subjectName} · {dayName(visit.visitDate)} <bdi dir="ltr">{formatDate(visit.visitDate)}</bdi>
+                        </p>
+                        {appendix.map(([title, text]) => (
+                            <section key={title} style={{ border: "0.5pt solid #000", marginBottom: "10pt" }}>
+                                <div style={{ background: "#DDDDDD", padding: "2pt 8pt", fontSize: "14pt", fontWeight: 700 }}>{title}</div>
+                                <div style={{ padding: "4pt 8pt", fontSize: "14pt", lineHeight: 1.4, whiteSpace: "pre-line", overflowWrap: "anywhere" }}>{text}</div>
+                            </section>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

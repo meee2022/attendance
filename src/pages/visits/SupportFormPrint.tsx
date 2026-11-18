@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { dayName, formatDate } from "../../../convex/visitMath";
 import { SUPPORT_DOMAIN_LABELS } from "../../../convex/visitCriteria";
@@ -27,6 +27,9 @@ const MIN_HEIGHT: Record<string, number> = { sp11: 32.3, sp13: 30.85, sp14: 30.8
 // where the letterhead leaves room for the form, on an A4 page in points
 const BODY_TOP = 92;
 const BODY_HEIGHT = 700;
+// A page may shrink this far to keep the Word file's split; past it, rows
+// carry on to the next page so long recommendations stay readable
+const MIN_SCALE = 0.9;
 
 const cell: CSSProperties = { border: LINE, padding: "0 4pt", fontFamily: FONT, fontSize: "14pt", lineHeight: 1.42, color: "#000", verticalAlign: "middle" };
 const label: CSSProperties = { ...cell, background: BEIGE };
@@ -42,12 +45,35 @@ export default function SupportVisitPages({ data }: { data: any }) {
     const coordinatorSignature = role === "coordinator" ? form.signatureUrl : null;
     const deputySignature = role === "deputy" ? form.signatureUrl : form.deputyApprovalSignatureUrl;
 
-    const rows = (list: Criterion[], first: boolean) => list.map((c, i) => {
-        // the domain cell spans its rows on each page; a domain carried over to
-        // page 2 continues in an empty cell, as in the Word file
+    // Each page holds items [starts[p], starts[p + 1]): the criteria rows, then
+    // one last item for the notes and signatures. A page too tall even at
+    // MIN_SCALE hands its last item to the next page, until everything fits.
+    const tail = ordered.length;
+    const [starts, setStarts] = useState([0, PAGE_ONE_ROWS]);
+    const bodies = useRef<(HTMLDivElement | null)[]>([]);
+    useLayoutEffect(() => {
+        for (let p = 0; p < starts.length; p++) {
+            const el = bodies.current[p];
+            const end = starts[p + 1] ?? tail + 1;
+            if (!el || el.scrollHeight * 72 / 96 <= BODY_HEIGHT / MIN_SCALE || end - starts[p] < 2) continue;
+            setStarts(p + 1 < starts.length ? starts.map((s, i) => (i === p + 1 ? s - 1 : s)) : [...starts, end - 1]);
+            return;
+        }
+    });
+    // fonts arriving can change every row's height: lay the pages out again
+    useLayoutEffect(() => {
+        const reset = () => setStarts([0, PAGE_ONE_ROWS]);
+        void document.fonts.ready.then(reset);
+        window.addEventListener("visit-form-layout", reset);
+        return () => window.removeEventListener("visit-form-layout", reset);
+    }, []);
+
+    const rows = (list: Criterion[]) => list.map((c, i) => {
+        // the domain cell spans its rows on each page; a domain carried over
+        // from the page before continues in an empty cell, as in the Word file
         const startsDomain = i === 0 || list[i - 1].domain !== c.domain;
         const span = startsDomain ? list.slice(i).findIndex(x => x.domain !== c.domain) : 0;
-        const carried = !first && i === 0 && ordered.indexOf(c) > 0 && ordered[ordered.indexOf(c) - 1].domain === c.domain;
+        const carried = i === 0 && ordered.indexOf(c) > 0 && ordered[ordered.indexOf(c) - 1].domain === c.domain;
         return (
             <tr key={c._id} style={{ height: `${MIN_HEIGHT[c._id] ?? 20}pt` }}>
                 {startsDomain && (
@@ -72,8 +98,41 @@ export default function SupportVisitPages({ data }: { data: any }) {
     const table: CSSProperties = { width: `${TABLE_W}pt`, margin: "0 auto", borderCollapse: "collapse", tableLayout: "fixed", direction: "rtl" };
     const ticked = (on: boolean, text: string) => <>{on && <span style={{ fontFamily: `"Segoe UI Symbol", Arial, sans-serif`, fontSize: "11pt" }}>✓ </span>}{text}</>;
 
+    const pageItems = (p: number) => {
+        const from = starts[p], to = starts[p + 1] ?? tail + 1;
+        return { list: ordered.slice(from, Math.min(to, tail)), hasTail: to > tail };
+    };
+    const ending = <>
+        <table style={{ ...table, marginTop: "-0.75pt" }}>
+            {colgroup}
+            <tbody>
+                <tr><td colSpan={8} style={{ ...band, textAlign: "right", fontSize: "16pt" }}>ملاحظات وتوصيات عامة</td></tr>
+                <tr style={{ height: "39.25pt" }}>
+                    <td colSpan={8} style={{ ...cell, fontSize: "13pt", lineHeight: 1.3, whiteSpace: "pre-line", textAlign: "right", verticalAlign: "top", padding: "2pt 6pt", overflowWrap: "anywhere" }}>{visit.notes ?? ""}</td>
+                </tr>
+            </tbody>
+        </table>
+        {/* the signature rows, with the Word file's own widths: 1946 · 1602 · 1452 */}
+        <table style={{ ...table, marginTop: "-0.75pt" }}>
+            <colgroup><col style={{ width: w(1946) }}/><col style={{ width: w(1602) }}/><col style={{ width: w(1452) }}/></colgroup>
+            <tbody>
+                <tr>{["معلم التربية الخاصة", "منسق التربية الخاصة", "النائب الأكاديمي"].map(t => <td key={t} style={band}>{t}</td>)}</tr>
+                <tr style={{ height: "36pt" }}>
+                    {[form.teacherSignatureUrl, coordinatorSignature, deputySignature].map((url: string | null, i) => (
+                        <td key={i} style={{ ...cell, padding: "2pt 4pt", position: "relative" }}>
+                            {url && <img src={url} alt="توقيع" style={{ display: "block", margin: "0 auto", height: "32pt", maxWidth: "100%", objectFit: "contain" }}/>}
+                        </td>
+                    ))}
+                </tr>
+            </tbody>
+        </table>
+        <p style={{ margin: "18pt 0 0", direction: "rtl", textAlign: "center", fontFamily: "Arial, sans-serif", fontSize: "11pt", color: "#000", wordSpacing: "2pt" }}>
+            5: ممتاز&emsp;&emsp;&emsp;4: جيد جداً&emsp;&emsp;&emsp;3: جيد&emsp;&emsp;&emsp;2: مقبول&emsp;&emsp;&emsp;1: ضعيف
+        </p>
+    </>;
+
     return <>
-        <Page>
+        <Page bodyRef={el => { bodies.current[0] = el; }}>
             <table style={{ width: "487pt", margin: "0 auto", borderCollapse: "collapse" }}>
                 <tbody><tr><td style={{ ...band, fontSize: "20pt", padding: "1pt 4pt" }}>12 - استمارات متابعة قسم التربية الخاصة</td></tr></tbody>
             </table>
@@ -107,39 +166,20 @@ export default function SupportVisitPages({ data }: { data: any }) {
                         {SCORES.map(s => <td key={s} style={{ ...label, padding: 0, textAlign: "center" }}>{s}</td>)}
                         <td style={{ ...label, textAlign: "center" }}>التوصيات</td>
                     </tr>
-                    {rows(ordered.slice(0, PAGE_ONE_ROWS), true)}
+                    {rows(pageItems(0).list)}
                 </tbody>
             </table>
+            {pageItems(0).hasTail && ending}
         </Page>
-        <Page>
-            <table style={table}>
-                {colgroup}
-                <tbody>
-                    {rows(ordered.slice(PAGE_ONE_ROWS), false)}
-                    <tr><td colSpan={8} style={{ ...band, textAlign: "right", fontSize: "16pt" }}>ملاحظات وتوصيات عامة</td></tr>
-                    <tr style={{ height: "39.25pt" }}>
-                        <td colSpan={8} style={{ ...cell, fontSize: "13pt", lineHeight: 1.3, whiteSpace: "pre-line", textAlign: "right", verticalAlign: "top", padding: "2pt 6pt", overflowWrap: "anywhere" }}>{visit.notes ?? ""}</td>
-                    </tr>
-                </tbody>
-            </table>
-            {/* the signature rows, with the Word file's own widths: 1946 · 1602 · 1452 */}
-            <table style={{ ...table, marginTop: "-0.75pt" }}>
-                <colgroup><col style={{ width: w(1946) }}/><col style={{ width: w(1602) }}/><col style={{ width: w(1452) }}/></colgroup>
-                <tbody>
-                    <tr>{["معلم التربية الخاصة", "منسق التربية الخاصة", "النائب الأكاديمي"].map(t => <td key={t} style={band}>{t}</td>)}</tr>
-                    <tr style={{ height: "36pt" }}>
-                        {[form.teacherSignatureUrl, coordinatorSignature, deputySignature].map((url: string | null, i) => (
-                            <td key={i} style={{ ...cell, padding: "2pt 4pt", position: "relative" }}>
-                                {url && <img src={url} alt="توقيع" style={{ display: "block", margin: "0 auto", height: "32pt", maxWidth: "100%", objectFit: "contain" }}/>}
-                            </td>
-                        ))}
-                    </tr>
-                </tbody>
-            </table>
-            <p style={{ margin: "18pt 0 0", direction: "rtl", textAlign: "center", fontFamily: "Arial, sans-serif", fontSize: "11pt", color: "#000", wordSpacing: "2pt" }}>
-                5: ممتاز&emsp;&emsp;&emsp;4: جيد جداً&emsp;&emsp;&emsp;3: جيد&emsp;&emsp;&emsp;2: مقبول&emsp;&emsp;&emsp;1: ضعيف
-            </p>
-        </Page>
+        {starts.slice(1).map((_, i) => {
+            const { list, hasTail } = pageItems(i + 1);
+            return (
+                <Page key={i} bodyRef={el => { bodies.current[i + 1] = el; }}>
+                    {list.length > 0 && <table style={table}>{colgroup}<tbody>{rows(list)}</tbody></table>}
+                    {hasTail && ending}
+                </Page>
+            );
+        })}
     </>;
 }
 
@@ -154,10 +194,10 @@ function Info({ label: l1, value, label2, value2 }: { label: string; value: Reac
     );
 }
 
-// One A4 page on the letterhead; a page whose recommendations run long is
-// scaled down to stay inside the letterhead's lines
-function Page({ children }: { children: ReactNode }) {
-    const body = useRef<HTMLDivElement>(null);
+// One A4 page on the letterhead, scaled down a little when its rows run long
+// (rarely past MIN_SCALE: only when a single row could not fit a page)
+function Page({ children, bodyRef }: { children: ReactNode; bodyRef: (el: HTMLDivElement | null) => void }) {
+    const body = useRef<HTMLDivElement | null>(null);
     useLayoutEffect(() => {
         const el = body.current;
         if (!el) return;
@@ -179,7 +219,7 @@ function Page({ children }: { children: ReactNode }) {
     return (
         <div className="form-page">
             <img src="/forms/support-letterhead.jpg" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }}/>
-            <div ref={body} style={{ position: "absolute", top: `${BODY_TOP}pt`, left: 0, right: 0, transformOrigin: "top center" }}>
+            <div ref={el => { body.current = el; bodyRef(el); }} style={{ position: "absolute", top: `${BODY_TOP}pt`, left: 0, right: 0, transformOrigin: "top center" }}>
                 {children}
             </div>
         </div>

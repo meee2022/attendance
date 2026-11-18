@@ -13,11 +13,13 @@ export async function createVisitPdf(data: any): Promise<Blob> {
     try {
         flushSync(() => root.render(<OfficialVisitForm data={data} toolbar={false}/>));
         await document.fonts.ready;
-        const pages = [...host.querySelectorAll<HTMLElement>(".form-page")];
         for (const img of host.querySelectorAll("img")) {
             await withTimeout(img.decode(), 30_000, "تحميل صور الاستمارة"); // Fail visibly instead of archiving a form with a missing official page.
         }
         await withTimeout(prepareOfficialForm(host), 30_000, "ضبط النص وحجم الصفحة");
+        // after layout: long text may have added a page or an appendix
+        const pages = [...host.querySelectorAll<HTMLElement>(".form-page")];
+        for (const img of host.querySelectorAll("img")) await withTimeout(img.decode(), 30_000, "تحميل صور الاستمارة");
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
         for (const [i, page] of pages.entries()) {
             // skipFonts: the form's own text is drawn as shapes and the visit's in a

@@ -13,7 +13,7 @@ export const sample = { criteria, form: { schoolName: "مدرسة ابن تيم�
 // ?support: the support teachers' form, rated 1-5 with a recommendation per criterion
 const support = { ...sample, criteria: SUPPORT_CRITERIA, visit: { ...sample.visit, formKind: "support", visitorRole: role, followUpType: "partial",
     ratings: Object.fromEntries(SUPPORT_CRITERIA.map((c, i) => [c._id, (i % 5) + 1])),
-    criterionRecs: { sp02: "ربط أهداف الحصة بالخطة الفردية للطالب", sp10: long || "تنويع الأنشطة حسب مستوى كل طالب", sp17: "استخدام لوحة التعزيز الرمزي" },
+    criterionRecs: { sp02: long || "ربط أهداف الحصة بالخطة الفردية للطالب", sp10: long || "تنويع الأنشطة حسب مستوى كل طالب", sp12: long, sp17: long || "استخدام لوحة التعزيز الرمزي" },
     notes: "زيارة تجريبية لاستمارة الدعم الإضافي." } } as any;
 const data = q.has("support") ? support : sample;
 export default function PdfCheck() {

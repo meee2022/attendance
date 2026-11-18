@@ -8,10 +8,12 @@
 //   average         Σ measured ÷ (3 × measured count)
 //   domain average  the same within one domain — null, not zero, when nothing
 //                   in that domain was measured
+// The support teachers' form rates 1–5: its criteria carry max 5, and every
+// average divides by the criteria's own maximum.
 
 export type Domain = "planning" | "execution" | "evaluation" | "management";
 export type VisitorRole = "coordinator" | "supervisor" | "deputy";
-export type Rating = 0 | 1 | 2 | 3 | "not_measured";
+export type Rating = 0 | 1 | 2 | 3 | 4 | 5 | "not_measured";
 
 export const DOMAINS: Domain[] = ["planning", "execution", "evaluation", "management"];
 
@@ -37,7 +39,7 @@ export const RATING_SCALE: { value: Rating; label: string; short: string }[] = [
     { value: "not_measured", label: "لم يتم قياسه", short: "لم يُقَس" },
 ];
 
-export type CriterionRef = { _id: string; domain: Domain };
+export type CriterionRef = { _id: string; domain: string; max?: number };
 
 export function parseRatings(json: string | undefined | null): Record<string, Rating> {
     if (!json) return {};
@@ -45,7 +47,7 @@ export function parseRatings(json: string | undefined | null): Record<string, Ra
         const raw = JSON.parse(json);
         const out: Record<string, Rating> = {};
         for (const [k, v] of Object.entries(raw ?? {})) {
-            if (v === "not_measured" || v === 0 || v === 1 || v === 2 || v === 3) out[k] = v as Rating;
+            if (v === "not_measured" || (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 5)) out[k] = v as Rating;
         }
         return out;
     } catch {
@@ -55,33 +57,34 @@ export function parseRatings(json: string | undefined | null): Record<string, Ra
 
 export type VisitScores = {
     average: number | null;
-    domains: Record<Domain, number | null>;
+    domains: Record<string, number | null>;
     measured: number;
     rated: number;           // measured + «لم يتم قياسه»
 };
 
 export function computeScores(ratings: Record<string, Rating>, criteria: CriterionRef[]): VisitScores {
-    const acc: Record<Domain, { sum: number; n: number }> = {
-        planning: { sum: 0, n: 0 }, execution: { sum: 0, n: 0 },
-        evaluation: { sum: 0, n: 0 }, management: { sum: 0, n: 0 },
-    };
-    let sum = 0, measured = 0, rated = 0;
+    const acc: Record<string, { sum: number; max: number }> = {};
+    for (const d of DOMAINS) acc[d] = { sum: 0, max: 0 };
+    let sum = 0, max = 0, measured = 0, rated = 0;
 
     for (const c of criteria) {
         const r = ratings[c._id];
         if (r === undefined) continue;
         rated++;
         if (r === "not_measured") continue;
+        const top = c.max ?? 3;
+        acc[c.domain] ??= { sum: 0, max: 0 };
         acc[c.domain].sum += r;
-        acc[c.domain].n++;
+        acc[c.domain].max += top;
         sum += r;
+        max += top;
         measured++;
     }
 
-    const domains = {} as Record<Domain, number | null>;
-    for (const d of DOMAINS) domains[d] = acc[d].n ? acc[d].sum / (3 * acc[d].n) : null;
+    const domains: Record<string, number | null> = {};
+    for (const [d, a] of Object.entries(acc)) domains[d] = a.max ? a.sum / a.max : null;
 
-    return { average: measured ? sum / (3 * measured) : null, domains, measured, rated };
+    return { average: max ? sum / max : null, domains, measured, rated };
 }
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -116,6 +119,7 @@ export type VisitDraftInput = {
     evalMgmtRec?: string;
     managementRec?: string;
     notes?: string;
+    criterionRecs?: Record<string, string>;
 };
 
 export type ValidationIssue = { field: string; message: string };
@@ -154,8 +158,14 @@ export function validateVisit(
     if (missing > 0) {
         issues.push({ field: "ratings", message: `بقي ${missing} ${missing === 1 ? "معيار" : "معايير"} بلا تقدير` });
     }
+    // 1–5 on the support form, 0–3 or «لم يتم قياسه» on the ministry's
+    const invalid = criteria.filter(c => {
+        const r = input.ratings[c._id];
+        return r !== undefined && (c.max === 5 ? r === "not_measured" || r < 1 || r > 5 : r !== "not_measured" && r > 3);
+    }).length;
+    if (invalid > 0) issues.push({ field: "ratings", message: `${invalid} ${invalid === 1 ? "تقدير" : "تقديرات"} خارج مقياس الاستمارة` });
 
-    const anyText = [input.planningRec, input.executionRec, input.evalMgmtRec, input.managementRec, input.notes]
+    const anyText = [input.planningRec, input.executionRec, input.evalMgmtRec, input.managementRec, input.notes, ...Object.values(input.criterionRecs ?? {})]
         .some(t => (t ?? "").trim().length > 0);
     if (!anyText) issues.push({ field: "recs", message: "اكتب توصية واحدة على الأقل أو ملاحظة عامة" });
 

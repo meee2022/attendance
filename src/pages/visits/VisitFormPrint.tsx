@@ -6,6 +6,7 @@ import { useSupervisionQuery as useQuery, SupervisionBoundary } from "../../lib/
 import { api } from "../../../convex/_generated/api";
 import { DOMAINS, dayName, formatDate, type Domain, type Rating, type VisitorRole } from "../../../convex/visitMath";
 import { STAGE_LABELS, stageOf } from "../../lib/visitStats";
+import SupportVisitPages from "./SupportFormPrint";
 
 // «استمارة الإشراف على أداء المعلّم» as the ministry prints it in
 // «النماذج المعتمدة للنائب 2026-2027» (pages 10 and 11), on one sheet. The two
@@ -377,14 +378,14 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
                 {visit.status !== "submitted" && (
                     <span className="text-xs font-bold text-amber-700">{stageOf(visit) === "draft" ? "مسودة — لم تُعتمد بعد" : STAGE_LABELS[stageOf(visit)]}</span>
                 )}
-                {!standard && (
+                {!standard && visit.formKind !== "support" && (
                     <span className="text-xs font-bold text-amber-700">
                         عدد المعايير في هذه الزيارة يختلف عن النموذج المعتمد (3 · 13 · 3 · 4) — راجع المعايير من الإعدادات.
                     </span>
                 )}
             </div>}
 
-            <div className="form-page">
+            {visit.formKind === "support" ? <SupportVisitPages data={data}/> : <div className="form-page">
                 <div className="form-sheet" ref={sheet}>
                     <PageSlice src={P1_SRC} y0={0} y1={tableEnd + 0.5} top={0}/>
                     <PageSlice src={P2_SRC} y0={P2_ROWS[0] - 0.5} y1={NOTES_TOP + 0.2} top={tableEnd - 0.5}/>
@@ -431,7 +432,7 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
                         <PageSlice src={P1_SRC} y0={FOOTER[0]} y1={FOOTER[1]} top={0}/>
                     </div>
                 </div>
-            </div>
+            </div>}
         </div>
     );
 }

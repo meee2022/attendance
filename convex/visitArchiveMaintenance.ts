@@ -130,3 +130,18 @@ export const renameSchool=internalMutation({args:{name:v.string()},handler:async
  const school=await ctx.db.query('schools').first();if(!school||!name.trim())throw new ConvexError('لا توجد مدرسة');
  await ctx.db.patch(school._id,{name:name.trim()});return {from:school.name,to:name.trim()};
 }});
+// Register a department's missing teachers and its coordinator, skipping anyone
+// already there. No PIN: the coordinator's sign-in is set from the admin page.
+export const addDepartmentStaff=internalMutation({args:{department:v.string(),teachers:v.array(v.string()),coordinator:v.optional(v.string())},handler:async(ctx,{department,teachers,coordinator})=>{
+ const school=await ctx.db.query('schools').first();if(!school)throw new ConvexError('لا توجد مدرسة');
+ const roster=await ctx.db.query('schoolTeachers').withIndex('by_school',q=>q.eq('schoolId',school._id)).collect();
+ const added:string[]=[];
+ for(const name of teachers){if(roster.some(t=>t.fullName.trim()===name.trim()))continue;
+  await ctx.db.insert('schoolTeachers',{schoolId:school._id,fullName:name.trim(),department,isActive:true});added.push(name);}
+ let coordinatorId=null;
+ if(coordinator){const people=await ctx.db.query('supervisors').withIndex('by_school',q=>q.eq('schoolId',school._id)).collect();
+  const found=people.find(p=>p.fullName.trim()===coordinator.trim()&&p.role==='coordinator');
+  if(found){if(!found.subjects.includes(department))await ctx.db.patch(found._id,{subjects:[...found.subjects,department]});coordinatorId=found._id;}
+  else coordinatorId=await ctx.db.insert('supervisors',{schoolId:school._id,fullName:coordinator.trim(),role:'coordinator',subjects:[department],isActive:true});}
+ return {added,coordinatorId};
+}});

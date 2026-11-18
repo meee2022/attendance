@@ -11,10 +11,11 @@ import {
     AlertTriangle, CheckCircle2, FileText, Loader2, Printer, RotateCcw, Save, Send, X,
 } from "lucide-react";
 import {
-    DOMAINS, DOMAIN_LABELS, RATING_SCALE, ROLE_LABELS,
+    RATING_SCALE, ROLE_LABELS,
     computeScores, dayName, formatDate, parseRatings, validateVisit,
-    type Domain, type Rating, type ValidationIssue,
+    type Rating, type ValidationIssue,
 } from "../../../convex/visitMath";
+import { SUPPORT_CRITERIA, SUPPORT_SCALE, domainList, isSupportDepartment } from "../../../convex/visitCriteria";
 import { pct, scoreTone, stageOf, type VisitRow } from "../../lib/visitStats";
 import { indicatorsOf } from "../../lib/visitGuide";
 import type { Session } from "./VisitsPage";
@@ -29,6 +30,11 @@ const DRAFT_PREFIX = "supervision-draft-v2";
 const RATING_COLORS: Record<string, string> = {
     "3": "#059669", "2": "#2563eb", "1": "#d97706", "0": "#dc2626", not_measured: "#64748b",
 };
+const SUPPORT_COLORS: Record<string, string> = {
+    "5": "#059669", "4": "#0d9488", "3": "#2563eb", "2": "#d97706", "1": "#dc2626",
+};
+// the support form's scale, in the order its columns are printed
+const SUPPORT_RATING_SCALE = SUPPORT_SCALE.map(s => ({ value: s.value as Rating, label: s.label, short: s.label }));
 
 type FormState = {
     recordedRole?: "coordinator" | "supervisor";
@@ -48,13 +54,15 @@ type FormState = {
     evalMgmtRec: string;
     managementRec: string;
     notes: string;
+    // the support form: a recommendation beside each criterion
+    criterionRecs: Record<string, string>;
 };
 
 function emptyForm(today: string, department = ""): FormState {
     return {
         department, teacherId: "", classId: "", subjectName: "", lessonTopic: "",
         visitDate: today, followUpType: "full", deliveryMode: "field", streamMode: "", ratings: {},
-        planningRec: "", executionRec: "", evalMgmtRec: "", managementRec: "", notes: "",
+        planningRec: "", executionRec: "", evalMgmtRec: "", managementRec: "", notes: "", criterionRecs: {},
     };
 }
 
@@ -62,7 +70,8 @@ function emptyForm(today: string, department = ""): FormState {
 function hasContent(f: FormState): boolean {
     return Boolean(f.teacherId || f.classId || f.lessonTopic.trim()
         || Object.keys(f.ratings).length
-        || f.planningRec.trim() || f.executionRec.trim() || f.evalMgmtRec.trim() || f.managementRec.trim() || f.notes.trim());
+        || f.planningRec.trim() || f.executionRec.trim() || f.evalMgmtRec.trim() || f.managementRec.trim() || f.notes.trim()
+        || Object.values(f.criterionRecs ?? {}).some(t => t.trim()));
 }
 
 function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
@@ -81,6 +90,7 @@ function fromVisit(v: VisitRow & { classId?: string | null }): FormState {
         ratings: parseRatings(v.ratings),
         planningRec: v.planningRec, executionRec: v.executionRec,
         evalMgmtRec: v.evalMgmtRec, managementRec: v.managementRec ?? "", notes: v.notes,
+        criterionRecs: (() => { try { return JSON.parse(v.criterionRecs || "{}"); } catch { return {}; } })(),
     };
 }
 
@@ -93,7 +103,6 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     onDirtyChange?: (dirty: boolean) => void;
     onNewVisit?: () => void;
 }) {
-    const criteria: { _id: string; domain: Domain; text: string }[] = setup.criteria;
     const soleDepartment: string = setup.departments.length === 1 ? setup.departments[0] : "";
     const editing = editingId ? visits.find(v => v._id === editingId) ?? null : null;
     const editingSubmitted = editing?.status === "submitted";
@@ -158,6 +167,12 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const teachers: any[] = setup.teachers;
     const teachersInDept = form.department ? teachers.filter(t => t.department === form.department) : teachers;
     const teacher = teachers.find(t => t._id === form.teacherId);
+    // the support teachers are visited on their own form
+    const support = isSupportDepartment(teacher?.department ?? form.department);
+    const criteria: { _id: string; domain: string; text: string; max?: number }[] = support ? SUPPORT_CRITERIA : setup.criteria;
+    const scale = support ? SUPPORT_RATING_SCALE : RATING_SCALE;
+    const colors = support ? SUPPORT_COLORS : RATING_COLORS;
+    const criterionRecs = Object.fromEntries(Object.entries(form.criterionRecs ?? {}).filter(([k, t]) => t.trim() && criteria.some(c => c._id === k)));
     // after submitting, only the academic deputy may correct the teacher
     const teacherLocked = editingSubmitted && session.role !== "deputy" && session.role !== "admin";
     const teacherChanged = editingSubmitted && !!editing && (editing.teacherId ?? "") !== form.teacherId;
@@ -173,7 +188,8 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
         visitDate: form.visitDate, followUpType: form.followUpType, ratings: form.ratings,
         planningRec: form.planningRec, executionRec: form.executionRec,
         evalMgmtRec: form.evalMgmtRec, managementRec: form.managementRec, notes: form.notes,
-    }, criteria, { today: setup.today, allowOldDate: Boolean(oldDateReason.trim()) }), [form, criteria, setup.today, oldDateReason]);
+        criterionRecs: support ? criterionRecs : {},
+    }, criteria, { today: setup.today, allowOldDate: Boolean(oldDateReason.trim()) }), [form, criteria, support, setup.today, oldDateReason]);
     const dateTooOld = issues.some(i => i.message.includes("أقدم من سنة"));
 
     const classesByGrade = useMemo(() => {
@@ -194,7 +210,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
     const rate = (criterionId: string, value: Rating) =>
         setForm(f => ({ ...f, ratings: { ...f.ratings, [criterionId]: value } }));
 
-    const rateDomain = (domain: Domain, value: Rating) =>
+    const rateDomain = (domain: string, value: Rating) =>
         setForm(f => {
             const next = { ...f.ratings };
             for (const c of criteria) if (c.domain === domain && next[c._id] === undefined) next[c._id] = value;
@@ -227,6 +243,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                 ratings: JSON.stringify(form.ratings),
                 planningRec: form.planningRec, executionRec: form.executionRec,
                 evalMgmtRec: form.evalMgmtRec, managementRec: form.managementRec, notes: form.notes,
+                criterionRecs: support ? JSON.stringify(criterionRecs) : undefined,
                 status,
                 confirmDuplicate,
                 oldDateReason: oldDateReason || undefined,
@@ -424,8 +441,9 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                             {t === "full" ? "كليّة" : "جزئيّة"}
                         </button>
                     ))}
-                    <span className="w-px h-6 bg-slate-200 mx-1" aria-hidden/>
-                    {(["field", "remote"] as const).map(t => (
+                    {/* the support form has no field / remote boxes */}
+                    {!support && <span className="w-px h-6 bg-slate-200 mx-1" aria-hidden/>}
+                    {!support && (["field", "remote"] as const).map(t => (
                         <button key={t} type="button" onClick={() => setForm(f => ({ ...f, deliveryMode: t, streamMode: t === "field" ? "" : f.streamMode }))}
                             aria-pressed={form.deliveryMode === t}
                             className={`px-5 py-2 rounded-xl text-sm font-black border-2 transition-colors ${
@@ -434,7 +452,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                             {t === "field" ? "ميدانيّة" : "عن بُعد"}
                         </button>
                     ))}
-                    {form.deliveryMode === "remote" && (["merged", "unmerged"] as const).map(t => (
+                    {!support && form.deliveryMode === "remote" && (["merged", "unmerged"] as const).map(t => (
                         <button key={t} type="button" onClick={() => set("streamMode", form.streamMode === t ? "" : t)}
                             aria-pressed={form.streamMode === t}
                             className={`px-4 py-2 rounded-xl text-xs font-black border-2 transition-colors ${
@@ -456,26 +474,27 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             </Section>
 
             {/* ٢. التقييم */}
-            <Section n={2} title="تقدير المعايير"
+            <Section n={2} title={support ? "تقدير المعايير — استمارة معلم التربية الخاصة / الدعم الإضافي" : "تقدير المعايير"}
                 right={<span className="text-xs font-black text-slate-500">أُنجز {doneCount} من {criteria.length}</span>}>
+                {support && <p className="text-xs font-bold text-slate-500">5 ممتاز · 4 جيد جداً · 3 جيد · 2 مقبول · 1 ضعيف — والتوصية تُكتب أمام البند كما في الاستمارة.</p>}
                 <div className="space-y-5">
-                    {DOMAINS.map(domain => {
+                    {domainList(support).map(([domain, domainLabel]) => {
                         const list = criteria.filter(c => c.domain === domain);
                         if (!list.length) return null;
                         return (
                             <div key={domain} className="space-y-2">
                                 <div className="flex items-center justify-between gap-2 flex-wrap">
                                     <h4 className="font-bold text-slate-700 text-sm">
-                                        {DOMAIN_LABELS[domain]}
+                                        {domainLabel}
                                         <span className="mr-2 text-xs font-black" style={{ color: scoreTone(scores.domains[domain]) }}>
                                             {pct(scores.domains[domain])}
                                         </span>
                                     </h4>
                                     <div className="flex gap-1 items-center">
                                         <span className="text-[10px] font-bold text-slate-400">تعبئة الباقي بـ</span>
-                                        {RATING_SCALE.map(r => (
+                                        {scale.map(r => (
                                             <button key={String(r.value)} type="button" onClick={() => rateDomain(domain, r.value)}
-                                                title={`تعبئة معايير «${DOMAIN_LABELS[domain]}» غير المقدَّرة بـ: ${r.label}`}
+                                                title={`تعبئة معايير «${domainLabel}» غير المقدَّرة بـ: ${r.label}`}
                                                 className="px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-500 hover:bg-slate-100">
                                                 {r.value === "not_measured" ? "لم يُقَس" : r.value}
                                             </button>
@@ -493,7 +512,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                                     <p className="text-sm text-slate-800 leading-relaxed">
                                                         <span className="text-slate-400 font-bold ml-1">{n}.</span>{c.text}
                                                     </p>
-                                                    {indicatorsOf(c.text).length > 0 && (
+                                                    {!support && indicatorsOf(c.text).length > 0 && (
                                                         <details className="mt-0.5">
                                                             <summary className="text-[11px] font-bold text-qatar-maroon cursor-pointer select-none w-fit">مؤشرات البند (الدليل التفسيري)</summary>
                                                             <ul className="mt-1 mr-4 list-disc space-y-0.5 text-xs text-slate-600 leading-relaxed">
@@ -501,11 +520,17 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                                             </ul>
                                                         </details>
                                                     )}
+                                                    {support && (
+                                                        <input value={form.criterionRecs?.[c._id] ?? ""} aria-label={`توصية المعيار ${n}`}
+                                                            onChange={e => setForm(f => ({ ...f, criterionRecs: { ...f.criterionRecs, [c._id]: e.target.value } }))}
+                                                            placeholder="التوصية (اختياري)"
+                                                            className="mt-1.5 w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-qatar-maroon"/>
+                                                    )}
                                                 </div>
                                                 <div className="grid grid-cols-5 gap-1 lg:w-[380px]" role="radiogroup" aria-label={`تقدير المعيار ${n}`}>
-                                                    {RATING_SCALE.map(r => {
+                                                    {scale.map(r => {
                                                         const active = current === r.value;
-                                                        const color = RATING_COLORS[String(r.value)];
+                                                        const color = colors[String(r.value)];
                                                         return (
                                                             <button key={String(r.value)} type="button" onClick={() => rate(c._id, r.value)}
                                                                 role="radio" aria-checked={active} title={r.label}
@@ -532,6 +557,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
             {/* ٣. التوصيات */}
             <Section n={3} title="التوصيات والملاحظات">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {!support && <>
                     <RecField label="توصيات التخطيط" value={form.planningRec} onChange={v => set("planningRec", v)}
                         suggestions={(bank ?? []).filter(b => b.domain === "planning")}/>
                     <RecField label="توصيات تنفيذ الدرس" value={form.executionRec} onChange={v => set("executionRec", v)}
@@ -540,6 +566,7 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                         suggestions={(bank ?? []).filter(b => b.domain === "evaluation")}/>
                     <RecField label="توصيات الإدارة الصفية وبيئة التعلم" value={form.managementRec} onChange={v => set("managementRec", v)}
                         suggestions={(bank ?? []).filter(b => b.domain === "management")}/>
+                    </>}
                     <RecField label="ملاحظات وتوصيات عامة" value={form.notes} onChange={v => set("notes", v)} wide
                         suggestions={(bank ?? []).filter(b => b.domain === "general")}/>
                 </div>
@@ -593,7 +620,8 @@ export default function VisitForm({ setup, session, editingId, visits, onDone, o
                                     ["التاريخ", form.visitDate ? `${dayName(form.visitDate)} ${formatDate(form.visitDate)}` : "—"],
                                     ["الزائر", `${ROLE_LABELS[recordedRole]} — ${recordedName}`],
                                     ["الدرس", form.lessonTopic || "—"],
-                                    ["المتابعة", `${form.followUpType === "partial" ? "جزئيّة" : "كليّة"} · ${form.deliveryMode === "remote"
+                                    ["الاستمارة", support ? "معلم التربية الخاصة / الدعم الإضافي" : "الاستمارة العامة"],
+                                    ["المتابعة", support ? (form.followUpType === "partial" ? "جزئية" : "كلية") : `${form.followUpType === "partial" ? "جزئيّة" : "كليّة"} · ${form.deliveryMode === "remote"
                                         ? `عن بُعد${form.streamMode ? ` (${form.streamMode === "merged" ? "بث مباشر مدمج" : "بث مباشر غير مدمج"})` : ""}` : "ميدانيّة"}`],
                                     ["المعدل", pct(scores.average, 1)],
                                     ["بريد المعلم", teacher?.email || "—"],

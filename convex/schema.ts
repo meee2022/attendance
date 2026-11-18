@@ -530,6 +530,10 @@ export default defineSchema({
         evalMgmtRec: v.optional(v.string()),     // التقويم (and, in visits before the split, الإدارة الصفية too)
         managementRec: v.optional(v.string()),   // الإدارة الصفية وبيئة التعلم
         notes: v.optional(v.string()),
+        // Support teachers are visited on their own form (visitCriteria.SUPPORT_CRITERIA),
+        // with a recommendation beside each criterion: JSON { [criterionId]: text }
+        formKind: v.optional(v.literal("support")),
+        criterionRecs: v.optional(v.string()),
         // A draft sent to the deputy or a colleague to review before it is submitted
         reviewRequest: v.optional(v.object({
             toRole: v.union(v.literal("deputy"), v.literal("coordinator")),

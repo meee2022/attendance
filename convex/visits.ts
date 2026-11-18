@@ -1,4 +1,5 @@
 import { deputyNameOf } from "./supervisionDefaults";
+import { SUPPORT_CRITERIA, isSupportDepartment } from "./visitCriteria";
 import { sessionMutation as mutation, sessionQuery as query, deputyMutation, canAccess, requireVisit } from "./supervisionAccess";
 import { ConvexError, v, type ObjectType } from "convex/values";
 import {
@@ -58,6 +59,13 @@ export async function activeCriteria(ctx: any, schoolId: any) {
 
 async function imageUrl(ctx: any, id: any) {
     return id ? await ctx.storage.getUrl(id) : null;
+}
+
+export function parseRecs(json?: string | null): Record<string, string> {
+    try {
+        const raw = json ? JSON.parse(json) : {};
+        return Object.fromEntries(Object.entries(raw ?? {}).filter(([, t]) => typeof t === "string" && t.trim()).map(([k, t]) => [k, (t as string).trim()]));
+    } catch { return {}; }
 }
 
 function snapshotCriteria(snapshot?: string) {
@@ -170,6 +178,8 @@ export const listVisits = query({
                 evalMgmtRec: x.evalMgmtRec ?? "",
                 managementRec: x.managementRec ?? "",
                 notes: x.notes ?? "",
+                formKind: x.formKind ?? null,
+                criterionRecs: x.criterionRecs ?? "",
                 createdAt: x.createdAt,
                 updatedAt: x.updatedAt ?? x.createdAt,
                 deletedAt: x.deletedAt ?? null,
@@ -192,6 +202,7 @@ function contentKey(x: any) {
         x.followUpType ?? "full", x.deliveryMode ?? "field", x.streamMode ?? "",
         Object.keys(ratings).sort().map(k => [k, ratings[k]]),
         x.planningRec ?? "", x.executionRec ?? "", x.evalMgmtRec ?? "", x.managementRec ?? "", x.notes ?? "",
+        x.criterionRecs ?? "",
     ]);
 }
 
@@ -213,9 +224,9 @@ export async function visitFormData(ctx: any, visit: any) {
         try { snapshot = visit.snapshot ? JSON.parse(visit.snapshot) : null; } catch { snapshot = null; }
 
         const criteria = snapshot?.criteria
-            ?? (await activeCriteria(ctx, school._id)).map((c: any) => ({
+            ?? (visit.formKind === "support" ? SUPPORT_CRITERIA : (await activeCriteria(ctx, school._id)).map((c: any) => ({
                 _id: c._id, domain: c.domain, text: c.text, order: c.order,
-            }));
+            })));
 
         const headerId = snapshot?.headerImageId ?? settings.headerImageId;
         const footerId = snapshot?.footerImageId ?? settings.footerImageId;
@@ -232,6 +243,7 @@ export async function visitFormData(ctx: any, visit: any) {
             visit: {
                 ...visit,
                 ratings: parseRatings(visit.ratings),
+                criterionRecs: parseRecs(visit.criterionRecs),
             },
             criteria,
             form: {
@@ -289,6 +301,7 @@ const visitArgs = {
     evalMgmtRec: v.optional(v.string()),
     managementRec: v.optional(v.string()),
     notes: v.optional(v.string()),
+    criterionRecs: v.optional(v.string()),
     status: v.union(v.literal("draft"), v.literal("submitted")),
     // «نفس المعلم + نفس نوع الزائر + نفس التاريخ» warns first; this confirms it
     confirmDuplicate: v.optional(v.boolean()),
@@ -302,9 +315,6 @@ const visitArgs = {
 export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitArgs>) {
         const school = await getSchool(ctx);
         const settings = await settingsOf(ctx, school);
-        const criteria = await activeCriteria(ctx, school._id);
-        const criteriaRefs: CriterionRef[] = criteria.map((c: any) => ({ _id: c._id, domain: c.domain as Domain }));
-        const ratings = parseRatings(args.ratings);
         const access = (ctx as any).supervisionSession;
         const existing = args.id ? await requireVisit(ctx, access, args.id, true) : null;
         args.actorName = access.name;
@@ -343,6 +353,14 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
         }
         if (cls && cls.schoolId !== school._id) throw new ConvexError("الصف غير متاح");
 
+        // The form follows the teacher: support teachers have their own
+        const support = isSupportDepartment(teacher.department);
+        const criteria: any[] = support ? SUPPORT_CRITERIA : await activeCriteria(ctx, school._id);
+        const criteriaRefs: CriterionRef[] = criteria.map((c: any) => ({ _id: c._id, domain: c.domain, max: c.max }));
+        const ids = new Set(criteria.map((c: any) => String(c._id)));
+        const ratings = Object.fromEntries(Object.entries(parseRatings(args.ratings)).filter(([k]) => ids.has(k)));
+        const criterionRecs = support ? Object.fromEntries(Object.entries(parseRecs(args.criterionRecs)).filter(([k]) => ids.has(k))) : {};
+
         // A submitted visit keeps by whom and when. The teacher (and with it the
         // subject) may be corrected when the wrong one was picked — with a
         // reason, and the earlier version kept like any other edit.
@@ -364,6 +382,7 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
                 visitDate: args.visitDate, followUpType: args.followUpType ?? null, ratings,
                 planningRec: args.planningRec, executionRec: args.executionRec,
                 evalMgmtRec: args.evalMgmtRec, managementRec: args.managementRec, notes: args.notes,
+                criterionRecs,
             }, criteriaRefs, { allowOldDate: Boolean(args.oldDateReason?.trim()) });
             if (issues.length) throw new ConvexError(issues.map(i => i.message).join(" · "));
 
@@ -415,10 +434,13 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
             // the live-stream boxes only mean something for a remote lesson
             streamMode: args.deliveryMode === "remote" ? args.streamMode : undefined,
             ratings: JSON.stringify(ratings),
-            planningRec: args.planningRec?.trim(),
-            executionRec: args.executionRec?.trim(),
-            evalMgmtRec: args.evalMgmtRec?.trim(),
-            managementRec: args.managementRec?.trim(),
+            // the support form has a recommendation beside each criterion instead
+            planningRec: support ? undefined : args.planningRec?.trim(),
+            executionRec: support ? undefined : args.executionRec?.trim(),
+            evalMgmtRec: support ? undefined : args.evalMgmtRec?.trim(),
+            managementRec: support ? undefined : args.managementRec?.trim(),
+            formKind: support ? "support" as const : undefined,
+            criterionRecs: Object.keys(criterionRecs).length ? JSON.stringify(criterionRecs) : undefined,
             notes: [args.notes?.trim(), args.oldDateReason?.trim() ? `(إدخال لاحق: ${args.oldDateReason.trim()})` : ""]
                 .filter(Boolean).join("\n") || undefined,
         };
@@ -489,7 +511,7 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
                     deputySignatureId: settings.deputySignatureId,
                     visitorSignatureId: args.visitorRole === "coordinator" && args.visitorId
                         ? ((await ctx.db.get(args.visitorId)) as any)?.signatureId ?? null : null,
-                    criteria: criteria.map((c: any) => ({ _id: c._id, domain: c.domain, text: c.text, order: c.order })),
+                    criteria: criteria.map((c: any) => ({ _id: c._id, domain: c.domain, text: c.text, order: c.order, ...(c.max ? { max: c.max } : {}) })),
                 }),
             };
         }

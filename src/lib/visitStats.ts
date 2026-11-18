@@ -45,13 +45,16 @@ export type VisitRow = {
     reviewRequest?: { toRole: "deputy" | "coordinator"; toVisitorId?: string; toName: string; byName: string; note?: string; at: number } | null;
     reviewReturn?: { byName: string; note: string; at: number } | null;
     notes: string;
+    formKind?: "support" | null;
+    criterionRecs?: string;
     createdAt: number;
     updatedAt: number;
     deletedAt: number | null;
     deleteReason: string | null;
 };
 
-export type Criterion = { _id: string; domain: Domain; text: string; order: number };
+// `max` 5 on the support teachers' form, 3 on the ministry's
+export type Criterion = { _id: string; domain: Domain | string; text: string; order: number; max?: number };
 export type Teacher = { _id: string; fullName: string; department: string; email: string };
 
 export type Filters = {
@@ -112,21 +115,23 @@ export function roleComparisons(visits: VisitRow[], criteria: Criterion[]) {
             const ca = first.criteriaSnapshot?.find(x => x._id === c._id), cb = last.criteriaSnapshot?.find(x => x._id === c._id);
             return ca && cb && ca.text === cb.text && ca.domain === cb.domain && cb.text === c.text && cb.domain === c.domain && typeof a[c._id] === "number" && typeof b[c._id] === "number";
         }) : [];
-        const mean = (r: Record<string, Rating>) => common.reduce((sum,c) => sum + (r[c._id] as number), 0) / (3 * common.length);
+        const mean = (r: Record<string, Rating>) => common.reduce((sum,c) => sum + (r[c._id] as number), 0) / common.reduce((sum, c) => sum + (c.max ?? 3), 0);
         return { role, count: rows.length, stats: criterionAverages(rows, criteria), first, last, commonCount: common.length,
             before: common.length ? mean(a) : null, after: common.length ? mean(b) : null,
             delta: common.length ? mean(b) - mean(a) : null };
     });
 }
 
-type Acc = { sum: number; n: number };
-const ratio = (a: Acc) => (a.n ? a.sum / (3 * a.n) : null);
+type Acc = { sum: number; n: number; max: number };
+const ratio = (a?: Acc) => (a?.n ? a.sum / a.max : null);
+const acc = (): Acc => ({ sum: 0, n: 0, max: 0 });
+const add = (a: Acc, r: number, max: number) => { a.sum += r; a.n++; a.max += max; };
 
 // Per criterion and per domain, pooled over every measured rating
 export function criterionAverages(visits: VisitRow[], criteria: Criterion[]) {
-    const byCriterion = new Map<string, Acc>(criteria.map(c => [c._id, { sum: 0, n: 0 }]));
-    const byDomain = new Map<Domain, Acc>(DOMAINS.map(d => [d, { sum: 0, n: 0 }]));
-    const overall: Acc = { sum: 0, n: 0 };
+    const byCriterion = new Map<string, Acc>(criteria.map(c => [c._id, acc()]));
+    const byDomain = new Map<string, Acc>([...DOMAINS, ...criteria.map(c => c.domain)].map(d => [d, acc()]));
+    const overall: Acc = acc();
 
     for (const visit of visits) {
         const ratings = parseRatings(visit.ratings);
@@ -135,15 +140,16 @@ export function criterionAverages(visits: VisitRow[], criteria: Criterion[]) {
             if (visit.criteriaSnapshot && (!frozen || frozen.text !== c.text || frozen.domain !== c.domain)) continue;
             const r: Rating | undefined = ratings[c._id];
             if (r === undefined || r === "not_measured") continue;
-            byCriterion.get(c._id)!.sum += r; byCriterion.get(c._id)!.n++;
-            byDomain.get(c.domain)!.sum += r; byDomain.get(c.domain)!.n++;
-            overall.sum += r; overall.n++;
+            const max = c.max ?? 3;
+            add(byCriterion.get(c._id)!, r, max);
+            add(byDomain.get(c.domain)!, r, max);
+            add(overall, r, max);
         }
     }
 
     return {
         criteria: criteria.map(c => ({ ...c, average: ratio(byCriterion.get(c._id)!), n: byCriterion.get(c._id)!.n })),
-        domains: Object.fromEntries(DOMAINS.map(d => [d, ratio(byDomain.get(d)!)])) as Record<Domain, number | null>,
+        domains: Object.fromEntries([...byDomain].map(([d, a]) => [d, ratio(a)])) as Record<string, number | null>,
         overall: ratio(overall),
     };
 }

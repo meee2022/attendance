@@ -394,3 +394,39 @@ describe("the Excel archive of visits before the platform", () => {
         expect(visits.find(v => v._id === f.visitId)!.visitNumber).toBe(2);
     });
 });
+
+describe("the support teachers' own form", () => {
+    it("rates the 21 support criteria 1–5, keeps a recommendation per criterion and freezes them", async () => {
+        const f = await fixture();
+        const { SUPPORT_CRITERIA } = await import("../convex/visitCriteria");
+        const { teacherId, classId } = await f.t.run(async ctx => {
+            await ctx.db.patch(f.visitorId, { subjects: ["العلوم", "الدعم الإضافي"] });
+            return {
+                teacherId: await ctx.db.insert("schoolTeachers", { schoolId: f.schoolId, fullName: "معلم دعم", department: "الدعم الإضافي", isActive: true }),
+                classId: await ctx.db.insert("classes", { schoolId: f.schoolId, name: "10-1", grade: 10, isActive: true }),
+            };
+        });
+        const save = (ratings: Record<string, unknown>) => f.t.mutation(A.visits.saveVisit, {
+            sessionToken: f.deputy, visitorRole: "deputy", visitorName: "نائب", teacherId, classId,
+            subjectName: "الدعم الإضافي", lessonTopic: "درس", visitDate: "2026-09-01", followUpType: "partial",
+            ratings: JSON.stringify(ratings), planningRec: "لا تُحفظ في هذه الاستمارة",
+            criterionRecs: JSON.stringify({ sp02: "ربط الأهداف بالخطة الفردية", nope: "خارج الاستمارة" }), status: "submitted",
+        });
+        const all = (r: unknown) => Object.fromEntries(SUPPORT_CRITERIA.map(c => [c._id, r]));
+        // «لم يتم قياسه» and the ministry's 0 are not on this form
+        await expect(save(all("not_measured"))).rejects.toThrow();
+        await expect(save(all(0))).rejects.toThrow();
+        const res = await save({ ...all(5), sp01: 1 });
+        const visit: any = await f.t.run(ctx => ctx.db.get(res.id));
+        expect(visit.formKind).toBe("support");
+        expect(visit.averageScore).toBeCloseTo(101 / 105);
+        expect(JSON.parse(visit.criterionRecs)).toEqual({ sp02: "ربط الأهداف بالخطة الفردية" });
+        expect(visit.planningRec).toBeUndefined();
+        expect(JSON.parse(visit.domainAverages).behavior).toBe(1);
+        const frozen = JSON.parse(visit.snapshot).criteria;
+        expect(frozen).toHaveLength(21);
+        expect(frozen[0]).toMatchObject({ _id: "sp01", max: 5 });
+        const form = await f.t.query(A.visits.getVisitForm, { sessionToken: f.deputy, id: res.id });
+        expect(form.visit.criterionRecs.sp02).toBe("ربط الأهداف بالخطة الفردية");
+    });
+});

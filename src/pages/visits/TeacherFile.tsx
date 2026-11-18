@@ -6,7 +6,8 @@ import FiltersBar, { periodPresets } from "./FiltersBar";
 import { applyFilters, type Filters } from "../../lib/visitStats";
 import { useMemo, useState } from "react";
 import { Printer, TrendingUp, TrendingDown } from "lucide-react";
-import { DOMAINS, DOMAIN_LABELS, ROLE_LABELS, formatDate, parseRatings, type VisitorRole } from "../../../convex/visitMath";
+import { ROLE_LABELS, formatDate, parseRatings, type VisitorRole } from "../../../convex/visitMath";
+import { SUPPORT_CRITERIA, domainList, isSupportDepartment } from "../../../convex/visitCriteria";
 import { countByRole, criterionAverages, pct, scoreTone, submittedOnly, type VisitRow } from "../../lib/visitStats";
 
 // One teacher across the year: the visits in order, where each domain stands,
@@ -29,7 +30,10 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
         .filter(v => v.teacherId === teacherId)
         .sort((a, b) => a.visitDate.localeCompare(b.visitDate)), [visits, teacherId, filters]);
 
-    const stats = criterionAverages(mine, setup.criteria);
+    // a support teacher is visited on the support form
+    const support = isSupportDepartment(teacher?.department);
+    const criteria: any[] = support ? SUPPORT_CRITERIA : setup.criteria;
+    const stats = criterionAverages(mine, criteria);
     const measured = stats.criteria.filter(c => c.average !== null && c.n >= 2);
     const strongest = [...measured].sort((a, b) => b.average! - a.average!).slice(0, 3);
     const weakest = [...measured].sort((a, b) => a.average! - b.average!).slice(0, 3);
@@ -96,10 +100,10 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
 
                         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-3">
                             <p className="font-bold text-slate-700 text-sm">المجالات</p>
-                            {DOMAINS.map(d => (
+                            {domainList(support).map(([d, label]) => (
                                 <div key={d}>
                                     <div className="flex justify-between text-xs font-bold mb-1">
-                                        <span className="text-slate-600">{DOMAIN_LABELS[d]}</span>
+                                        <span className="text-slate-600">{label}</span>
                                         <span style={{ color: scoreTone(stats.domains[d]) }}>{pct(stats.domains[d])}</span>
                                     </div>
                                     <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
@@ -132,14 +136,14 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                         </div>
                     </div>
 
-                    <TeacherComparisons visits={mine} criteria={setup.criteria}/>
+                    <TeacherComparisons visits={mine} criteria={criteria} support={support}/>
                     <p className="text-xs text-slate-600">القوة وأولويات التحسين أدناه مؤشرات للبنود المقاسة مرتين على الأقل، وليست حكمًا نهائيًا على أداء المعلم.</p>
                     {measured.length > 0 && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <CriteriaList title="نقاط القوة" icon={<TrendingUp className="w-4 h-4 text-emerald-600"/>}
-                                items={strongest} visits={mine} criteria={setup.criteria}/>
+                                items={strongest} visits={mine} criteria={criteria}/>
                             <CriteriaList title="أولويات التحسين" icon={<TrendingDown className="w-4 h-4 text-rose-600"/>}
-                                items={weakest} visits={mine} criteria={setup.criteria} showTrail/>
+                                items={weakest} visits={mine} criteria={criteria} showTrail/>
                         </div>
                     )}
 
@@ -168,6 +172,7 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
                                         <AcknowledgementControl visit={v} canManage={(session?.role === "deputy" || session?.role === "admin") || session?.visitorId === v.visitorId}/>
                                         {[["التخطيط", v.planningRec], ["تنفيذ الدرس", v.executionRec],
                                           [v.managementRec ? "التقويم" : "التقويم والإدارة الصفية", v.evalMgmtRec], ["الإدارة الصفية وبيئة التعلم", v.managementRec ?? ""], ["عامة", v.notes]]
+                                            .concat(supportRecs(v))
                                             .filter(([, t]) => t && t.trim())
                                             .map(([k, t]) => (
                                                 <p key={k} className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
@@ -183,6 +188,13 @@ export default function TeacherFile({ setup, visits, teacherId, onChangeTeacher,
             )}
         </div>
     );
+}
+
+// The support form's recommendations, each beside its criterion
+function supportRecs(v: VisitRow): [string, string][] {
+    let recs: Record<string, string> = {};
+    try { recs = JSON.parse(v.criterionRecs || "{}"); } catch { /* none */ }
+    return SUPPORT_CRITERIA.filter(c => recs[c._id]).map(c => [`«${c.text}»`, recs[c._id]]);
 }
 
 function CriteriaList({ title, icon, items, visits, criteria, showTrail }: {
@@ -204,7 +216,7 @@ function CriteriaList({ title, icon, items, visits, criteria, showTrail }: {
                         <p className="text-xs text-slate-500 mt-1">{c.n} قياسات</p>
                         {showTrail && trail.length > 1 && (
                             <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                {trail.map(x => `${formatDate(x.v.visitDate)} · ${ROLE_LABELS[x.v.visitorRole]}: ${x.rating}/3`).join(" | ")}
+                                {trail.map(x => `${formatDate(x.v.visitDate)} · ${ROLE_LABELS[x.v.visitorRole]}: ${x.rating}/${c.max ?? 3}`).join(" | ")}
                             </p>
                         )}
                     </div>

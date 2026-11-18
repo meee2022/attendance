@@ -145,3 +145,21 @@ export const addDepartmentStaff=internalMutation({args:{department:v.string(),te
   else coordinatorId=await ctx.db.insert('supervisors',{schoolId:school._id,fullName:coordinator.trim(),role:'coordinator',subjects:[department],isActive:true});}
  return {added,coordinatorId};
 }});
+// A visitor who has left: off the sign-in list and the forms, their visits kept
+export const retireVisitor=internalMutation({args:{fullName:v.string()},handler:async(ctx,{fullName})=>{
+ const school=await ctx.db.query('schools').first();if(!school)throw new ConvexError('لا توجد مدرسة');
+ const found=(await ctx.db.query('supervisors').withIndex('by_school',q=>q.eq('schoolId',school._id)).collect()).filter(p=>p.fullName.trim()===fullName.trim()&&p.isActive);
+ if(found.length!==1)throw new ConvexError('الزائر غير موجود أو مكرر');
+ await ctx.db.patch(found[0]._id,{isActive:false});
+ await ctx.db.insert('supervisionAuditLog',{schoolId:school._id,action:'visitor_retired',actorName:'مسؤول المنصة',details:`${fullName} (${found[0].role}: ${found[0].subjects.join('، ')})`,timestamp:Date.now()});
+ return found[0]._id;
+}});
+// A reviewed staff list applied as changes only: emails filled in, leavers
+// set inactive (their visits stay). Refuses a teacher already changed.
+export const applyRosterChanges=internalMutation({args:{emails:v.array(v.object({id:v.id('schoolTeachers'),email:v.string()})),deactivate:v.array(v.id('schoolTeachers'))},handler:async(ctx,args)=>{
+ const result:string[]=[];let schoolId:any=null;
+ for(const {id,email} of args.emails){const t=await ctx.db.get(id);if(!t||t.email)throw new ConvexError('المعلم غير متاح أو له بريد');schoolId=t.schoolId;await ctx.db.patch(id,{email:email.trim()});result.push(`${t.fullName}: ${email}`);}
+ for(const id of args.deactivate){const t=await ctx.db.get(id);if(!t||!t.isActive)throw new ConvexError('المعلم غير موجود أو غير نشط');schoolId=t.schoolId;await ctx.db.patch(id,{isActive:false});result.push(`${t.fullName}: غير نشط`);}
+ if(schoolId)await ctx.db.insert('supervisionAuditLog',{schoolId,action:'roster_reconciled',actorName:'مسؤول المنصة',details:result.join('\n'),timestamp:Date.now()});
+ return result;
+}});

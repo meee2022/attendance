@@ -1,6 +1,7 @@
 import { deputyNameOf } from "./supervisionDefaults";
 import { ConvexError, v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { nameKey } from "./visitMath";
 
 export async function digest(value: string) {
     const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -30,6 +31,13 @@ export const accountOf = (ctx: any, schoolId: any, role: string, ownerId?: any) 
     : role === "teacher" ? ctx.db.query("supervisionAccounts").withIndex("by_teacher", (q: any) => q.eq("teacherId", ownerId)).first()
     : ctx.db.query("supervisionAccounts")
         .withIndex("by_owner", (q: any) => q.eq("schoolId", schoolId).eq("role", role).eq("visitorId", role === "coordinator" ? ownerId : undefined)).first();
+
+// A coordinator is on the staff list as a teacher too, but signs in as a
+// coordinator: one person, one account
+export async function isCoordinator(ctx: any, teacher: any) {
+    const coordinators = await ctx.db.query("supervisors").withIndex("by_role", (q: any) => q.eq("schoolId", teacher.schoolId).eq("role", "coordinator")).collect();
+    return coordinators.some((p: any) => p.isActive !== false && nameKey(p.fullName) === nameKey(teacher.fullName));
+}
 
 // A fresh salt and hash for this owner, replacing any earlier password
 export async function setPassword(ctx: any, schoolId: any, role: string, ownerId: any, password: string) {

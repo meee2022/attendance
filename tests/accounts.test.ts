@@ -113,6 +113,9 @@ describe("personal accounts", () => {
         expect(await f.t.query(A.supervisionSessions.current, { token: hex("2") })).toBeNull();
         expect((await own("first@school.qa", "Changed2026", hex("8"))).error).toBeTruthy();
 
+        // a coordinator, on the staff list too, is not offered a second account as a teacher
+        const both = await f.t.run(ctx => ctx.db.insert("schoolTeachers", { schoolId: f.schoolId, fullName: "منسق  أول", department: "العلوم", email: "c@school.qa", isActive: true }));
+        await expect(f.t.mutation(A.accounts.createActivations, { sessionToken: hex("a"), items: [{ role: "teacher", ownerId: both, token: hex("9") }] })).rejects.toThrow();
         const status = await f.t.query(A.accounts.status, { sessionToken: hex("a") });
         expect(status.rows.filter((r: any) => r.role === "teacher").map((r: any) => [r.name, !!r.linkExpiresAt])).toEqual([["معلم ثان", true]]);
     });

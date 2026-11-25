@@ -1,7 +1,7 @@
 import { deputyNameOf } from "./supervisionDefaults";
 import { query, mutation } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
-import { accountOf, credentialOf, digest, hashPassword, passwordProblem, requireSession, rolePin, setPassword } from "./supervisionAccess";
+import { accountOf, credentialOf, digest, hashPassword, isCoordinator, passwordProblem, requireSession, rolePin, setPassword } from "./supervisionAccess";
 
 // Signing in. A coordinator, the deputy and the platform admin each have a
 // password of their own, set through a one-time link (or, for the deputy and
@@ -115,7 +115,7 @@ async function activation(ctx: any, token: string) {
     if (!row || row.expiresAt < Date.now()) return null;
     const person = row.visitorId ? await ctx.db.get(row.visitorId) : row.teacherId ? await ctx.db.get(row.teacherId) : null;
     if (row.role === "coordinator" && (!person || person.isActive === false || person.role !== "coordinator")) return null;
-    if (row.role === "teacher" && (!person || person.isActive === false)) return null;
+    if (row.role === "teacher" && (!person || person.isActive === false || await isCoordinator(ctx, person))) return null;
     const settings = await ctx.db.query("supervisionSettings").withIndex("by_school", (q: any) => q.eq("schoolId", row.schoolId)).first();
     return { row, person, name: person ? person.fullName.replace(/\s+/g, " ").trim() as string : row.role === "deputy" ? deputyNameOf(settings) : "مسؤول المنصة" };
 }

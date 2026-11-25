@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { deputyMutation, deputyQuery, accountOf, digest, passwordProblem, setPassword } from "./supervisionAccess";
+import { deputyMutation, deputyQuery, accountOf, digest, isCoordinator, passwordProblem, setPassword } from "./supervisionAccess";
 import { deputyNameOf } from "./supervisionDefaults";
 import { nameKey } from "./visitMath";
 
@@ -23,6 +23,7 @@ async function owner(ctx: any, role: string, ownerId?: string) {
     const person = id ? await ctx.db.get(id) : null;
     const valid = !table ? !ownerId : !!person && person.schoolId === session.schoolId && person.isActive !== false && (role !== "coordinator" || person.role === "coordinator");
     if (!valid) throw new ConvexError("الحساب غير موجود");
+    if (role === "teacher" && await isCoordinator(ctx, person)) throw new ConvexError("المنسق يدخل بحساب المنسق؛ لا يُنشأ له حساب معلم");
     return { session, person, id };
 }
 const linksOf = (ctx: any, schoolId: any, role: string, id: any) => role === "teacher"
@@ -44,7 +45,7 @@ export const status = deputyQuery({ args: {}, handler: async (ctx) => {
     const rows = [row("deputy", null, deputyNameOf(settings), "الإدارة والمنسقون", "النائب الأكاديمي"), row("admin", null, "مسؤول المنصة", "الإدارة والمنسقون", "مسؤول المنصة"),
         // a coordinator is on the staff list too: that is where their phone is
         ...coordinators.map(p => row("coordinator", p._id, p.fullName, "الإدارة والمنسقون", `منسق ${p.subjects.join("، ")}`, staff.find(t => nameKey(t.fullName) === nameKey(p.fullName)))),
-        ...staff.sort((a, b) => (a.department ?? "").localeCompare(b.department ?? "", "ar") || a.fullName.localeCompare(b.fullName, "ar"))
+        ...staff.filter(t => !coordinators.some(p => nameKey(p.fullName) === nameKey(t.fullName))).sort((a, b) => (a.department ?? "").localeCompare(b.department ?? "", "ar") || a.fullName.localeCompare(b.fullName, "ar"))
             .map(t => row("teacher", t._id, t.fullName, (t.department ?? "").trim(), `معلم ${(t.department ?? "").trim()}`, t))];
     // the shared codes still open the door for those not yet activated
     return { rows, sharedCode: !!school.coordinatorPin, teacherSharedCode: !!school.teacherPin, isAdmin: session.role === "admin" };

@@ -7,7 +7,7 @@ import { useSupervisionQuery as useQuery, SupervisionBoundary, useSupervisionSes
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import {
-    ClipboardCheck, LayoutDashboard, Plus, Layers, User, BarChart3, Users, LogOut, FileText, Award,
+    ClipboardCheck, LayoutDashboard, Plus, Layers, User, BarChart3, Users, LogOut, FileText, Award, ShieldCheck,
 } from "lucide-react";
 import { PageHeader, LoadingSpinner } from "../../components/ui";
 import { clearStoredRole } from "../../components/SupervisionPinGate";
@@ -22,13 +22,14 @@ import VisitsAnalysis from "./VisitsAnalysis";
 import MonthlyReport from "./MonthlyReport";
 import { MySignatureButton, ReviewInbox } from "./VisitWorkflow";
 import Evaluations from "../evaluations/Evaluations";
+import { AccountsPanel } from "../../components/Accounts";
 
 // One place for the whole supervision cycle. It opens on the overview — who
 // has been visited, who has not, where each department stands — because that
 // is the question the academic deputy comes with; recording a visit is one
 // tab away.
 
-type Tab = "evaluation" | "report" | "import" | "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
+type Tab = "accounts" | "evaluation" | "report" | "import" | "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
 
 export type Session = { role: VisitorRole | "admin"; name: string; visitorId?: string };
 
@@ -100,7 +101,9 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
         { key: "evaluation", label: "تقييم الأداء السنوي", icon: <Award className="w-4 h-4"/> },
         // Managing the staff list is the deputy's job, not each department's
         ...((session.role === "deputy" || session.role === "admin")
-            ? [{ key: "people" as Tab, label: "المعلمون والزائرون", icon: <Users className="w-4 h-4"/> }]
+            ? [{ key: "people" as Tab, label: "المعلمون والزائرون", icon: <Users className="w-4 h-4"/> },
+               // each person's own sign-in: links to activate, passwords to reset
+               { key: "accounts" as Tab, label: "الحسابات الشخصية", icon: <ShieldCheck className="w-4 h-4"/> }]
             : []),
     ];
 
@@ -156,6 +159,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
             {tab === "report" && <MonthlyReport setup={setup} visits={visits}/>}
             {tab === "evaluation" && <Evaluations visits={visits} onDirtyChange={setDirty}/>}
             {tab === "people" && (session.role === "deputy" || session.role === "admin") && <SupervisionTeachers/>}
+            {tab === "accounts" && (session.role === "deputy" || session.role === "admin") && <AccountsPanel/>}
         </div>
     );
 }

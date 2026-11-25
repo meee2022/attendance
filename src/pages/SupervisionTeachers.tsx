@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../lib/supervisionSession";
 // @ts-ignore
 import { api } from "../../convex/_generated/api";
-import { AccountsPanel } from "../components/Accounts";
 import { Plus, Trash2, Pencil, Check, X, Download, Search, Users, Mail, AlertCircle, RotateCcw } from "lucide-react";
 
 const SUBJECTS = [
@@ -280,8 +279,6 @@ function SupervisorsManager({ supervisors, departments, onAdd, onDelete }: { sup
                     <Plus className="w-4 h-4"/>إضافة
                 </button>
             </div>
-
-            <AccountsPanel/>
 
             {(["coordinator", "supervisor", "deputy"] as const).map(r => byRole[r].length > 0 && (
                 <div key={r} className="rounded-xl border border-slate-100 overflow-hidden">

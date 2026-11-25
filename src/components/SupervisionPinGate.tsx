@@ -16,7 +16,7 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
 };
 const ROLE_DESCRIPTIONS: Record<VisitorRole, string> = {
     teacher: "الدخول برمز المعلمين المشترك",
-    admin: "جميع الصلاحيات وإدارة رموز دخول المنصة",
+    admin: "جميع الصلاحيات وإدارة حسابات المنصة",
     coordinator: "زيارات القسم ومتابعة المعلمين",
     supervisor: "الزيارات الإشرافية والتوصيات",
     deputy: "إدارة المدرسة والطلاب والمعلمين والإشراف",
@@ -124,18 +124,19 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
                         </div>
                         {selectedRole === "deputy" && setup && !deputyName && <p role="status" className="supervision-entry-help">يجب ضبط اسم النائب في إعدادات الإشراف أولًا.</p>}
                         <div className="supervision-entry-field">
-                            <label htmlFor="supervision-pin">{selectedRole === "admin" ? "رمز أدمن المنصة" : "رمز الدخول"} <span>(PIN)</span></label>
+                            <label htmlFor="supervision-pin">{selectedRole === "teacher" ? "رمز المعلمين" : "كلمة السر"}</label>
                             <div className="supervision-pin-input">
                                 <input id="supervision-pin" type={showPin ? "text" : "password"} value={pin} dir="ltr"
                                     onChange={e => { setPin(e.target.value); setError(""); }}
                                     placeholder="••••" autoComplete="current-password" disabled={busy} required
                                     aria-invalid={!!error} aria-describedby={error ? "supervision-entry-error" : undefined}/>
                                 <button type="button" onClick={() => setShowPin(value => !value)}
-                                    aria-label={showPin ? "إخفاء رمز الدخول" : "إظهار رمز الدخول"} aria-pressed={showPin}>
+                                    aria-label={showPin ? "إخفاء كلمة السر" : "إظهار كلمة السر"} aria-pressed={showPin}>
                                     {showPin ? <EyeOff size={18}/> : <Eye size={18}/>}
                                 </button>
                             </div>
                         </div>
+                        {selectedRole === "coordinator" && <p className="supervision-entry-help">أول مرة؟ افتح رابط التفعيل الذي أرسله لك النائب الأكاديمي واختر كلمة سرك. نسيتها؟ اطلب منه رابطًا جديدًا.</p>}
                         {error && <p id="supervision-entry-error" role="alert" className="supervision-entry-error">{error}</p>}
                         <button type="submit" className="supervision-entry-submit" disabled={busy || !setup || (selectedRole === "deputy" && !deputyName) || (selectedRole !== "deputy" && selectedRole !== "admin" && selectedRole !== "teacher" && !people.length)}>
                             {busy ? "جاري تسجيل الدخول…" : platform ? "دخول المنصة" : "دخول الإشراف"}<ArrowLeft size={17} aria-hidden="true"/>

@@ -6,7 +6,7 @@ export function redactPlatformResult(value: any, privileged: boolean): any {
     if (Array.isArray(value)) return value.map(x => redactPlatformResult(x, privileged));
     if (!value || typeof value !== "object") return value;
     return Object.fromEntries(Object.entries(value).filter(([key]) =>
-        !/^(adminPin|teacherPin|coordinatorPin|supervisorPin|deputyPin|pin|credentialHash|tokenHash)$/i.test(key)
+        !/^(adminPin|teacherPin|coordinatorPin|supervisorPin|deputyPin|pin|credentialHash|tokenHash|passwordHash|salt)$/i.test(key)
         && (privileged || !/^(nationalId|guardianPhone|phone|phoneNumber|mobile|parentPhone)$/i.test(key)))
         .map(([key, child]) => [key, redactPlatformResult(child, privileged)]));
 }

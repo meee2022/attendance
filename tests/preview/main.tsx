@@ -22,6 +22,10 @@ import { FormPreview } from "../../src/pages/visits/TeacherAcknowledgement";
 import EvaluationPages from "../../src/pages/evaluations/EvaluationFormPrint";
 import { FORM_PAGE_CSS } from "../../src/pages/visits/VisitFormPrint";
 import { INDICATORS, levelOf, totalOf } from "../../convex/evaluationForm";
+import { AccountsPanel } from "../../src/components/Accounts";
+// ?accounts: the deputy's panel of personal accounts
+if (new URLSearchParams(location.search).has("accounts")) createRoot(document.getElementById("root")!).render(<div dir="rtl" style={{ maxWidth: 1000, margin: "auto", padding: 16 }}><AccountsPanel/></div>);
+else
 // ?evalprint: the printed appraisal form with made-up data (&blank: no marks yet)
 if (new URLSearchParams(location.search).has("evalprint")) {
     const scores = new URLSearchParams(location.search).has("blank") ? {} : Object.fromEntries(INDICATORS.map((i, n) => [i.id, n % 6 ? i.max : i.max - 1]));

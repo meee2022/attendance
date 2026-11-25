@@ -14,6 +14,38 @@ export function rolePin(school: any, role: string, visitor?: any) {
         : role === "supervisor" ? school.supervisorPin || "" : school.coordinatorPin || "");
 }
 
+// PBKDF2-SHA256, 100,000 rounds: a stolen table gives no passwords back
+export async function hashPassword(password: string, salt: string) {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(salt), iterations: 100_000 }, key, 256);
+    return Array.from(new Uint8Array(bits), x => x.toString(16).padStart(2, "0")).join("");
+}
+export const passwordProblem = (password: string) =>
+    password.length < 8 || password.length > 72 ? "اختر كلمة سر من 8 أحرف على الأقل"
+    : !/\p{L}/u.test(password) || !/\d/.test(password) ? "اجعل كلمة السر تجمع حروفًا وأرقامًا" : "";
+
+export const accountOf = (ctx: any, schoolId: any, role: string, visitorId?: any) =>
+    role === "teacher" || role === "supervisor" ? null : ctx.db.query("supervisionAccounts")
+        .withIndex("by_owner", (q: any) => q.eq("schoolId", schoolId).eq("role", role).eq("visitorId", role === "coordinator" ? visitorId : undefined)).first();
+
+// A fresh salt and hash for this owner, replacing any earlier password
+export async function setPassword(ctx: any, schoolId: any, role: string, visitorId: any, password: string) {
+    const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), x => x.toString(16).padStart(2, "0")).join("");
+    const value = { salt, passwordHash: await hashPassword(password, salt), updatedAt: Date.now() };
+    const account = await accountOf(ctx, schoolId, role, visitorId);
+    if (account) await ctx.db.patch(account._id, value);
+    else await ctx.db.insert("supervisionAccounts", { schoolId, role, visitorId: role === "coordinator" ? visitorId : undefined, ...value });
+    return value.passwordHash;
+}
+
+// What a session was opened with: the person's own password once they have
+// one, otherwise the role's code. A session dies when that changes.
+export async function credentialOf(ctx: any, school: any, role: string, visitor: any) {
+    const account = await accountOf(ctx, school._id, role, visitor?._id);
+    const pin = rolePin(school, role, visitor);
+    return { account, credential: account ? account.passwordHash as string : pin ? await digest(pin) : "" };
+}
+
 export async function requireSession(ctx: any, token?: string, deputy = false) {
     if (!token) throw new ConvexError("سجّل الدخول للمنصة أولاً");
     const hash = await digest(token);
@@ -22,13 +54,16 @@ export async function requireSession(ctx: any, token?: string, deputy = false) {
     if (!session || session.expiresAt <= Date.now()) throw new ConvexError("انتهت الجلسة؛ سجّل الدخول مرة أخرى");
     const school = await ctx.db.get(session.schoolId);
     const visitor = session.visitorId ? await ctx.db.get(session.visitorId) : null;
+    const { account, credential } = school ? await credentialOf(ctx, school, session.role, visitor) : { account: null, credential: "" };
     if (session.role === "supervisor" || !school || (session.visitorId && (!visitor || visitor.isActive === false || visitor.role !== session.role))
-        || !rolePin(school, session.role, visitor) || session.credentialHash !== await digest(rolePin(school, session.role, visitor))) {
+        || !credential || session.credentialHash !== credential) {
         throw new ConvexError("تغيّرت صلاحيات الدخول؛ سجّل الدخول مرة أخرى");
     }
     if (deputy && session.role !== "deputy" && session.role !== "admin") throw new ConvexError("هذه العملية متاحة للنائب الأكاديمي أو مسؤول المنصة");
     const settings = session.role === "deputy" ? await ctx.db.query("supervisionSettings").withIndex("by_school", (q: any) => q.eq("schoolId", school._id)).first() : null;
-    return { ...session, name: session.role === "deputy" ? deputyNameOf(settings) : session.name, departments: (session.role === "deputy" || session.role === "admin") ? null : (visitor?.subjects ?? []).map((s: string) => s.trim()) };
+    // the deputy and the admin still on their old code are asked for a password of their own
+    return { ...session, needsPassword: !account && (session.role === "deputy" || session.role === "admin"),
+        name: session.role === "deputy" ? deputyNameOf(settings) : session.name, departments: (session.role === "deputy" || session.role === "admin") ? null : (visitor?.subjects ?? []).map((s: string) => s.trim()) };
 }
 
 export function canAccess(session: any, schoolId: any, department: string) {

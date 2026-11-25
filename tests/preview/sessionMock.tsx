@@ -31,6 +31,7 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
     if (name === "visitWorkflow:emailStatus") return { teacherName: "معلم تجريبي", teacherEmail: "teacher@example.com", teacherPhone: null, sends: [] };
     if (name === "visitImports:original") return null;
     if (name === "visitWorkflow:mySignature") return mySignature;
+    if (name === "accounts:status") return { sharedCode, isAdmin: false, rows: accountRows };
     if (name === "teacherEvaluations:list") return { academicYear: "2026 - 2027", manager, rows: setup.teachers.map((t: any) => { const e = evaluations[t._id]; return {
         teacherId: t._id, teacherName: t.fullName, department: t.department, isCoordinator: false, evaluationId: e?._id ?? null, status: e?.status ?? "none",
         scored: e ? Object.keys(e.scores).length : 0, total: e ? totalOf(e.scores) : null, level: e && Object.keys(e.scores).length === 34 ? levelOf(totalOf(e.scores)) : "",
@@ -43,6 +44,14 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
         previous: args.teacherId === "t1" ? { academicYear: "2025 - 2026", total: 88, scores: { "1.1": 2, "1.2": 3 } } : null, principalName: "مدير تجريبي", schoolName: "مدرسة تجريبية" }; }
     return [];
 }
+// personal accounts, kept in the page's memory
+let sharedCode = true;
+const accountRows: any[] = [
+    { role: "deputy", visitorId: null, name: "نائب تجريبي", detail: "النائب الأكاديمي", activatedAt: Date.UTC(2026, 10, 20), linkExpiresAt: null, phone: "", email: "" },
+    { role: "admin", visitorId: null, name: "مسؤول المنصة", detail: "مسؤول المنصة", activatedAt: null, linkExpiresAt: null, phone: "", email: "" },
+    { role: "coordinator", visitorId: "vc1", name: "منسق تجريبي", detail: "منسق العلوم", activatedAt: null, linkExpiresAt: null, phone: "55500001", email: "c1@example.com" },
+    { role: "coordinator", visitorId: "vc2", name: "منسق زميل تجريبي", detail: "منسق الرياضيات", activatedAt: null, linkExpiresAt: null, phone: "55500002", email: "c2@example.com" },
+];
 // the yearly appraisal, kept in the page's memory
 const manager = !new URLSearchParams(location.search).get("as")?.startsWith("coord");
 const evaluations: Record<string, any> = {};
@@ -62,6 +71,9 @@ export function useSupervisionMutation(ref: any) { return async (args: any) => {
     if (name === "visitWorkflow:clearTeacherSign") { patchVisit(args.visitId, { teacherSign: null }); return null; }
     if (name === "visitWorkflow:sendToDeputy") { patchVisit(args.visitId, { reviewRequest: { toRole: "deputy", toName: "نائب تجريبي", byName: session.name, at: Date.now() } }); return null; }
     if (name === "supervisionAcknowledgements:create") return null;
+    if (name === "accounts:createActivation") { accountRows.find(r => r.role === args.role && (r.visitorId ?? undefined) === args.visitorId).linkExpiresAt = Date.now() + 48 * 3600000; changed(); return null; }
+    if (name === "accounts:setFor") { accountRows.find(r => r.role === args.role && (r.visitorId ?? undefined) === args.visitorId).activatedAt = Date.now(); changed(); return null; }
+    if (name === "accounts:retireSharedCode") { sharedCode = false; changed(); return null; }
     if (name === "teacherEvaluations:save") { const scores = JSON.parse(args.scores), old = evaluations[args.teacherId];
         evaluations[args.teacherId] = { _id: `e-${args.teacherId}`, evaluatorName: session.name, evaluatorRole: manager ? "deputy" : "coordinator", ...old, scores, penalties: args.penalties, courses: args.courses, updatedAt: Date.now(),
             status: args.send && !manager ? "sent" : old?.status ?? "draft", sent: args.send && !manager ? { scores, total: totalOf(scores), at: Date.now(), name: session.name } : old?.sent ?? null };

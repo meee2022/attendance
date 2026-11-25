@@ -74,6 +74,18 @@ export default defineSchema({
         role: v.union(v.literal("coordinator"), v.literal("supervisor"), v.literal("deputy"), v.literal("admin"), v.literal("teacher")),
         visitorId: v.optional(v.id("supervisors")), name: v.string(), expiresAt: v.number(),
     }).index("by_token", ["tokenHash"]),
+    // A person's own sign-in: a password only they know, kept salted and hashed.
+    // The deputy and the platform admin have no row in «supervisors», so the
+    // owner is the role, plus the visitor for a coordinator.
+    supervisionAccounts: defineTable({
+        schoolId: v.id("schools"), role: v.union(v.literal("coordinator"), v.literal("deputy"), v.literal("admin")),
+        visitorId: v.optional(v.id("supervisors")), salt: v.string(), passwordHash: v.string(), updatedAt: v.number(),
+    }).index("by_owner", ["schoolId", "role", "visitorId"]),
+    // The one-time link a person sets that password through
+    accountActivations: defineTable({
+        schoolId: v.id("schools"), role: v.union(v.literal("coordinator"), v.literal("deputy"), v.literal("admin")),
+        visitorId: v.optional(v.id("supervisors")), tokenHash: v.string(), expiresAt: v.number(), createdBy: v.string(),
+    }).index("by_token", ["tokenHash"]).index("by_owner", ["schoolId", "role", "visitorId"]),
     supervisionLoginAttempts: defineTable({
         key: v.string(), failures: v.number(), resetAt: v.number(),
     }).index("by_key", ["key"]),

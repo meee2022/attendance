@@ -1,7 +1,12 @@
 import { deputyNameOf } from "./supervisionDefaults";
 import { query, mutation } from "./_generated/server";
-import { v } from "convex/values";
-import { digest, requireSession, rolePin } from "./supervisionAccess";
+import { ConvexError, v } from "convex/values";
+import { accountOf, credentialOf, digest, hashPassword, passwordProblem, requireSession, rolePin, setPassword } from "./supervisionAccess";
+
+// Signing in. A coordinator, the deputy and the platform admin each have a
+// password of their own, set through a one-time link (or, for the deputy and
+// the admin, on first signing in with their old code). Until a person has
+// one, the role's code still opens the door; after it, only their password does.
 
 export const directory = query({
     args: {}, handler: async ctx => {
@@ -27,7 +32,10 @@ export const login = mutation({
         const person = args.visitorId ? await ctx.db.get(args.visitorId) : null;
         const validPerson = person ? person.schoolId === school._id && person.role === args.role && person.isActive
             : (args.role === "deputy" || args.role === "admin" || args.role === "teacher") && !args.visitorId;
-        if (!validPerson || !rolePin(school, args.role, person) || args.pin !== rolePin(school, args.role, person)) {
+        const { account, credential } = await credentialOf(ctx, school, args.role, person);
+        const matches = account ? await hashPassword(args.pin, account.salt) === account.passwordHash
+            : !!rolePin(school, args.role, person) && args.pin === rolePin(school, args.role, person);
+        if (!validPerson || !matches) {
             const fresh = !attempt || attempt.resetAt <= Date.now();
             const data = { key, failures: fresh ? 1 : attempt.failures + 1, resetAt: fresh ? Date.now() + 600000 : attempt.resetAt };
             if (attempt) await ctx.db.patch(attempt._id, data); else await ctx.db.insert("supervisionLoginAttempts", data);
@@ -43,17 +51,76 @@ export const login = mutation({
         if (!name) return { error: "لم يُضبط اسم النائب الأكاديمي في إعدادات الإشراف بعد." };
         const expiresAt = Date.now() + 8 * 3600000;
         await ctx.db.insert("supervisionSessions", { schoolId: school._id, tokenHash,
-            credentialHash: await digest(rolePin(school, args.role, person)), role: args.role, visitorId: args.visitorId, name, expiresAt });
+            credentialHash: credential, role: args.role, visitorId: args.visitorId, name, expiresAt });
         return { session: { role: args.role, visitorId: args.visitorId, name, expiresAt, token: args.token } };
     },
 });
 
 export const current = query({ args: { token: v.string() }, handler: async (ctx, args) => {
-    try { const s = await requireSession(ctx, args.token); return { role: s.role, name: s.name, visitorId: s.visitorId, expiresAt: s.expiresAt }; }
+    try { const s = await requireSession(ctx, args.token); return { role: s.role, name: s.name, visitorId: s.visitorId, expiresAt: s.expiresAt, needsPassword: s.needsPassword }; }
     catch { return null; }
 } });
 export const logout = mutation({ args: { token: v.string() }, handler: async (ctx, args) => {
     const hash = await digest(args.token);
     const s = await ctx.db.query("supervisionSessions").withIndex("by_token", q => q.eq("tokenHash", hash)).first();
     if (s) await ctx.db.delete(s._id);
+} });
+
+// ── A person's own password ──────────────────────────────────────────────
+const OWNED = ["coordinator", "deputy", "admin"];
+
+// Changing it takes the current one. The deputy and the admin without a
+// password yet confirm with the code they signed in with.
+export const changePassword = mutation({ args: { token: v.string(), current: v.string(), next: v.string() }, handler: async (ctx, args) => {
+    const session = await requireSession(ctx, args.token);
+    if (!OWNED.includes(session.role)) throw new ConvexError("لا يوجد حساب شخصي لهذه الصفة");
+    const school: any = await ctx.db.get(session.schoolId);
+    const visitor: any = session.visitorId ? await ctx.db.get(session.visitorId) : null;
+    const account = await accountOf(ctx, school._id, session.role, session.visitorId);
+    if (!account && session.role === "coordinator") throw new ConvexError("يُفعَّل حسابك برابط من النائب الأكاديمي");
+    const key = `${school._id}:password:${session.role}:${session.visitorId ?? ""}`;
+    const attempt = await ctx.db.query("supervisionLoginAttempts").withIndex("by_key", q => q.eq("key", key)).first();
+    if (attempt && attempt.resetAt > Date.now() && attempt.failures >= 8) return { error: "محاولات كثيرة؛ أعد المحاولة بعد عشر دقائق" };
+    const known = account ? await hashPassword(args.current, account.salt) === account.passwordHash : args.current === rolePin(school, session.role, visitor);
+    if (!known) {
+        const fresh = !attempt || attempt.resetAt <= Date.now();
+        const data = { key, failures: fresh ? 1 : attempt.failures + 1, resetAt: fresh ? Date.now() + 600000 : attempt.resetAt };
+        if (attempt) await ctx.db.patch(attempt._id, data); else await ctx.db.insert("supervisionLoginAttempts", data);
+        return { error: "كلمة السر الحالية غير صحيحة" };
+    }
+    const problem = passwordProblem(args.next) || (args.next === args.current ? "اختر كلمة سر مختلفة عن الحالية" : "");
+    if (problem) return { error: problem };
+    if (attempt) await ctx.db.delete(attempt._id);
+    // this session carries on; any other one opened with the old password ends
+    await ctx.db.patch(session._id, { credentialHash: await setPassword(ctx, school._id, session.role, session.visitorId, args.next) });
+    await ctx.db.insert("supervisionAuditLog", { schoolId: school._id, action: "password_changed", actorName: session.name, details: "غيّر كلمة سره", timestamp: Date.now() });
+    return { ok: true };
+} });
+
+// The one-time link: whose account it is, and setting its password
+async function activation(ctx: any, token: string) {
+    if (!/^[a-f0-9]{64}$/.test(token)) return null;
+    const tokenHash = await digest(token);
+    const row = await ctx.db.query("accountActivations").withIndex("by_token", (q: any) => q.eq("tokenHash", tokenHash)).first();
+    if (!row || row.expiresAt < Date.now()) return null;
+    const person = row.visitorId ? await ctx.db.get(row.visitorId) : null;
+    if (row.role === "coordinator" && (!person || person.isActive === false || person.role !== "coordinator")) return null;
+    const settings = await ctx.db.query("supervisionSettings").withIndex("by_school", (q: any) => q.eq("schoolId", row.schoolId)).first();
+    return { row, name: row.role === "coordinator" ? person.fullName as string : row.role === "deputy" ? deputyNameOf(settings) : "مسؤول المنصة" };
+}
+export const activationInfo = query({ args: { token: v.string() }, handler: async (ctx, args) => {
+    const found = await activation(ctx, args.token);
+    return found ? { name: found.name, role: found.row.role } : null;
+} });
+export const activate = mutation({ args: { token: v.string(), password: v.string() }, handler: async (ctx, args) => {
+    const found = await activation(ctx, args.token);
+    if (!found) return { error: "الرابط منتهي أو استُخدم من قبل؛ اطلب رابطًا جديدًا" };
+    const problem = passwordProblem(args.password);
+    if (problem) return { error: problem };
+    const { row, name } = found;
+    await setPassword(ctx, row.schoolId, row.role, row.visitorId, args.password);
+    await ctx.db.delete(row._id);                                               // one use
+    if (row.visitorId) await ctx.db.patch(row.visitorId, { pin: undefined });   // the old private code retires
+    await ctx.db.insert("supervisionAuditLog", { schoolId: row.schoolId, action: "account_activated", actorName: name, details: `فعّل حسابه برابط أنشأه ${row.createdBy}`, timestamp: Date.now() });
+    return { ok: true };
 } });

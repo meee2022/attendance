@@ -2,6 +2,7 @@ import { Component, createContext, useContext, useEffect, useState, type ReactNo
 import { useQuery as rawQuery, useMutation as rawMutation, useConvex as rawConvex } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import SupervisionPinGate, { getStoredRole, clearStoredRole } from "../components/SupervisionPinGate";
+import { OwnPassword } from "../components/Accounts";
 
 const Context = createContext<ReturnType<typeof getStoredRole>>(null);
 export const usePlatformSession = () => useContext(Context);
@@ -45,5 +46,7 @@ export default function PlatformBoundary({ children }: { children: ReactNode }) 
     useEffect(() => { if (session && current === null) clearStoredRole(); }, [session, current]);
     if (!session) return <SupervisionPinGate platform onAuthed={() => setSession(getStoredRole())}/>;
     if (!current) return <p className="p-10 text-center">جاري التحقق من تسجيل الدخول…</p>;
+    // the deputy and the admin, still on the old shared-style code, choose a password first
+    if (current.needsPassword) return <OwnPassword forced/>;
     return <Context.Provider value={{ ...session, ...current }}><SessionError key={session.token}>{children}</SessionError></Context.Provider>;
 }

@@ -28,6 +28,7 @@ import VisitsPage from "./pages/visits/VisitsPage";
 import VisitFormPrint from "./pages/visits/VisitFormPrint";
 import EvaluationPrint from "./pages/evaluations/EvaluationPrint";
 import EvaluationSign from "./pages/evaluations/EvaluationSign";
+import { AccountActivate, OwnPassword } from "./components/Accounts";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
 import GradesSheetPrint from "./pages/GradesSheetPrint";
@@ -132,13 +133,17 @@ function useHomePath(): string {
 
 function ProtectedApp() {
   const platformUser = usePlatformSession();
+  const [changingPassword, setChangingPassword] = useState(false);
   const { pathname } = useLocation();
   const isPrintPage = pathname.includes("/print/") || pathname === "/supervision/acknowledge";
   return (
     <div className={`${isPrintPage ? "" : "app-shell"} min-h-screen bg-qatar-gray-bg text-slate-900 font-sans`} dir="rtl">
       <a href="#main-content" className="skip-link">انتقل إلى المحتوى</a>
       <Navbar />
-      <div className="no-print max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-600 py-2"><span>{platformUser?.name}</span><button className="text-qatar-maroon px-3 py-2 underline" onClick={clearStoredRole}>تسجيل الخروج</button></div>
+      <div className="no-print max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-600 py-2"><span>{platformUser?.name}</span><span>
+        {platformUser && platformUser.role !== "teacher" && <button className="text-qatar-maroon px-3 py-2 underline" onClick={() => setChangingPassword(true)}>تغيير كلمة السر</button>}
+        <button className="text-qatar-maroon px-3 py-2 underline" onClick={clearStoredRole}>تسجيل الخروج</button></span></div>
+      {changingPassword && <OwnPassword onClose={() => setChangingPassword(false)}/>}
       <main id="main-content" className={`${isPrintPage ? "" : "workspace"} max-w-7xl mx-auto py-4 lg:py-6 px-3 sm:px-6 lg:px-8 pb-28 lg:pb-10`}>
         <Routes>
           <Route path="/teacher-tasks" element={<FeatureRoute featureKey="/teacher-tasks"><TeacherTasks/></FeatureRoute>} />
@@ -460,6 +465,8 @@ function BottomNav() {
 function App() {
   const { pathname } = useLocation();
   if (pathname === "/supervision/acknowledge") return <TeacherAcknowledgement/>;
+  // the one-time link a person sets their own password through («/a» in a text message)
+  if (pathname === "/a" || pathname === "/supervision/activate") return <AccountActivate/>;
   // a teacher's own appraisal form, read and signed through its private link
   if (pathname === "/supervision/evaluation-sign") return <EvaluationSign/>;
   // a guardian's report opens from its private link, without signing in;

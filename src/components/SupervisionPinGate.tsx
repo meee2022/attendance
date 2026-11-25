@@ -15,7 +15,7 @@ const ROLE_LABELS: Record<VisitorRole, string> = {
     deputy: "النائب الأكاديمي",
 };
 const ROLE_DESCRIPTIONS: Record<VisitorRole, string> = {
-    teacher: "الدخول برمز المعلمين المشترك",
+    teacher: "الدخول بحسابك الشخصي",
     admin: "جميع الصلاحيات وإدارة حسابات المنصة",
     coordinator: "زيارات القسم ومتابعة المعلمين",
     supervisor: "الزيارات الإشرافية والتوصيات",
@@ -47,6 +47,9 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
     const [showPin, setShowPin] = useState(false);
     const [error, setError] = useState("");
     const [visitorId, setVisitorId] = useState("");
+    // a teacher signs in as themselves; the shared code, while it lasts, is the other way in
+    const [identifier, setIdentifier] = useState("");
+    const [sharedCode, setSharedCode] = useState(false);
     const login = useMutation((api as any).supervisionSessions.login);
     const [busy, setBusy] = useState(false);
     const setup = useQuery((api as any).supervisionSessions.directory) as any;
@@ -54,6 +57,7 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
         ? (setup?.visitors ?? []).filter((p: any) => p.role === selectedRole)
         : [];
     const deputyName: string = setup?.deputyName ?? "";
+    const ownAccount = selectedRole === "teacher" && !sharedCode;
 
     const handleSubmit = async () => {
         if (busy || !selectedRole) return;
@@ -62,7 +66,7 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
         setBusy(true); setError("");
         try {
             const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
-            const result = await login({ role: selectedRole, visitorId: visitorId || undefined, name, pin, token });
+            const result = await login({ role: selectedRole, visitorId: visitorId || undefined, name, pin, token, ...(ownAccount ? { identifier } : {}) });
             if (result.error) { setError(result.error); return; }
             sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result.session));
             if (selectedRole === "admin") sessionStorage.setItem("qatar_admin_auth", "true");
@@ -74,7 +78,7 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
     };
 
     const resetRole = () => {
-        setSelectedRole(null); setVisitorId(""); setVisitorName(""); setPin(""); setError(""); setShowPin(false);
+        setSelectedRole(null); setVisitorId(""); setVisitorName(""); setPin(""); setError(""); setShowPin(false); setIdentifier(""); setSharedCode(false);
     };
 
     return (
@@ -105,8 +109,11 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
                     </div>
                     <form className="supervision-entry-form" onSubmit={e => { e.preventDefault(); void handleSubmit(); }}>
                         <div className="supervision-entry-field">
-                            <label htmlFor="supervision-visitor">الاسم</label>
-                            {selectedRole !== "deputy" && selectedRole !== "admin" && selectedRole !== "teacher" ? (
+                            <label htmlFor="supervision-visitor">{ownAccount ? "البريد الرسمي أو رقم الجوال" : "الاسم"}</label>
+                            {ownAccount ? (
+                                <input id="supervision-visitor" type="text" dir="ltr" inputMode="email" value={identifier} autoComplete="username" disabled={busy} autoFocus required
+                                    onChange={e => { setIdentifier(e.target.value); setError(""); }} placeholder="name@education.qa"/>
+                            ) : selectedRole !== "deputy" && selectedRole !== "admin" && selectedRole !== "teacher" ? (
                                 <select id="supervision-visitor" value={visitorId} disabled={busy || !setup || !people.length} autoFocus
                                     onChange={e => {
                                         const person = people.find(x => x._id === e.target.value);
@@ -124,7 +131,7 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
                         </div>
                         {selectedRole === "deputy" && setup && !deputyName && <p role="status" className="supervision-entry-help">يجب ضبط اسم النائب في إعدادات الإشراف أولًا.</p>}
                         <div className="supervision-entry-field">
-                            <label htmlFor="supervision-pin">{selectedRole === "teacher" ? "رمز المعلمين" : "كلمة السر"}</label>
+                            <label htmlFor="supervision-pin">{selectedRole === "teacher" && sharedCode ? "رمز المعلمين المشترك" : "كلمة السر"}</label>
                             <div className="supervision-pin-input">
                                 <input id="supervision-pin" type={showPin ? "text" : "password"} value={pin} dir="ltr"
                                     onChange={e => { setPin(e.target.value); setError(""); }}
@@ -136,7 +143,9 @@ export default function SupervisionPinGate({ onAuthed, platform = false }: { pla
                                 </button>
                             </div>
                         </div>
-                        {selectedRole === "coordinator" && <p className="supervision-entry-help">أول مرة؟ افتح رابط التفعيل الذي أرسله لك النائب الأكاديمي واختر كلمة سرك. نسيتها؟ اطلب منه رابطًا جديدًا.</p>}
+                        {(selectedRole === "coordinator" || ownAccount) && <p className="supervision-entry-help">أول مرة؟ افتح رابط التفعيل الذي أرسله لك النائب الأكاديمي واختر كلمة سرك. نسيتها؟ اطلب منه رابطًا جديدًا.</p>}
+                        {selectedRole === "teacher" && setup?.teacherSharedCode && <button type="button" className="supervision-entry-back" disabled={busy}
+                            onClick={() => { setSharedCode(v => !v); setPin(""); setError(""); }}>{sharedCode ? "الدخول بحسابي الشخصي" : "لم أفعّل حسابي بعد: الدخول بالرمز المشترك"}</button>}
                         {error && <p id="supervision-entry-error" role="alert" className="supervision-entry-error">{error}</p>}
                         <button type="submit" className="supervision-entry-submit" disabled={busy || !setup || (selectedRole === "deputy" && !deputyName) || (selectedRole !== "deputy" && selectedRole !== "admin" && selectedRole !== "teacher" && !people.length)}>
                             {busy ? "جاري تسجيل الدخول…" : platform ? "دخول المنصة" : "دخول الإشراف"}<ArrowLeft size={17} aria-hidden="true"/>

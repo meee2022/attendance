@@ -6,10 +6,10 @@ import { useSupervisionQuery, useSupervisionMutation } from "../lib/supervisionS
 import { StatusChip } from "./ui";
 import { getStoredRole } from "./SupervisionPinGate";
 
-// Personal accounts. Each coordinator, the deputy and the platform admin
-// signs in with a password of their own. Nobody registers: the deputy makes a
-// one-time link for a person already on the list, and that person chooses
-// the password.
+// Personal accounts. Each teacher, each coordinator, the deputy and the
+// platform admin signs in with a password of their own. Nobody registers: the
+// deputy makes a one-time link for a person already on the school's lists,
+// and that person chooses the password.
 
 const S = (api as any).supervisionSessions, ACC = (api as any).accounts;
 const errorText = (e: any, fallback: string) => (typeof e?.data === "string" ? e.data : fallback);
@@ -20,7 +20,7 @@ const RULE = "8 أحرف على الأقل، تجمع حروفًا وأرقام�
 const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, "0")).join("");
 // «/a» is the short form of the activation page, for a text message
 const linkOf = (token: string) => `${window.location.origin}/a#${token}`;
-const messageOf = (name: string, url: string) => `أ. ${name}\nفعّل حسابك في منصة مدرسة ابن تيمية واختر كلمة سرك (الرابط صالح 48 ساعة ولمرة واحدة):\n${url}`;
+const messageOf = (r: Row, url: string) => `أ. ${r.name}\nفعّل حسابك في منصة مدرسة ابن تيمية واختر كلمة سرك (الرابط صالح ${r.role === "teacher" ? "7 أيام" : "48 ساعة"} ولمرة واحدة):\n${url}`;
 
 function NewPassword({ value, confirm, onChange, onConfirm }: { value: string; confirm: string; onChange: (v: string) => void; onConfirm: (v: string) => void }) {
     return <>
@@ -98,18 +98,22 @@ export function AccountActivate() {
         catch { setError("تعذّر الاتصال؛ حاول مرة أخرى"); }
         finally { setBusy(false); }
     };
-    const role = ({ coordinator: "منسق", deputy: "النائب الأكاديمي", admin: "مسؤول المنصة" } as Record<string, string>)[info?.role] ?? "";
+    const role = ({ teacher: "معلم", coordinator: "منسق", deputy: "النائب الأكاديمي", admin: "مسؤول المنصة" } as Record<string, string>)[info?.role] ?? "";
+    const signIn = [info?.email, info?.phone].filter(Boolean);
     return (
         <main dir="rtl" className="min-h-screen bg-qatar-gray-bg flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4 shadow-[0_1px_2px_rgba(0,0,0,.04),0_12px_32px_rgba(92,21,35,.10)]">
                 <h1 className="text-xl font-black text-qatar-maroon flex items-center gap-2"><ShieldCheck className="w-6 h-6"/>تفعيل حسابك</h1>
                 {done ? <>
-                    <p role="status" className="rounded-xl bg-emerald-50 text-emerald-800 p-4 text-sm font-bold leading-7">تم تفعيل حسابك. ادخل المنصة باسمك وكلمة السر التي اخترتها.</p>
+                    <p role="status" className="rounded-xl bg-emerald-50 text-emerald-800 p-4 text-sm font-bold leading-7">
+                        تم تفعيل حسابك. {info?.role === "teacher" ? "ادخل المنصة بصفة «معلم» ببريدك الرسمي أو رقم جوالك مع كلمة السر التي اخترتها." : "ادخل المنصة باسمك وكلمة السر التي اخترتها."}
+                    </p>
                     <a href="/" className={`${primary} w-full`}>الدخول إلى المنصة</a>
                 </> : info === undefined ? <p className="text-sm text-slate-500">جاري التحقق من الرابط…</p>
                 : !info ? <p className="text-sm font-bold text-slate-700 leading-7">الرابط منتهي أو استُخدم من قبل. اطلب رابطًا جديدًا من النائب الأكاديمي.</p>
                 : <form className="space-y-3" onSubmit={e => { e.preventDefault(); void submit(); }}>
                     <p className="text-sm text-slate-700 leading-7">الحساب: <strong>{info.name}</strong> ({role}). اختر كلمة سر لا يعرفها غيرك؛ هذا الرابط يعمل مرة واحدة.</p>
+                    {signIn.length > 0 && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-700 leading-6">ستدخل بعد التفعيل بـ: <bdi dir="ltr" className="font-black">{signIn.join("  /  ")}</bdi></p>}
                     <NewPassword value={next} confirm={confirm} onChange={setNext} onConfirm={setConfirm}/>
                     {error && <p role="alert" className="text-xs font-bold text-rose-700">{error}</p>}
                     <button className={`${primary} w-full`} disabled={busy || next.length < 8 || next !== confirm}>{busy && <Loader2 className="w-4 h-4 animate-spin"/>}تفعيل الحساب</button>
@@ -119,15 +123,17 @@ export function AccountActivate() {
     );
 }
 
-type Row = { role: string; visitorId: string | null; name: string; detail: string; activatedAt: number | null; linkExpiresAt: number | null; phone: string; email: string };
-const keyOf = (r: Row) => `${r.role}:${r.visitorId ?? ""}`;
+type Row = { role: string; ownerId: string | null; name: string; group: string; detail: string; activatedAt: number | null; linkExpiresAt: number | null; phone: string; email: string };
+const keyOf = (r: Row) => `${r.role}:${r.ownerId ?? ""}`;
 const day = (at: number) => new Date(at).toLocaleDateString("ar-QA", { timeZone: "Asia/Qatar" });
 
 // The deputy's panel: who has activated, links for one person or for everyone
-// still without an account, and retiring the shared coordinator code
+// in view still without an account, and retiring the shared coordinator code
 export function AccountsPanel() {
-    const data = useSupervisionQuery(ACC.status) as { rows: Row[]; sharedCode: boolean; isAdmin: boolean } | undefined;
-    const createActivation = useSupervisionMutation(ACC.createActivation), setFor = useSupervisionMutation(ACC.setFor), retire = useSupervisionMutation(ACC.retireSharedCode);
+    const data = useSupervisionQuery(ACC.status) as { rows: Row[]; sharedCode: boolean; teacherSharedCode: boolean; isAdmin: boolean } | undefined;
+    const createActivations = useSupervisionMutation(ACC.createActivations), setFor = useSupervisionMutation(ACC.setFor), retire = useSupervisionMutation(ACC.retireSharedCode);
+    const [group, setGroup] = useState("الإدارة والمنسقون");
+    const [search, setSearch] = useState("");
     // the links made in this sitting: a link is shown once, only its hash is stored
     const [links, setLinks] = useState<Record<string, string>>({});
     const [busy, setBusy] = useState("");
@@ -137,17 +143,18 @@ export function AccountsPanel() {
     if (!data) return null;
 
     const manageable = (r: Row) => r.role !== "admin" || data.isAdmin;
-    const pending = data.rows.filter(r => r.role === "coordinator" && !r.activatedAt);
+    const groups = [...new Set(data.rows.map(r => r.group))];
+    const teachers = data.rows.filter(r => r.role === "teacher");
+    const shown = data.rows.filter(r => (group === "all" || r.group === group) && r.name.includes(search.trim()));
+    // everyone in view who has to be sent a link: the coordinators and teachers not yet activated
+    const pending = shown.filter(r => (r.role === "coordinator" || r.role === "teacher") && !r.activatedAt);
+    const coordinatorsLeft = data.rows.filter(r => r.role === "coordinator" && !r.activatedAt).length;
     const make = async (rows: Row[], name: string) => {
         setBusy(name); setError("");
         try {
-            const made: Record<string, string> = {};
-            for (const r of rows) {
-                const token = newToken();
-                await createActivation({ role: r.role, visitorId: r.visitorId ?? undefined, token });
-                made[keyOf(r)] = linkOf(token);
-            }
-            setLinks(l => ({ ...l, ...made }));
+            const items = rows.map(r => ({ r, token: newToken() }));
+            await createActivations({ items: items.map(({ r, token }) => ({ role: r.role, ownerId: r.ownerId ?? undefined, token })) });
+            setLinks(l => ({ ...l, ...Object.fromEntries(items.map(({ r, token }) => [keyOf(r), linkOf(token)])) }));
         } catch (e) { setError(errorText(e, "تعذّر إنشاء الرابط؛ حاول مرة أخرى")); }
         finally { setBusy(""); }
     };
@@ -157,25 +164,34 @@ export function AccountsPanel() {
         const { downloadWorkbook } = await import("../lib/excelExport");
         await downloadWorkbook("روابط تفعيل الحسابات", [{ name: "Sheet1", title: "",
             columns: [{ header: "Phone Number", width: 16 }, { header: "Message Body", width: 100 }, { header: "الاسم", width: 34 }, { header: "البريد", width: 30 }],
-            rows: ready.map(r => [r.phone.replace(/\D/g, ""), messageOf(r.name, links[keyOf(r)]), r.name, r.email]) }]);
+            rows: ready.map(r => [r.phone.replace(/\D/g, ""), messageOf(r, links[keyOf(r)]), r.name, r.email]) }]);
     };
 
     return (
         <section className="rounded-2xl bg-white shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(92,21,35,.07)] overflow-hidden" aria-labelledby="accounts-title">
             <div className="p-4 flex items-center gap-2 flex-wrap border-b border-slate-100">
                 <h3 id="accounts-title" className="font-black text-slate-800 flex items-center gap-2 ml-auto"><ShieldCheck className="w-5 h-5 text-qatar-maroon"/>الحسابات الشخصية</h3>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="بحث بالاسم" aria-label="بحث بالاسم" className="w-40! border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-qatar-maroon"/>
+                <select value={group} onChange={e => setGroup(e.target.value)} aria-label="المجموعة" className="w-56! border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-qatar-maroon">
+                    <option value="all">الكل ({data.rows.length})</option>
+                    {groups.map(g => <option key={g} value={g}>{g} ({data.rows.filter(r => r.group === g).length})</option>)}
+                </select>
                 <button className={primary} disabled={!!busy || !pending.length} onClick={() => make(pending, "all")}>
                     {busy === "all" ? <Loader2 className="w-4 h-4 animate-spin"/> : <Link2 className="w-4 h-4"/>}روابط لكل من لم يفعّل ({pending.length})
                 </button>
             </div>
             <p className="px-4 pt-3 text-xs text-slate-600 leading-6">
-                لكل شخص كلمة سر يختارها بنفسه من رابط يعمل مرة واحدة خلال 48 ساعة. الرابط يظهر هنا وقت إنشائه فقط؛ إنشاء رابط جديد يلغي السابق، ويُستخدم أيضًا لمن نسي كلمة سره.
+                لكل شخص كلمة سر يختارها بنفسه من رابط يعمل مرة واحدة (48 ساعة للمنسقين والإدارة، و7 أيام للمعلمين). الرابط يظهر هنا وقت إنشائه فقط؛ إنشاء رابط جديد يلغي السابق، ويُستخدم أيضًا لمن نسي كلمة سره.
+                المعلم يدخل ببريده الرسمي أو رقم جواله. فعّل حتى الآن {teachers.filter(r => r.activatedAt).length} من {teachers.length} معلمًا.
             </p>
+            {data.teacherSharedCode && <p className="mx-4 mt-3 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs font-bold text-amber-900 leading-6">
+                رمز المعلمين المشترك ما زال يعمل، فيدخل به أي معلم بلا اسم. بعد أن يفعّل المعلمون حساباتهم يوقفه مسؤول المنصة من «دخول المعلمين» في الإعدادات.
+            </p>}
             {data.sharedCode && (
                 <div className="mx-4 mt-3 rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-center gap-3 flex-wrap text-xs font-bold text-amber-900">
-                    <span className="flex-1 min-w-56 leading-6">رمز المنسقين المشترك ما زال يعمل لمن لم يفعّل حسابه ({pending.length}). ألغِه بعد أن يفعّل الجميع.</span>
+                    <span className="flex-1 min-w-56 leading-6">رمز المنسقين المشترك ما زال يعمل لمن لم يفعّل حسابه ({coordinatorsLeft}). ألغِه بعد أن يفعّل الجميع.</span>
                     <button className={ghost} disabled={!!busy} onClick={async () => {
-                        if (!window.confirm(pending.length ? `ما زال ${pending.length} منسق بلا حساب، ولن يستطيعوا الدخول بعد الإلغاء إلا برابط تفعيل. إلغاء الرمز المشترك؟` : "إلغاء رمز المنسقين المشترك نهائيًا؟")) return;
+                        if (!window.confirm(coordinatorsLeft ? `ما زال ${coordinatorsLeft} منسق بلا حساب، ولن يستطيعوا الدخول بعد الإلغاء إلا برابط تفعيل. إلغاء الرمز المشترك؟` : "إلغاء رمز المنسقين المشترك نهائيًا؟")) return;
                         setBusy("retire"); setError("");
                         try { await retire({}); } catch (e) { setError(errorText(e, "تعذّر الإلغاء")); } finally { setBusy(""); }
                     }}>إلغاء الرمز المشترك</button>
@@ -187,7 +203,7 @@ export function AccountsPanel() {
                 <div className="mx-4 mt-3 rounded-xl border border-slate-200 p-3 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-black text-slate-800 ml-auto">روابط جاهزة للإرسال ({ready.length})</p>
-                        <button className={ghost} onClick={() => copy(ready.map(r => messageOf(r.name, links[keyOf(r)])).join("\n\n"), "all")}><Copy className="w-3.5 h-3.5"/>{copied === "all" ? "تم النسخ" : "نسخ كل الرسائل"}</button>
+                        <button className={ghost} onClick={() => copy(ready.map(r => messageOf(r, links[keyOf(r)])).join("\n\n"), "all")}><Copy className="w-3.5 h-3.5"/>{copied === "all" ? "تم النسخ" : "نسخ كل الرسائل"}</button>
                         <button className={ghost} onClick={exportSheet}><FileSpreadsheet className="w-3.5 h-3.5"/>ملف الرسائل (Excel)</button>
                     </div>
                     <p className="text-[11px] font-bold text-amber-800">انسخها أو نزّل الملف الآن: الروابط لا تظهر مرة أخرى بعد إغلاق الصفحة.</p>
@@ -200,7 +216,7 @@ export function AccountsPanel() {
                         <tr><th scope="col" className="p-3 font-black">الاسم</th><th scope="col" className="p-3 font-black">الحساب</th><th scope="col" className="p-3 font-black">الرابط</th><th scope="col" className="p-3"><span className="sr-only">إجراءات</span></th></tr>
                     </thead>
                     <tbody>
-                        {data.rows.map((r, i) => {
+                        {shown.map((r, i) => {
                             const k = keyOf(r), link = links[k];
                             return (
                                 <tr key={k} className={`border-t border-slate-100 transition-colors hover:bg-qatar-maroon/5 ${i % 2 ? "bg-slate-50/60" : ""}`}>
@@ -209,7 +225,7 @@ export function AccountsPanel() {
                                     <td className="p-3 text-xs">
                                         {link ? <span className="flex items-center gap-2">
                                             <input readOnly dir="ltr" value={link} onFocus={e => e.target.select()} aria-label={`رابط تفعيل ${r.name}`} className="w-48 border border-slate-200 rounded-lg px-2 py-1.5 text-[11px] bg-white"/>
-                                            <button className={ghost} onClick={() => copy(messageOf(r.name, link), k)}>{copied === k ? "تم النسخ" : "نسخ الرسالة"}</button>
+                                            <button className={ghost} onClick={() => copy(messageOf(r, link), k)}>{copied === k ? "تم النسخ" : "نسخ الرسالة"}</button>
                                         </span> : r.linkExpiresAt ? <span className="font-bold text-slate-500">رابط مُرسل، ينتهي {day(r.linkExpiresAt)}</span> : ""}
                                     </td>
                                     <td className="p-3">
@@ -226,7 +242,7 @@ export function AccountsPanel() {
                     </tbody>
                 </table>
             </div>
-            {setting && <SetFor row={setting} onClose={() => setSetting(null)} save={password => setFor({ role: setting.role, visitorId: setting.visitorId ?? undefined, password })}/>}
+            {setting && <SetFor row={setting} onClose={() => setSetting(null)} save={password => setFor({ role: setting.role, ownerId: setting.ownerId ?? undefined, password })}/>}
         </section>
     );
 }

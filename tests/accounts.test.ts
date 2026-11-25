@@ -12,7 +12,9 @@ async function fixture() {
     const ids = await t.run(async ctx => {
         const schoolId = await ctx.db.insert("schools", { name: "مدرسة اختبار", code: "TEST", createdAt: "2026-09-01", deputyPin: "deputy-code", coordinatorPin: "shared-code", adminPin: "admin-code" });
         const person = (fullName: string) => ctx.db.insert("supervisors", { schoolId, fullName, role: "coordinator", subjects: ["العلوم"], isActive: true });
-        return { schoolId, first: await person("منسق أول"), second: await person("منسق ثان") };
+        const teacher = (fullName: string, email: string, phone: string) => ctx.db.insert("schoolTeachers", { schoolId, fullName, department: "العلوم", email, phone, isActive: true });
+        return { schoolId, first: await person("منسق أول"), second: await person("منسق ثان"),
+            teacher: await teacher("معلم أول", "first@school.qa", "55001122"), colleague: await teacher("معلم ثان", "second@school.qa", "55003344") };
     });
     const login = (role: string, pin: string, token: string, visitorId?: any) => t.mutation(A.supervisionSessions.login, { role, visitorId, name: "x", pin, token });
     return { t, ...ids, login };
@@ -43,13 +45,13 @@ describe("personal accounts", () => {
         await f.login("coordinator", "shared-code", hex("b"), f.first);
         const link = hex("d");
         // a coordinator cannot issue links, see the accounts, or claim an account from inside
-        await expect(f.t.mutation(A.accounts.createActivation, { sessionToken: hex("b"), role: "coordinator", visitorId: f.second, token: link })).rejects.toThrow();
+        await expect(f.t.mutation(A.accounts.createActivations, { sessionToken: hex("b"), items: [{ role: "coordinator", ownerId: f.second, token: link }] })).rejects.toThrow();
         await expect(f.t.query(A.accounts.status, { sessionToken: hex("b") })).rejects.toThrow();
         await expect(f.t.mutation(A.supervisionSessions.changePassword, { token: hex("b"), current: "shared-code", next: "Claimed2026" })).rejects.toThrow();
         // the admin's account is the admin's own
-        await expect(f.t.mutation(A.accounts.createActivation, { sessionToken: hex("a"), role: "admin", token: link })).rejects.toThrow();
+        await expect(f.t.mutation(A.accounts.createActivations, { sessionToken: hex("a"), items: [{ role: "admin", token: link }] })).rejects.toThrow();
 
-        await f.t.mutation(A.accounts.createActivation, { sessionToken: hex("a"), role: "coordinator", visitorId: f.first, token: link });
+        await f.t.mutation(A.accounts.createActivations, { sessionToken: hex("a"), items: [{ role: "coordinator", ownerId: f.first, token: link }] });
         expect(await f.t.query(A.supervisionSessions.activationInfo, { token: link })).toEqual({ name: "منسق أول", role: "coordinator" });
         expect(await f.t.query(A.supervisionSessions.activationInfo, { token: hex("e") })).toBeNull();
         expect((await f.t.mutation(A.supervisionSessions.activate, { token: link, password: "12345678" })).error).toBeTruthy();
@@ -71,7 +73,47 @@ describe("personal accounts", () => {
         expect((await f.login("coordinator", "shared-code", hex("5"), f.second)).error).toBeTruthy();
         expect(await f.t.query(A.supervisionSessions.current, { token: hex("4") })).toBeNull();
         // the deputy can set a password for someone, who then signs in with it
-        await f.t.mutation(A.accounts.setFor, { sessionToken: hex("a"), role: "coordinator", visitorId: f.second, password: "Second2026" });
+        await f.t.mutation(A.accounts.setFor, { sessionToken: hex("a"), role: "coordinator", ownerId: f.second, password: "Second2026" });
         expect((await f.login("coordinator", "Second2026", hex("6"), f.second)).session).toBeTruthy();
+    });
+
+    it("lets a teacher sign in as themselves, by e-mail or mobile number, once their link is used", async () => {
+        const f = await fixture();
+        await f.t.run(ctx => ctx.db.patch(f.schoolId, { teacherPin: "teachers-code" }));
+        await f.login("deputy", "deputy-code", hex("a"));
+        const own = (identifier: string, pin: string, token: string) => f.t.mutation(A.supervisionSessions.login, { role: "teacher", name: "x", pin, token, identifier });
+        // no account yet: the shared code is not a personal password
+        expect((await own("first@school.qa", "teachers-code", hex("1"))).error).toBeTruthy();
+        // links for both teachers in one go
+        await f.t.mutation(A.accounts.createActivations, { sessionToken: hex("a"), items: [
+            { role: "teacher", ownerId: f.teacher, token: hex("d") }, { role: "teacher", ownerId: f.colleague, token: hex("e") }] });
+        expect(await f.t.query(A.supervisionSessions.activationInfo, { token: hex("d") })).toEqual({ name: "معلم أول", role: "teacher", email: "first@school.qa", phone: "55001122" });
+        expect((await f.t.mutation(A.supervisionSessions.activate, { token: hex("d"), password: "Teacher2026" })).ok).toBe(true);
+
+        const session = await own("FIRST@school.qa ", "Teacher2026", hex("2"));
+        expect(session.session.name).toBe("معلم أول");
+        expect((await own("+974 5500 1122", "Teacher2026", hex("3"))).session.name).toBe("معلم أول");
+        expect((await f.t.query(A.supervisionSessions.current, { token: hex("2") })).personal).toBe(true);
+        // a colleague's identifier, an unknown one, and a too-short number all fail the same way
+        expect((await own("second@school.qa", "Teacher2026", hex("4"))).error).toBeTruthy();
+        expect((await own("nobody@school.qa", "Teacher2026", hex("5"))).error).toBeTruthy();
+        expect((await own("1122", "Teacher2026", hex("6"))).error).toBeTruthy();
+        // a teacher is still kept out of supervision and of other people's accounts
+        await expect(f.t.query(A.accounts.status, { sessionToken: hex("2") })).rejects.toThrow();
+        await expect(f.t.query(A.teacherEvaluations.list, { sessionToken: hex("2") })).rejects.toThrow();
+
+        // they change their own password; retiring the shared code leaves their session alone
+        expect((await f.t.mutation(A.supervisionSessions.changePassword, { token: hex("2"), current: "Teacher2026", next: "Changed2026" })).ok).toBe(true);
+        expect(await f.t.query(A.supervisionSessions.current, { token: hex("3") })).toBeNull();
+        await f.t.run(ctx => ctx.db.patch(f.schoolId, { teacherPin: undefined }));
+        expect((await f.t.query(A.supervisionSessions.current, { token: hex("2") })).name).toBe("معلم أول");
+        expect((await f.t.mutation(A.supervisionSessions.login, { role: "teacher", name: "x", pin: "teachers-code", token: hex("7") })).error).toBeTruthy();
+        // a teacher who leaves loses the account's door
+        await f.t.run(ctx => ctx.db.patch(f.teacher, { isActive: false }));
+        expect(await f.t.query(A.supervisionSessions.current, { token: hex("2") })).toBeNull();
+        expect((await own("first@school.qa", "Changed2026", hex("8"))).error).toBeTruthy();
+
+        const status = await f.t.query(A.accounts.status, { sessionToken: hex("a") });
+        expect(status.rows.filter((r: any) => r.role === "teacher").map((r: any) => [r.name, !!r.linkExpiresAt])).toEqual([["معلم ثان", true]]);
     });
 });

@@ -24,25 +24,31 @@ export const passwordProblem = (password: string) =>
     password.length < 8 || password.length > 72 ? "اختر كلمة سر من 8 أحرف على الأقل"
     : !/\p{L}/u.test(password) || !/\d/.test(password) ? "اجعل كلمة السر تجمع حروفًا وأرقامًا" : "";
 
-export const accountOf = (ctx: any, schoolId: any, role: string, visitorId?: any) =>
-    role === "teacher" || role === "supervisor" ? null : ctx.db.query("supervisionAccounts")
-        .withIndex("by_owner", (q: any) => q.eq("schoolId", schoolId).eq("role", role).eq("visitorId", role === "coordinator" ? visitorId : undefined)).first();
+// `ownerId`: the coordinator's row in «supervisors», or the teacher's in «schoolTeachers»
+export const accountOf = (ctx: any, schoolId: any, role: string, ownerId?: any) =>
+    role === "supervisor" || (role === "teacher" && !ownerId) ? null
+    : role === "teacher" ? ctx.db.query("supervisionAccounts").withIndex("by_teacher", (q: any) => q.eq("teacherId", ownerId)).first()
+    : ctx.db.query("supervisionAccounts")
+        .withIndex("by_owner", (q: any) => q.eq("schoolId", schoolId).eq("role", role).eq("visitorId", role === "coordinator" ? ownerId : undefined)).first();
 
 // A fresh salt and hash for this owner, replacing any earlier password
-export async function setPassword(ctx: any, schoolId: any, role: string, visitorId: any, password: string) {
+export async function setPassword(ctx: any, schoolId: any, role: string, ownerId: any, password: string) {
     const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), x => x.toString(16).padStart(2, "0")).join("");
     const value = { salt, passwordHash: await hashPassword(password, salt), updatedAt: Date.now() };
-    const account = await accountOf(ctx, schoolId, role, visitorId);
+    const account = await accountOf(ctx, schoolId, role, ownerId);
     if (account) await ctx.db.patch(account._id, value);
-    else await ctx.db.insert("supervisionAccounts", { schoolId, role, visitorId: role === "coordinator" ? visitorId : undefined, ...value });
+    else await ctx.db.insert("supervisionAccounts", { schoolId, role, ...value,
+        ...(role === "coordinator" ? { visitorId: ownerId } : role === "teacher" ? { teacherId: ownerId } : {}) });
     return value.passwordHash;
 }
 
 // What a session was opened with: the person's own password once they have
-// one, otherwise the role's code. A session dies when that changes.
-export async function credentialOf(ctx: any, school: any, role: string, visitor: any) {
-    const account = await accountOf(ctx, school._id, role, visitor?._id);
-    const pin = rolePin(school, role, visitor);
+// one, otherwise the role's code. A session dies when that changes. `person`
+// is the coordinator or the teacher signed in as themselves; a teacher's own
+// session never falls back to the shared teacher code.
+export async function credentialOf(ctx: any, school: any, role: string, person: any) {
+    const account = await accountOf(ctx, school._id, role, person?._id);
+    const pin = role === "teacher" ? (person ? "" : rolePin(school, role)) : rolePin(school, role, person);
     return { account, credential: account ? account.passwordHash as string : pin ? await digest(pin) : "" };
 }
 
@@ -54,8 +60,10 @@ export async function requireSession(ctx: any, token?: string, deputy = false) {
     if (!session || session.expiresAt <= Date.now()) throw new ConvexError("انتهت الجلسة؛ سجّل الدخول مرة أخرى");
     const school = await ctx.db.get(session.schoolId);
     const visitor = session.visitorId ? await ctx.db.get(session.visitorId) : null;
-    const { account, credential } = school ? await credentialOf(ctx, school, session.role, visitor) : { account: null, credential: "" };
+    const teacher = session.teacherId ? await ctx.db.get(session.teacherId) : null;
+    const { account, credential } = school ? await credentialOf(ctx, school, session.role, visitor ?? teacher) : { account: null, credential: "" };
     if (session.role === "supervisor" || !school || (session.visitorId && (!visitor || visitor.isActive === false || visitor.role !== session.role))
+        || (session.teacherId && (!teacher || teacher.isActive === false || teacher.schoolId !== school._id))
         || !credential || session.credentialHash !== credential) {
         throw new ConvexError("تغيّرت صلاحيات الدخول؛ سجّل الدخول مرة أخرى");
     }

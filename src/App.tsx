@@ -141,7 +141,7 @@ function ProtectedApp() {
       <a href="#main-content" className="skip-link">انتقل إلى المحتوى</a>
       <Navbar />
       <div className="no-print max-w-7xl mx-auto px-4 flex justify-between items-center text-xs text-slate-600 py-2"><span>{platformUser?.name}</span><span>
-        {platformUser && platformUser.role !== "teacher" && <button className="text-qatar-maroon px-3 py-2 underline" onClick={() => setChangingPassword(true)}>تغيير كلمة السر</button>}
+        {(platformUser as any)?.personal && <button className="text-qatar-maroon px-3 py-2 underline" onClick={() => setChangingPassword(true)}>تغيير كلمة السر</button>}
         <button className="text-qatar-maroon px-3 py-2 underline" onClick={clearStoredRole}>تسجيل الخروج</button></span></div>
       {changingPassword && <OwnPassword onClose={() => setChangingPassword(false)}/>}
       <main id="main-content" className={`${isPrintPage ? "" : "workspace"} max-w-7xl mx-auto py-4 lg:py-6 px-3 sm:px-6 lg:px-8 pb-28 lg:pb-10`}>

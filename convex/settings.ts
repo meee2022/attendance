@@ -28,7 +28,8 @@ export const setTeacherAccess = adminMutation({
         if (args.enabled && [school.adminPin, school.deputyPin, school.coordinatorPin].includes(args.newPin!)) throw new Error("اختر رمزًا مختلفًا عن رموز الإدارة والإشراف");
         await ctx.db.patch(school._id, { teacherPin: args.enabled ? args.newPin : undefined });
         const sessions = await ctx.db.query("supervisionSessions").collect();
-        for (const session of sessions) if (session.schoolId === school._id && session.role === "teacher") await ctx.db.delete(session._id);
+        // the sessions opened with the shared code; a teacher's own account is untouched
+        for (const session of sessions) if (session.schoolId === school._id && session.role === "teacher" && !session.teacherId) await ctx.db.delete(session._id);
         return null;
     },
 });

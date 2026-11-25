@@ -1,9 +1,13 @@
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
+import type { ReactElement } from "react";
 import { OfficialVisitForm, prepareOfficialForm } from "../pages/visits/VisitFormPrint";
 
 // Render the existing official form, rather than maintaining a second PDF template.
-export async function createVisitPdf(data: any): Promise<Blob> {
+export const createVisitPdf = (data: any) => createFormPdf(<OfficialVisitForm data={data} toolbar={false}/>);
+
+// Any printed form made of «.form-page» sheets, one PDF page per sheet
+export async function createFormPdf(form: ReactElement): Promise<Blob> {
     const [{ toPng }, { jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
     const host = document.createElement("div");
     host.setAttribute("aria-hidden", "true");
@@ -11,7 +15,7 @@ export async function createVisitPdf(data: any): Promise<Blob> {
     document.body.appendChild(host);
     const root = createRoot(host);
     try {
-        flushSync(() => root.render(<OfficialVisitForm data={data} toolbar={false}/>));
+        flushSync(() => root.render(form));
         await document.fonts.ready;
         for (const img of host.querySelectorAll("img")) {
             await withTimeout(img.decode(), 30_000, "تحميل صور الاستمارة"); // Fail visibly instead of archiving a form with a missing official page.

@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
+import { usePages } from "./usePages";
 import type { CSSProperties, ReactNode } from "react";
 import { dayName, formatDate } from "../../../convex/visitMath";
 import { SUPPORT_DOMAIN_LABELS } from "../../../convex/visitCriteria";
@@ -49,24 +50,7 @@ export default function SupportVisitPages({ data }: { data: any }) {
     // one last item for the notes and signatures. A page too tall even at
     // MIN_SCALE hands its last item to the next page, until everything fits.
     const tail = ordered.length;
-    const [starts, setStarts] = useState([0, PAGE_ONE_ROWS]);
-    const bodies = useRef<(HTMLDivElement | null)[]>([]);
-    useLayoutEffect(() => {
-        for (let p = 0; p < starts.length; p++) {
-            const el = bodies.current[p];
-            const end = starts[p + 1] ?? tail + 1;
-            if (!el || el.scrollHeight * 72 / 96 <= BODY_HEIGHT / MIN_SCALE || end - starts[p] < 2) continue;
-            setStarts(p + 1 < starts.length ? starts.map((s, i) => (i === p + 1 ? s - 1 : s)) : [...starts, end - 1]);
-            return;
-        }
-    });
-    // fonts arriving can change every row's height: lay the pages out again
-    useLayoutEffect(() => {
-        const reset = () => setStarts([0, PAGE_ONE_ROWS]);
-        void document.fonts.ready.then(reset);
-        window.addEventListener("visit-form-layout", reset);
-        return () => window.removeEventListener("visit-form-layout", reset);
-    }, []);
+    const { starts, bodyOf } = usePages(tail + 1, BODY_HEIGHT / MIN_SCALE, [0, PAGE_ONE_ROWS]);
 
     const rows = (list: Criterion[]) => list.map((c, i) => {
         // the domain cell spans its rows on each page; a domain carried over
@@ -132,7 +116,7 @@ export default function SupportVisitPages({ data }: { data: any }) {
     </>;
 
     return <>
-        <Page bodyRef={el => { bodies.current[0] = el; }}>
+        <Page bodyRef={bodyOf(0)}>
             <table style={{ width: "487pt", margin: "0 auto", borderCollapse: "collapse" }}>
                 <tbody><tr><td style={{ ...band, fontSize: "20pt", padding: "1pt 4pt" }}>12 - استمارات متابعة قسم التربية الخاصة</td></tr></tbody>
             </table>
@@ -174,7 +158,7 @@ export default function SupportVisitPages({ data }: { data: any }) {
         {starts.slice(1).map((_, i) => {
             const { list, hasTail } = pageItems(i + 1);
             return (
-                <Page key={i} bodyRef={el => { bodies.current[i + 1] = el; }}>
+                <Page key={i} bodyRef={bodyOf(i + 1)}>
                     {list.length > 0 && <table style={table}>{colgroup}<tbody>{rows(list)}</tbody></table>}
                     {hasTail && ending}
                 </Page>

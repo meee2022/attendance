@@ -378,6 +378,45 @@ export default defineSchema({
     }).index("by_school", ["schoolId"]),
 
     // سجل المراجعات (audit log)
+    // ── تقييم الأداء السنوي (استمارة تقييم أداء المعلم) ────────────────────
+    // What the appraisal form prints about the teacher. Kept apart from
+    // schoolTeachers, which other pages read whole.
+    teacherProfiles: defineTable({
+        schoolId: v.id("schools"), teacherId: v.id("schoolTeachers"),
+        employeeNo: v.optional(v.string()), personalNo: v.optional(v.string()), hireDate: v.optional(v.string()),
+        jobTitle: v.optional(v.string()), nationality: v.optional(v.string()),
+    }).index("by_teacher", ["teacherId"]),
+    teacherEvaluations: defineTable({
+        schoolId: v.id("schools"), academicYear: v.string(),
+        // absent on an archived form of a teacher who has left
+        teacherId: v.optional(v.id("schoolTeachers")),
+        teacherName: v.string(), department: v.string(),
+        profile: v.object({ employeeNo: v.string(), personalNo: v.string(), hireDate: v.string(), jobTitle: v.string(), nationality: v.string() }),
+        penalties: v.array(v.object({ type: v.string(), reason: v.string(), date: v.string() })),
+        courses: v.array(v.object({ name: v.string(), place: v.string(), duration: v.string(), date: v.string() })),
+        scores: v.string(),                 // JSON { [indicatorId]: mark }
+        total: v.number(),
+        status: v.union(v.literal("draft"), v.literal("sent"), v.literal("approved")),
+        evaluatorId: v.optional(v.id("supervisors")), evaluatorName: v.string(),
+        evaluatorRole: v.union(v.literal("coordinator"), v.literal("deputy")),
+        // The form as the coordinator sent it: the deputy then edits the form
+        // itself, and the coordinator can still open what they wrote
+        coordinatorVersion: v.optional(v.object({
+            scores: v.string(), total: v.number(), at: v.number(), name: v.string(),
+            penalties: v.array(v.object({ type: v.string(), reason: v.string(), date: v.string() })),
+            courses: v.array(v.object({ name: v.string(), place: v.string(), duration: v.string(), date: v.string() })),
+        })),
+        approval: v.optional(v.object({ name: v.string(), at: v.number() })),
+        teacherSign: v.optional(v.object({ at: v.number(), signatureId: v.id("_storage"), comment: v.optional(v.string()) })),
+        archived: v.optional(v.boolean()),  // a past year's form, kept for comparison
+        createdAt: v.number(), updatedAt: v.number(),
+    }).index("by_school_year", ["schoolId", "academicYear"]).index("by_teacher", ["teacherId"]),
+    // The private link a teacher reads and signs their approved form through
+    evaluationLinks: defineTable({
+        schoolId: v.id("schools"), evaluationId: v.id("teacherEvaluations"), tokenHash: v.string(),
+        evaluationUpdatedAt: v.number(), expiresAt: v.number(), createdBy: v.string(), revoked: v.boolean(),
+    }).index("by_token", ["tokenHash"]).index("by_evaluation", ["evaluationId"]),
+
     supervisionAuditLog: defineTable({
         schoolId: v.id("schools"),
         visitId: v.optional(v.id("supervisionVisits")),

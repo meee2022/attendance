@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { levelOf, totalOf } from "../../convex/evaluationForm";
 import { getFunctionName } from "convex/server";
 const asCoordinator = new URLSearchParams(location.search).get("as") === "coordinator";
 export const session: any = asCoordinator
@@ -30,8 +31,21 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
     if (name === "visitWorkflow:emailStatus") return { teacherName: "معلم تجريبي", teacherEmail: "teacher@example.com", teacherPhone: null, sends: [] };
     if (name === "visitImports:original") return null;
     if (name === "visitWorkflow:mySignature") return mySignature;
+    if (name === "teacherEvaluations:list") return { academicYear: "2026 - 2027", manager, rows: setup.teachers.map((t: any) => { const e = evaluations[t._id]; return {
+        teacherId: t._id, teacherName: t.fullName, department: t.department, isCoordinator: false, evaluationId: e?._id ?? null, status: e?.status ?? "none",
+        scored: e ? Object.keys(e.scores).length : 0, total: e ? totalOf(e.scores) : null, level: e && Object.keys(e.scores).length === 34 ? levelOf(totalOf(e.scores)) : "",
+        sentTotal: e?.sent?.total ?? null, signed: false, previousTotal: t._id === "t1" ? 88 : null }; }) };
+    if (name === "teacherEvaluations:get") { const t: any = setup.teachers.find((x: any) => x._id === args.teacherId), e = evaluations[args.teacherId]; return {
+        academicYear: "2026 - 2027", manager, teacherName: t.fullName, department: t.department,
+        profile: { employeeNo: "10001", personalNo: "29900000000", hireDate: args.teacherId === "t1" ? "01/09/2015" : "", jobTitle: `مدرس ${t.department}`, nationality: "تجريبي" },
+        evaluation: e ? { ...e, total: totalOf(e.scores), approval: null, signedAt: null, signComment: "" } : null,
+        editable: !e || (e.status !== "approved" && (manager || e.status === "draft")),
+        previous: args.teacherId === "t1" ? { academicYear: "2025 - 2026", total: 88, scores: { "1.1": 2, "1.2": 3 } } : null, principalName: "مدير تجريبي", schoolName: "مدرسة تجريبية" }; }
     return [];
 }
+// the yearly appraisal, kept in the page's memory
+const manager = !new URLSearchParams(location.search).get("as")?.startsWith("coord");
+const evaluations: Record<string, any> = {};
 let mySignature: string | null = new URLSearchParams(location.search).has("signed") ? "/forms/moe-logo.png" : null;
 const changed = () => window.dispatchEvent(new Event("preview-data"));
 const patchVisit = (id: string, patch: any) => { const i = visits.findIndex(v => v._id === id); if (i >= 0) visits[i] = { ...visits[i], ...patch }; changed(); };
@@ -48,6 +62,13 @@ export function useSupervisionMutation(ref: any) { return async (args: any) => {
     if (name === "visitWorkflow:clearTeacherSign") { patchVisit(args.visitId, { teacherSign: null }); return null; }
     if (name === "visitWorkflow:sendToDeputy") { patchVisit(args.visitId, { reviewRequest: { toRole: "deputy", toName: "نائب تجريبي", byName: session.name, at: Date.now() } }); return null; }
     if (name === "supervisionAcknowledgements:create") return null;
+    if (name === "teacherEvaluations:save") { const scores = JSON.parse(args.scores), old = evaluations[args.teacherId];
+        evaluations[args.teacherId] = { _id: `e-${args.teacherId}`, evaluatorName: session.name, evaluatorRole: manager ? "deputy" : "coordinator", ...old, scores, penalties: args.penalties, courses: args.courses, updatedAt: Date.now(),
+            status: args.send && !manager ? "sent" : old?.status ?? "draft", sent: args.send && !manager ? { scores, total: totalOf(scores), at: Date.now(), name: session.name } : old?.sent ?? null };
+        changed(); return { id: `e-${args.teacherId}`, status: evaluations[args.teacherId].status }; }
+    if (name === "teacherEvaluations:approve" || name === "teacherEvaluations:reopen") { const e: any = Object.values(evaluations).find((x: any) => x._id === args.id);
+        e.status = name.endsWith("approve") ? "approved" : "draft"; e.updatedAt = Date.now(); changed(); return null; }
+    if (name === "teacherEvaluations:createLink" || name === "teacherEvaluations:saveProfile") return null;
     if (name === "visits:saveVisit") {
         const id = args.id || `v${Date.now()}`, teacher = setup.teachers.find(t => t._id === args.teacherId);
         const signing = asCoordinator && args.status === "submitted";

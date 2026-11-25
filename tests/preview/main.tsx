@@ -19,6 +19,18 @@ import StudentOpinionsPage from "../../src/pages/StudentOpinionsPage";
 import { ReportView } from "../../src/pages/GuardianReport";
 import { sample } from "./PdfCheck";
 import { FormPreview } from "../../src/pages/visits/TeacherAcknowledgement";
+import EvaluationPages from "../../src/pages/evaluations/EvaluationFormPrint";
+import { FORM_PAGE_CSS } from "../../src/pages/visits/VisitFormPrint";
+import { INDICATORS, levelOf, totalOf } from "../../convex/evaluationForm";
+// ?evalprint: the printed appraisal form with made-up data (&blank: no marks yet)
+if (new URLSearchParams(location.search).has("evalprint")) {
+    const scores = new URLSearchParams(location.search).has("blank") ? {} : Object.fromEntries(INDICATORS.map((i, n) => [i.id, n % 6 ? i.max : i.max - 1]));
+    createRoot(document.getElementById("root")!).render(<div dir="rtl" className="vfp"><style>{FORM_PAGE_CSS}</style><EvaluationPages form={{
+        _id: "e1", teacherName: "معلم تجريبي باسم رباعي", academicYear: "2026 - 2027", schoolName: "مدرسة ابن تيمية الثانوية للبنين", principalName: "مدير تجريبي",
+        profile: { employeeNo: "10001", personalNo: "29900000000", hireDate: "01/09/2015", jobTitle: "مدرس مادة تجريبية", nationality: "تجريبي" },
+        penalties: [], courses: [{ name: "دورة تجريبية", place: "مركز التدريب", duration: "3 أيام", date: "10/2026" }],
+        scores, total: totalOf(scores), level: levelOf(totalOf(scores)), status: "approved", signedAt: null, signatureUrl: null }}/></div>);
+} else
 if (new URLSearchParams(location.search).has("gradesheet")) createRoot(document.getElementById("root")!).render(<GradeCheck/>);
 else
 if (new URLSearchParams(location.search).has("opinions")) createRoot(document.getElementById("root")!).render(<div style={{ padding: 12 }}><StudentOpinionsPage/></div>);

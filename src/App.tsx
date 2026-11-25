@@ -26,6 +26,8 @@ import GuardianReport from "./pages/GuardianReport";
 import { UserCheck } from "lucide-react";
 import VisitsPage from "./pages/visits/VisitsPage";
 import VisitFormPrint from "./pages/visits/VisitFormPrint";
+import EvaluationPrint from "./pages/evaluations/EvaluationPrint";
+import EvaluationSign from "./pages/evaluations/EvaluationSign";
 import GradesPage from "./pages/GradesPage";
 import GradesPrint from "./pages/GradesPrint";
 import GradesSheetPrint from "./pages/GradesSheetPrint";
@@ -155,6 +157,7 @@ function ProtectedApp() {
           <Route path="/supervision"         element={<FeatureRoute featureKey="/supervision"><VisitsPage /></FeatureRoute>} />
           <Route path="/supervision/acknowledge" element={<TeacherAcknowledgement />} />
           <Route path="/supervision/print/:id" element={<VisitFormPrint />} />
+          <Route path="/supervision/evaluation/print/:key" element={<EvaluationPrint />} />
           <Route path="/grades"              element={<FeatureRoute featureKey="/grades"><GradesPage /></FeatureRoute>} />
           <Route path="/grades/print/class" element={<GradesSheetPrint />} />
           <Route path="/grades/print/plan" element={<PlanPrint />} />
@@ -457,6 +460,8 @@ function BottomNav() {
 function App() {
   const { pathname } = useLocation();
   if (pathname === "/supervision/acknowledge") return <TeacherAcknowledgement/>;
+  // a teacher's own appraisal form, read and signed through its private link
+  if (pathname === "/supervision/evaluation-sign") return <EvaluationSign/>;
   // a guardian's report opens from its private link, without signing in;
   // «/r» is the short form sent by SMS
   if (pathname === "/guardian-report" || pathname === "/r") return <GuardianReport/>;

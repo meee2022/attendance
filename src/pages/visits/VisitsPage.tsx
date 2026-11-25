@@ -7,7 +7,7 @@ import { useSupervisionQuery as useQuery, SupervisionBoundary, useSupervisionSes
 // @ts-ignore
 import { api } from "../../../convex/_generated/api";
 import {
-    ClipboardCheck, LayoutDashboard, Plus, Layers, User, BarChart3, Users, LogOut, FileText,
+    ClipboardCheck, LayoutDashboard, Plus, Layers, User, BarChart3, Users, LogOut, FileText, Award,
 } from "lucide-react";
 import { PageHeader, LoadingSpinner } from "../../components/ui";
 import { clearStoredRole } from "../../components/SupervisionPinGate";
@@ -21,13 +21,14 @@ import TeacherFile from "./TeacherFile";
 import VisitsAnalysis from "./VisitsAnalysis";
 import MonthlyReport from "./MonthlyReport";
 import { MySignatureButton, ReviewInbox } from "./VisitWorkflow";
+import Evaluations from "../evaluations/Evaluations";
 
 // One place for the whole supervision cycle. It opens on the overview — who
 // has been visited, who has not, where each department stands — because that
 // is the question the academic deputy comes with; recording a visit is one
 // tab away.
 
-type Tab = "report" | "import" | "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
+type Tab = "evaluation" | "report" | "import" | "dashboard" | "new" | "registry" | "teacher" | "analysis" | "people" | "followup";
 
 export type Session = { role: VisitorRole | "admin"; name: string; visitorId?: string };
 
@@ -96,6 +97,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
         { key: "analysis", label: "التحليل", icon: <BarChart3 className="w-4 h-4"/> },
         { key: "report", label: "التقرير الشهري", icon: <FileText className="w-4 h-4"/> },
         { key: "followup", label: "المتابعة والخطة", icon: <ClipboardCheck className="w-4 h-4"/> },
+        { key: "evaluation", label: "تقييم الأداء السنوي", icon: <Award className="w-4 h-4"/> },
         // Managing the staff list is the deputy's job, not each department's
         ...((session.role === "deputy" || session.role === "admin")
             ? [{ key: "people" as Tab, label: "المعلمون والزائرون", icon: <Users className="w-4 h-4"/> }]
@@ -152,6 +154,7 @@ export function VisitsWorkspace({ setup: fullSetup, visits: allVisits, session, 
             {tab === "followup" && <VisitFollowUp onDirtyChange={setDirty} setup={setup} visits={visits} teacherId={followupTeacher} onOpenTeacher={openTeacher}/>}
             {tab === "analysis" && <VisitsAnalysis setup={setup} visits={visits}/>}
             {tab === "report" && <MonthlyReport setup={setup} visits={visits}/>}
+            {tab === "evaluation" && <Evaluations visits={visits} onDirtyChange={setDirty}/>}
             {tab === "people" && (session.role === "deputy" || session.role === "admin") && <SupervisionTeachers/>}
         </div>
     );

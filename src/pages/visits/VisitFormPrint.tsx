@@ -44,6 +44,23 @@ function usePrintLayout(fit: () => void, deps?: DependencyList) {
     }, deps);
 }
 
+// A4 sheets on a grey desk on screen, and exactly one sheet per page in print
+export const FORM_PAGE_CSS = `
+                @page { size: A4 portrait; margin: 0; }
+                @media print {
+                    .no-print, .skip-link { display: none !important; }
+                    html, body { background: #fff !important; margin: 0 !important; }
+                    /* the app frame keeps a full-height padded shell around print routes */
+                    #main-content { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+                    .min-h-screen { min-height: 0 !important; }
+                    .vfp { background: #fff !important; min-height: 0 !important; padding: 0 !important; }
+                    .form-page { margin: 0 !important; box-shadow: none !important; }
+                }
+                .vfp { background: #e2e8f0; min-height: 100vh; padding-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; contain: strict; break-inside: avoid; }
+                .form-page:last-child { break-after: auto; page-break-after: auto; }
+`;
+
 export async function prepareOfficialForm(root: HTMLElement) {
     await document.fonts.ready;
     await Promise.all([...root.querySelectorAll("img")].map(img => img.decode()));
@@ -389,20 +406,7 @@ export function OfficialVisitForm({ data, toolbar = true, autoPrint = false }: {
 
     return (
         <div ref={root} dir="rtl" className="vfp">
-            <style>{`
-                @page { size: A4 portrait; margin: 0; }
-                @media print {
-                    .no-print, .skip-link { display: none !important; }
-                    html, body { background: #fff !important; margin: 0 !important; }
-                    /* the app frame keeps a full-height padded shell around print routes */
-                    #main-content { padding: 0 !important; margin: 0 !important; max-width: none !important; }
-                    .min-h-screen { min-height: 0 !important; }
-                    .vfp { background: #fff !important; min-height: 0 !important; padding: 0 !important; }
-                    .form-page { margin: 0 !important; box-shadow: none !important; }
-                }
-                .vfp { background: #e2e8f0; min-height: 100vh; padding-bottom: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .form-page { position: relative; width: 210mm; height: 297mm; margin: 16px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); overflow: hidden; break-after: page; page-break-after: always; contain: strict; break-inside: avoid; }
-                .form-page:last-child { break-after: auto; page-break-after: auto; }
+            <style>{FORM_PAGE_CSS + `
                 .form-sheet { position: absolute; left: 0; right: auto; top: ${SHEET_MARGIN}pt; width: ${PAGE_W}pt; transform-origin: top left; }
             `}</style>
 

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useSupervisionMutation, useSupervisionQuery } from "../../lib/supervisionSession";
@@ -35,8 +35,9 @@ export function AcknowledgementControl({ visit, canManage }: { visit: VisitRow; 
     </div>;
 }
 
-// The A4 form scaled to the width of the teacher's screen
-export function FormPreview({ data }: { data: any }) {
+// The A4 form scaled to the width of the teacher's screen: a visit's, or any
+// other printed form passed as children
+export function FormPreview({ data, children }: { data?: any; children?: ReactNode }) {
     const outer = useRef<HTMLDivElement>(null);
     const inner = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState({ k: 1, height: 1160 });
@@ -54,7 +55,7 @@ export function FormPreview({ data }: { data: any }) {
     return <div ref={outer} className="sign-preview rounded-xl border border-slate-200 overflow-hidden" style={{ height: size.height }}>
         <style>{`.sign-preview .vfp { min-height: 0; padding-bottom: 0; } .sign-preview .form-page { margin: 0 auto; box-shadow: none; }`}</style>
         <div ref={inner} style={{ width: 794, transform: `scale(${size.k})`, transformOrigin: "top right" }}>
-            <OfficialVisitForm data={data} toolbar={false}/>
+            {children ?? <OfficialVisitForm data={data} toolbar={false}/>}
         </div>
     </div>;
 }

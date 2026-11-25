@@ -5,6 +5,7 @@ import {internal} from './_generated/api';
 import {v,ConvexError} from 'convex/values';
 import {saveVisitHandler,settingsOf,activeCriteria} from './visits';
 import {computeScores} from './visitMath';
+import {parseScores} from './evaluationForm';
 const I=internal as any;
 // Apply an explicitly reviewed roster atomically; reject concurrent roster edits.
 export const reconcileRoster=internalMutation({args:{schoolId:v.id('schools'),expected:v.string(),rows:v.string(),deactivate:v.array(v.id('schoolTeachers'))},handler:async(ctx,args)=>{
@@ -162,4 +163,29 @@ export const applyRosterChanges=internalMutation({args:{emails:v.array(v.object(
  for(const id of args.deactivate){const t=await ctx.db.get(id);if(!t||!t.isActive)throw new ConvexError('المعلم غير موجود أو غير نشط');schoolId=t.schoolId;await ctx.db.patch(id,{isActive:false});result.push(`${t.fullName}: غير نشط`);}
  if(schoolId)await ctx.db.insert('supervisionAuditLog',{schoolId,action:'roster_reconciled',actorName:'مسؤول المنصة',details:result.join('\n'),timestamp:Date.now()});
  return result;
+}});
+// The appraisal forms kept as Word files before the platform: each teacher's
+// details for the form, and last year's marks as an archive to compare with.
+// Running it again changes nothing already stored.
+export const importEvaluationData=internalMutation({args:{year:v.string(),profiles:v.string(),archive:v.string()},handler:async(ctx,args)=>{
+ const school=await ctx.db.query('schools').first();if(!school)throw new ConvexError('لا توجد مدرسة');
+ const text=(x:any)=>String(x??'').replace(/\s+/g,' ').trim();
+ const profileOf=(p:any)=>({employeeNo:text(p.employeeNo),personalNo:text(p.personalNo),hireDate:text(p.hireDate),jobTitle:text(p.jobTitle),nationality:text(p.nationality)});
+ let profiles=0,archived=0,skipped=0;
+ for(const p of JSON.parse(args.profiles)){
+  const teacher=await ctx.db.get(p.teacherId as any) as any;if(!teacher||teacher.schoolId!==school._id)throw new ConvexError('معلم غير موجود');
+  const existing=await ctx.db.query('teacherProfiles').withIndex('by_teacher',q=>q.eq('teacherId',teacher._id)).first();
+  if(existing)await ctx.db.patch(existing._id,profileOf(p));else await ctx.db.insert('teacherProfiles',{schoolId:school._id,teacherId:teacher._id,...profileOf(p)});
+  profiles++;
+ }
+ const have=await ctx.db.query('teacherEvaluations').withIndex('by_school_year',q=>q.eq('schoolId',school._id).eq('academicYear',args.year)).collect();
+ for(const a of JSON.parse(args.archive)){
+  if(have.some(e=>e.profile.personalNo===text(a.personalNo))){skipped++;continue;}
+  const now=Date.now();
+  await ctx.db.insert('teacherEvaluations',{schoolId:school._id,academicYear:args.year,teacherId:a.teacherId||undefined,teacherName:text(a.name),department:text(a.department),
+   profile:profileOf(a),penalties:a.penalties,courses:a.courses,scores:JSON.stringify(parseScores(JSON.stringify(a.scores))),total:a.total,
+   status:'approved',evaluatorName:'أرشيف استمارات تقييم الأداء',evaluatorRole:'deputy',archived:true,createdAt:now,updatedAt:now});
+  archived++;
+ }
+ return {profiles,archived,skipped};
 }});

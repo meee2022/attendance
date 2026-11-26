@@ -57,9 +57,12 @@ const accountRows: any[] = [
 const manager = !new URLSearchParams(location.search).get("as")?.startsWith("coord");
 const evaluations: Record<string, any> = {};
 // ?reviewing: a form the coordinator sent with full marks, waiting for the deputy
-if (new URLSearchParams(location.search).has("reviewing")) { const s = Object.fromEntries(INDICATORS.map(i => [i.id, i.max]));
+if (new URLSearchParams(location.search).has("reviewing") || new URLSearchParams(location.search).has("approved")) { const s = Object.fromEntries(INDICATORS.map(i => [i.id, i.max]));
     evaluations.t1 = { _id: "e-t1", evaluatorName: "منسق تجريبي", evaluatorRole: "coordinator", scores: s, penalties: [], courses: [], updatedAt: 1, status: "sent",
-        sent: { scores: s, total: 100, at: Date.UTC(2026, 10, 20), name: "منسق تجريبي", penalties: [], courses: [] }, review: null }; }
+        sent: { scores: s, total: 100, at: Date.UTC(2026, 10, 20), name: "منسق تجريبي", penalties: [], courses: [] }, review: null };
+    // ?approved: the deputy lowered 1.1 and approved
+    if (new URLSearchParams(location.search).has("approved")) Object.assign(evaluations.t1, { status: "approved", scores: { ...s, "1.1": 1 }, review: { note: "خُفّضت درجة لعدم وجود دليل.", items: { "1.1": "لا يوجد دليل" } },
+        coordinatorNote: new URLSearchParams(location.search).has("noted") ? { text: "المعلم قدّم أدلة المؤشر 1.1 في ملف الإنجاز، أرجو مراجعة الدرجة.", at: Date.UTC(2026, 10, 25), name: "منسق تجريبي" } : undefined }); }
 let mySignature: string | null = new URLSearchParams(location.search).has("signed") ? "/forms/moe-logo.png" : null;
 const changed = () => window.dispatchEvent(new Event("preview-data"));
 const patchVisit = (id: string, patch: any) => { const i = visits.findIndex(v => v._id === id); if (i >= 0) visits[i] = { ...visits[i], ...patch }; changed(); };
@@ -86,6 +89,8 @@ export function useSupervisionMutation(ref: any) { return async (args: any) => {
         changed(); return { id: `e-${args.teacherId}`, status: evaluations[args.teacherId].status }; }
     if (name === "teacherEvaluations:approve" || name === "teacherEvaluations:reopen") { const e: any = Object.values(evaluations).find((x: any) => x._id === args.id);
         e.status = name.endsWith("approve") ? "approved" : "draft"; e.updatedAt = Date.now(); changed(); return null; }
+    if (name === "teacherEvaluations:noteFromCoordinator" || name === "teacherEvaluations:answerNote") { const e: any = Object.values(evaluations).find((x: any) => x._id === args.id);
+        e.coordinatorNote = args.text ? { text: args.text, at: Date.now(), name: session.name } : { ...e.coordinatorNote, handledAt: Date.now(), handledBy: session.name, reply: args.reply }; changed(); return null; }
     if (name === "teacherEvaluations:remove") { for (const k of Object.keys(evaluations)) if (evaluations[k]._id === args.id) delete evaluations[k]; changed(); return null; }
     if (name === "teacherEvaluations:createLink" || name === "teacherEvaluations:saveProfile") return null;
     if (name === "visits:saveVisit") {

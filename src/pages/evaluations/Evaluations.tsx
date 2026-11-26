@@ -86,6 +86,9 @@ function List({ data, onOpen }: { data: any; onOpen: (id: string) => void }) {
                     </button>
                     {data.manager && <button className={ghost} onClick={exportExcel}><FileSpreadsheet className="w-4 h-4"/>Excel</button>}
                 </div>
+                {data.manager && data.rows.some((r: any) => r.noteOpen) && <p className="px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-xs font-bold text-amber-900">
+                    ملاحظات من المنسقين على تقييمات معتمدة تنتظرك: {data.rows.filter((r: any) => r.noteOpen).length}. افتح الاستمارة المعلَّمة للرد أو التعديل.
+                </p>}
                 {rows.length === 0 ? (
                     <EmptyState icon={<Award className="w-6 h-6"/>} title="لا يوجد معلمون للتقييم"
                         description={search || department ? "غيّر البحث أو القسم." : "يظهر هنا معلمو قسمك. منسق القسم يقيّمه النائب الأكاديمي."}/>
@@ -112,6 +115,7 @@ function List({ data, onOpen }: { data: any; onOpen: (id: string) => void }) {
                                             <th scope="row" className="p-3 font-bold text-slate-800">
                                                 {r.teacherName}
                                                 {r.isCoordinator && <span className="block text-[11px] font-bold text-slate-500">منسق القسم</span>}
+                                                {r.noteOpen && <span className="block text-[11px] font-bold text-amber-700">{data.manager ? "ملاحظة من المنسق تنتظر ردك" : "ملاحظتك عند النائب"}</span>}
                                             </th>
                                             {departments.length > 1 && <td className="p-3 text-slate-600">{r.department}</td>}
                                             <td className="p-3"><StatusChip status={STATUS[r.status].chip} label={STATUS[r.status].label}/></td>
@@ -170,6 +174,8 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
     const [link, setLink] = useState("");
     const [copied, setCopied] = useState(false);
     const save = useMutation(A.save), approve = useMutation(A.approve), reopen = useMutation(A.reopen), createLink = useMutation(A.createLink), remove = useMutation(A.remove);
+    const sendNote = useMutation(A.noteFromCoordinator), answerNote = useMutation(A.answerNote);
+    const [noteText, setNoteText] = useState("");
 
     const dirty = editable && JSON.stringify({ scores, penalties, courses, note, notes }) !== JSON.stringify(initial);
     useUnsavedChanges(dirty, onDirtyChange);
@@ -236,6 +242,43 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
 
             {compare && <Compare sent={e.sent} scores={scores} penalties={filled(penalties)} courses={filled(courses)} approved={status === "approved"}
                 note={note} setNote={editable && data.manager ? setNote : null} notes={notes} changedIds={changedIds} teacherId={teacherId}/>}
+
+            {/* after approval: the coordinator's remark, and the deputy's answer to it */}
+            {e?.sent && (e.coordinatorNote || (!data.manager && status === "approved")) && (
+                <section className="ev-rise bg-white rounded-2xl p-4 sm:p-5 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(92,21,35,.07)] space-y-3">
+                    <h4 className="font-black text-slate-800 text-sm">{data.manager ? "ملاحظة المنسق على التقييم المعتمد" : "ملاحظتك على التقييم المعتمد"}</h4>
+                    {e.coordinatorNote && <div className={`rounded-xl px-3 py-2.5 border ${e.coordinatorNote.handledAt ? "bg-slate-50 border-slate-200" : "bg-amber-50 border-amber-200"}`}>
+                        <p className="text-[11px] font-bold text-slate-500">{e.coordinatorNote.name} · {new Date(e.coordinatorNote.at).toLocaleDateString("ar-QA", { timeZone: "Asia/Qatar" })}</p>
+                        <p className="text-sm text-slate-800 leading-7 whitespace-pre-line mt-0.5">{e.coordinatorNote.text}</p>
+                        <p className="text-xs font-bold mt-1.5 text-slate-600">
+                            {e.coordinatorNote.handledAt
+                                ? <>اطّلع عليها {e.coordinatorNote.handledBy} في {new Date(e.coordinatorNote.handledAt).toLocaleDateString("ar-QA", { timeZone: "Asia/Qatar" })}{e.coordinatorNote.reply ? <>. ردّه: <span className="text-slate-800">{e.coordinatorNote.reply}</span></> : ""}</>
+                                : status === "approved" ? <span className="text-amber-800">لم يرد النائب الأكاديمي بعد</span> : <span className="text-amber-800">أعاد النائب الأكاديمي فتح الاستمارة للتعديل</span>}
+                        </p>
+                    </div>}
+                    {data.manager && e.coordinatorNote && !e.coordinatorNote.handledAt && <>
+                        <textarea value={noteText} onChange={ev => setNoteText(ev.target.value)} maxLength={1000} rows={2} aria-label="ردّك على المنسق"
+                            placeholder="ردّك على المنسق (اختياري)" className={`${inputCls} leading-6 resize-y`}/>
+                        <div className="flex gap-2 flex-wrap">
+                            {status === "approved" && <button className={primary} disabled={!!busy} onClick={() => {
+                                if (window.confirm("إعادة فتح الاستمارة لتعديلها؟ يُلغى توقيع المعلم إن وُجد، ثم تعتمدها من جديد."))
+                                    void run("reopen", () => reopen({ id: e._id, reason: `ملاحظة المنسق: ${e.coordinatorNote.text}`.slice(0, 200) }));
+                            }}><RotateCcw className="w-4 h-4"/>إعادة فتح للتعديل</button>}
+                            <button className={ghost} disabled={!!busy} onClick={() => run("answer", async () => { await answerNote({ id: e._id, reply: noteText }); setNoteText(""); })}>
+                                <CheckCircle2 className="w-4 h-4"/>{noteText.trim() ? "إرسال الرد دون تعديل" : "تم الاطلاع دون تعديل"}
+                            </button>
+                        </div>
+                    </>}
+                    {!data.manager && status === "approved" && <>
+                        <p className="text-xs text-slate-600 leading-6">لو عندك ملاحظة على تعديلات النائب، اكتبها هنا وتصله فورًا. النائب يقرّر: يعيد فتح الاستمارة ويعدّلها، أو يرد عليك.</p>
+                        <textarea value={noteText} onChange={ev => setNoteText(ev.target.value)} maxLength={1000} rows={3} aria-label="ملاحظتك للنائب الأكاديمي"
+                            placeholder="مثال: المعلم قدّم أدلة المؤشر 1.1 في ملف الإنجاز، أرجو مراجعة الدرجة." className={`${inputCls} leading-6 resize-y`}/>
+                        <button className={primary} disabled={!!busy || !noteText.trim()} onClick={() => run("note", async () => { await sendNote({ id: e._id, text: noteText }); setNoteText(""); })}>
+                            {busy === "note" ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}{e.coordinatorNote ? "إرسال ملاحظة جديدة" : "إرسال الملاحظة للنائب"}
+                        </button>
+                    </>}
+                </section>
+            )}
 
             <Section title="الجزاءات التأديبية التي وقعت على الموظف خلال سنة التقييم">
                 <Rows rows={penalties} set={setPenalties} disabled={!editable} labels={{ type: "نوع الجزاء", reason: "سبب الجزاء", date: "تاريخ الجزاء" }}/>

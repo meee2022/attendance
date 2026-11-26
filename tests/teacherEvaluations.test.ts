@@ -104,6 +104,15 @@ describe("the yearly teacher appraisal", () => {
         expect((await f.t.query(A.evaluationLinks.readLink, { token })).signedAt).toBeTypeOf("number");
         await expect(f.t.mutation(A.evaluationLinks.sign, { token, storageId, comment: "" })).rejects.toThrow();
 
+        // the coordinator answers the approved form; the deputy replies, or reopens and approves again
+        await expect(f.t.mutation(A.teacherEvaluations.noteFromCoordinator, { sessionToken: f.tokens.maths, id, text: "x" })).rejects.toThrow();
+        await f.t.mutation(A.teacherEvaluations.noteFromCoordinator, { sessionToken: f.tokens.science, id, text: "المعلم قدّم الأدلة للمؤشر 1.1" });
+        expect((await f.t.query(A.evaluationLinks.readLink, { token })).signedAt).toBeTypeOf("number");
+        expect((await f.t.query(A.teacherEvaluations.list, { sessionToken: f.tokens.deputy })).rows.find((r: any) => r.evaluationId === id).noteOpen).toBe(true);
+        await f.t.mutation(A.teacherEvaluations.answerNote, { sessionToken: f.tokens.deputy, id, reply: "اطلعت، تبقى الدرجة" });
+        expect((await get(f.tokens.science)).evaluation.coordinatorNote.reply).toBe("اطلعت، تبقى الدرجة");
+        expect((await f.t.query(A.teacherEvaluations.list, { sessionToken: f.tokens.deputy })).rows.find((r: any) => r.evaluationId === id).noteOpen).toBe(false);
+
         // only the deputy removes a form; the teacher is then back to «لم يبدأ»
         await expect(f.t.mutation(A.teacherEvaluations.remove, { sessionToken: f.tokens.science, id })).rejects.toThrow();
 

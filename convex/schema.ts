@@ -428,6 +428,9 @@ export default defineSchema({
         // The deputy's notes to the coordinator: one on the whole form, and one
         // beside each mark they changed (JSON { [indicatorId]: note })
         review: v.optional(v.object({ note: v.string(), items: v.string() })),
+        // The coordinator's remark on the approved form, until the deputy deals with it
+        coordinatorNote: v.optional(v.object({ text: v.string(), at: v.number(), name: v.string(),
+            handledAt: v.optional(v.number()), handledBy: v.optional(v.string()), reply: v.optional(v.string()) })),
         approval: v.optional(v.object({ name: v.string(), at: v.number() })),
         teacherSign: v.optional(v.object({ at: v.number(), signatureId: v.id("_storage"), comment: v.optional(v.string()) })),
         archived: v.optional(v.boolean()),  // a past year's form, kept for comparison

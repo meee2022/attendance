@@ -80,6 +80,7 @@ export const list = sessionQuery({ args: {}, handler: async (ctx) => {
             total: c ? c.total : null, level: c && scoredCount(c.scores) === INDICATORS.length ? levelOf(c.total) : "",
             // the mark the coordinator sent, beside the deputy's final one
             sentTotal: e?.coordinatorVersion?.total ?? null, signed: !!e?.teacherSign,
+            noteOpen: !!e?.coordinatorNote && !e.coordinatorNote.handledAt,
             previousTotal: (previous.get(t._id) as any)?.total ?? null,
         };
     }).sort((a: any, b: any) => a.department.localeCompare(b.department, "ar") || a.teacherName.localeCompare(b.teacherName, "ar")) };
@@ -101,6 +102,7 @@ export const get = sessionQuery({ args: { teacherId: v.id("schoolTeachers") }, h
                 penalties: e.coordinatorVersion.penalties, courses: e.coordinatorVersion.courses } : null,
             // the deputy's notes reach the coordinator with the approved form, as the marks do
             review: e.review && (manager(session) || e.status === "approved") ? { note: e.review.note, items: notesOf(e.review.items) } : null,
+            coordinatorNote: e.coordinatorNote ?? null,
         } : null,
         // may this visitor change the form now?
         editable: !e ? true : e.status === "approved" ? false : manager(session) ? true : mine && e.status === "draft",
@@ -169,7 +171,8 @@ export const approve = deputyMutation({ args: { id: v.id("teacherEvaluations") }
     if (e.status === "approved") return;
     if (scoredCount(parseScores(e.scores)) !== INDICATORS.length) throw new ConvexError("أكمل درجات كل المؤشرات قبل الاعتماد");
     const now = Date.now();
-    await ctx.db.patch(e._id, { status: "approved", approval: { name: session.name, at: now }, updatedAt: now });
+    await ctx.db.patch(e._id, { status: "approved", approval: { name: session.name, at: now }, updatedAt: now,
+        ...(e.coordinatorNote && !e.coordinatorNote.handledAt ? { coordinatorNote: { ...e.coordinatorNote, handledAt: now, handledBy: session.name } } : {}) });
     await ctx.db.insert("supervisionAuditLog", { schoolId: e.schoolId, action: "evaluation_approved", actorName: session.name,
         details: `اعتماد تقييم ${e.teacherName}`, timestamp: now });
 } });
@@ -184,6 +187,31 @@ export const reopen = deputyMutation({ args: { id: v.id("teacherEvaluations"), r
     await ctx.db.patch(e._id, { status: e.coordinatorVersion ? "sent" : "draft", approval: undefined, teacherSign: undefined, updatedAt: now });
     await ctx.db.insert("supervisionAuditLog", { schoolId: e.schoolId, action: "evaluation_reopened", actorName: session.name,
         details: `إعادة فتح تقييم ${e.teacherName}: ${clean(args.reason)}`, timestamp: now });
+} });
+
+// After approval the coordinator may answer the deputy's changes with a remark;
+// the deputy then reopens the form to change it, or replies. The form itself,
+// and the teacher's link to it, stay as they are.
+export const noteFromCoordinator = sessionMutation({ args: { id: v.id("teacherEvaluations"), text: v.string() }, handler: async (ctx, args) => {
+    const { session, allowed } = await context(ctx);
+    const e = await ctx.db.get(args.id);
+    if (!e || !e.teacherId || e.archived || manager(session) || !allowed(await ctx.db.get(e.teacherId))) throw new ConvexError("الاستمارة غير متاحة ضمن صلاحياتك");
+    if (e.status !== "approved" || !e.coordinatorVersion) throw new ConvexError("تُرسل الملاحظة بعد اعتماد النائب الأكاديمي");
+    const text = args.text.trim().slice(0, 1000);
+    if (!text) throw new ConvexError("اكتب الملاحظة");
+    const now = Date.now();
+    await ctx.db.patch(e._id, { coordinatorNote: { text, at: now, name: session.name } });
+    await ctx.db.insert("supervisionAuditLog", { schoolId: e.schoolId, action: "evaluation_coordinator_note", actorName: session.name,
+        details: `ملاحظة على تقييم ${e.teacherName}`, timestamp: now });
+} });
+
+// The deputy has read the remark, with an optional reply to the coordinator
+export const answerNote = deputyMutation({ args: { id: v.id("teacherEvaluations"), reply: v.string() }, handler: async (ctx, args) => {
+    const session = (ctx as any).supervisionSession;
+    const e = await ctx.db.get(args.id);
+    if (!e || e.schoolId !== session.schoolId || !e.coordinatorNote) throw new ConvexError("لا توجد ملاحظة");
+    const reply = args.reply.trim().slice(0, 1000);
+    await ctx.db.patch(e._id, { coordinatorNote: { ...e.coordinatorNote, handledAt: Date.now(), handledBy: session.name, ...(reply ? { reply } : { reply: undefined }) } });
 } });
 
 // Removing this year's form altogether: a trial entry, or one made for the

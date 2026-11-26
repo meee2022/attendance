@@ -233,6 +233,23 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
                 <Rows rows={courses} set={setCourses} disabled={!editable} labels={{ name: "اسم الدورة", place: "مكان الانعقاد", duration: "المدة", date: "التاريخ" }}/>
             </Section>
 
+            {/* Fill every indicator at once, then change the few that differ */}
+            {editable && (
+                <div className="ev-rise bg-white rounded-2xl p-4 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(92,21,35,.07)] flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-black text-slate-800 ml-auto">تعبئة سريعة<span className="block text-[11px] font-bold text-slate-500">تملأ المؤشرات التي لم تُقدَّر بعد، ثم عدّل أي درجة تريدها.</span></p>
+                    <button type="button" className={primary} disabled={complete}
+                        onClick={() => setScores(s => ({ ...Object.fromEntries(INDICATORS.map(i => [i.id, i.max])), ...s }))}>
+                        <CheckCircle2 className="w-4 h-4"/>الدرجة الكاملة للكل
+                    </button>
+                    {data.previous && <button type="button" className={ghost} disabled={complete}
+                        onClick={() => setScores(s => ({ ...data.previous.scores, ...s }))}>درجات العام السابق</button>}
+                    <button type="button" className={ghost} disabled={!done}
+                        onClick={() => { if (window.confirm("مسح كل الدرجات المدخلة في هذه الاستمارة؟")) setScores({}); }}>
+                        <RotateCcw className="w-4 h-4"/>مسح الدرجات
+                    </button>
+                </div>
+            )}
+
             {EVALUATION_DOMAINS.map((d, di) => (
                 <Section key={d.title} title={`${di + 1}. ${d.title}`}
                     right={<span className="text-sm font-black text-qatar-maroon tabular-nums whitespace-nowrap">{domainTotal(scores, di + 1)} من {d.percent}</span>}>

@@ -89,7 +89,7 @@ export const getSetup = query({
         const teachers = (await ctx.db.query("schoolTeachers")
             .withIndex("by_school", (q: any) => q.eq("schoolId", school._id))
             .collect())
-            .filter((t: any) => t.isActive !== false && canAccess(access, t.schoolId, t.department ?? ""))
+            .filter((t: any) => t.isActive !== false && canAccess(access, t.schoolId, t.department ?? "", t._id))
             .map((t: any) => ({
                 _id: t._id, fullName: t.fullName.replace(/\s+/g, " ").trim(),
                 department: (t.department ?? "").trim(), email: t.email ?? "",
@@ -139,7 +139,7 @@ export const listVisits = query({
             .collect();
 
         return all
-            .filter((x: any) => canAccess((ctx as any).supervisionSession, x.schoolId, x.teacherDepartment ?? ""))
+            .filter((x: any) => canAccess((ctx as any).supervisionSession, x.schoolId, x.teacherDepartment ?? "", x.teacherId))
             .filter((x: any) => Boolean(x.deletedAt) === Boolean(args.deleted))
             .map((x: any) => ({
                 _id: x._id,
@@ -344,7 +344,7 @@ export async function saveVisitHandler(ctx: any, args: ObjectType<typeof visitAr
 
         const teacher = args.teacherId ? await ctx.db.get(args.teacherId) : null;
         const cls = args.classId ? await ctx.db.get(args.classId) : null;
-        if (!teacher || !canAccess(access, teacher.schoolId, teacher.department ?? "")) throw new ConvexError("المعلم خارج الأقسام المسموحة لك");
+        if (!teacher || !canAccess(access, teacher.schoolId, teacher.department ?? "", teacher._id)) throw new ConvexError("المعلم خارج الأقسام المسموحة لك");
         if (delegated && !supervisor!.subjects.map((d: string) => d.trim()).includes((teacher.department ?? "").trim())) throw new ConvexError("الزائر غير مسجل لهذا القسم");
         if (historicalImport) {
             const previous = await ctx.db.query("supervisionVisits").withIndex("by_teacher_id", (q:any)=>q.eq("schoolId",school._id).eq("teacherId",args.teacherId)).collect();

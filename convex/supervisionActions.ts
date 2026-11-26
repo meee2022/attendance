@@ -5,7 +5,7 @@ import { sessionQuery, sessionMutation, canAccess, requireVisit } from "./superv
 export const list = sessionQuery({ args: {}, handler: async ctx => {
     const access = (ctx as any).supervisionSession;
     const rows = await ctx.db.query("supervisionActions").withIndex("by_school", q => q.eq("schoolId", access.schoolId)).collect();
-    return rows.filter(r => canAccess(access, r.schoolId, r.department)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    return rows.filter(r => canAccess(access, r.schoolId, r.department, r.teacherId)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 } });
 
 export const save = sessionMutation({
@@ -18,9 +18,9 @@ export const save = sessionMutation({
     handler: async (ctx, args) => {
         const access = (ctx as any).supervisionSession;
         const teacher = await ctx.db.get(args.teacherId);
-        if (!teacher || !canAccess(access, teacher.schoolId, teacher.department ?? "")) throw new ConvexError("المعلم خارج نطاق صلاحياتك");
+        if (!teacher || !canAccess(access, teacher.schoolId, teacher.department ?? "", teacher._id)) throw new ConvexError("المعلم خارج نطاق صلاحياتك");
         const old = args.id ? await ctx.db.get(args.id) : null;
-        if (args.id && (!old || !canAccess(access, old.schoolId, old.department))) throw new ConvexError("سجل المتابعة غير متاح");
+        if (args.id && (!old || !canAccess(access, old.schoolId, old.department, old.teacherId))) throw new ConvexError("سجل المتابعة غير متاح");
         if (old && old.updatedAt !== args.expectedUpdatedAt) throw new ConvexError("تم تعديل السجل بواسطة مستخدم آخر؛ أعد فتحه قبل الحفظ");
         if (old && old.teacherId !== args.teacherId) throw new ConvexError("لا يمكن تغيير المعلم بعد إنشاء السجل");
         if (!args.title.trim() || !args.owner.trim()) throw new ConvexError("أدخل الإجراء والمسؤول عن تنفيذه");

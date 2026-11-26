@@ -28,6 +28,9 @@ export default function SupervisionTeachers() {
     const [editEmail, setEditEmail] = useState("");
     const [editDept, setEditDept] = useState("");
     const [editPhone, setEditPhone] = useState("");
+    // which coordinator supervises the teacher, when two cover the department ("" = all of them)
+    const [editCoordinator, setEditCoordinator] = useState("");
+    const coordinatorsOf = (department: string) => (supervisors ?? []).filter((s: any) => s.role === "coordinator" && s.isActive !== false && s.subjects.some((x: string) => x.trim() === department.trim()));
     const [status, setStatus] = useState("active");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
@@ -173,7 +176,12 @@ export default function SupervisionTeachers() {
                                                     className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold bg-white focus:outline-none focus:border-qatar-maroon"/>
                                                 <select aria-label="قسم المعلم" value={editDept} onChange={e => setEditDept(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm">{Array.from(new Set([...SUBJECTS, editDept])).map(d => <option key={d}>{d}</option>)}</select>
                                                 <input aria-label="هاتف المعلم" value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="الهاتف" className="rounded-lg border border-slate-200 px-2 py-1 text-sm"/>
-                                                <button title="حفظ التعديل" disabled={busy || !editName.trim() || !editDept} onClick={() => run(async () => { await updateTeacher({ id: t._id as any, fullName: editName, department: editDept, phone: editPhone, email: editEmail }); setEditId(null); })}
+                                                {coordinatorsOf(editDept).length > 1 && <select aria-label="المنسق المسؤول عن المعلم" value={editCoordinator} onChange={e => setEditCoordinator(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1 text-sm">
+                                                    <option value="">كل منسقي القسم</option>
+                                                    {coordinatorsOf(editDept).map((s: any) => <option key={s._id} value={s._id}>المنسق: {s.fullName}</option>)}
+                                                </select>}
+                                                <button title="حفظ التعديل" disabled={busy || !editName.trim() || !editDept} onClick={() => run(async () => { await updateTeacher({ id: t._id as any, fullName: editName, department: editDept, phone: editPhone, email: editEmail,
+                                                    coordinatorId: (coordinatorsOf(editDept).some((s: any) => s._id === editCoordinator) ? editCoordinator : null) as any }); setEditId(null); })}
                                                     className="p-1 rounded-lg bg-emerald-100 text-emerald-600 hover:bg-emerald-200">
                                                     <Check className="w-3.5 h-3.5"/>
                                                 </button>
@@ -184,7 +192,7 @@ export default function SupervisionTeachers() {
                                         ) : (
                                             <div key={t._id} className="p-3 flex items-center justify-between gap-2">
                                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <button title="تعديل المعلم" onClick={() => { setEditId(t._id); setEditName(t.fullName); setEditEmail(t.email ?? ""); setEditDept(t.department); setEditPhone(t.phone ?? ""); }}
+                                                    <button title="تعديل المعلم" onClick={() => { setEditId(t._id); setEditName(t.fullName); setEditEmail(t.email ?? ""); setEditDept(t.department); setEditPhone(t.phone ?? ""); setEditCoordinator(t.coordinatorId ?? ""); }}
                                                         className="p-1.5 rounded-lg text-slate-300 hover:bg-blue-50 hover:text-blue-500">
                                                         <Pencil className="w-3.5 h-3.5"/>
                                                     </button>
@@ -196,6 +204,7 @@ export default function SupervisionTeachers() {
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-bold text-slate-700 truncate">{t.fullName}</p>
                                                     {t.isActive === false && <span className="text-xs text-slate-500">معلم سابق</span>}
+                                                    {t.coordinatorId && <p className="text-[11px] font-bold text-qatar-maroon mt-0.5">المنسق المسؤول: {(supervisors ?? []).find((s: any) => s._id === t.coordinatorId)?.fullName ?? ""}</p>}
                                                     {t.email && (
                                                         <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1 mt-0.5 truncate">
                                                             <Mail className="w-2.5 h-2.5"/>{t.email}

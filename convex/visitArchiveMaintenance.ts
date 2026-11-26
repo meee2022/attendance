@@ -146,6 +146,18 @@ export const addDepartmentStaff=internalMutation({args:{department:v.string(),te
   else coordinatorId=await ctx.db.insert('supervisors',{schoolId:school._id,fullName:coordinator.trim(),role:'coordinator',subjects:[department],isActive:true});}
  return {added,coordinatorId};
 }});
+// Which coordinator supervises a teacher, when two cover the department
+export const assignCoordinator=internalMutation({args:{teacher:v.string(),coordinator:v.string()},handler:async(ctx,args)=>{
+ const school=await ctx.db.query('schools').first();if(!school)throw new ConvexError('لا توجد مدرسة');
+ const key=(s:string)=>s.replace(/\s+/g,' ').trim();
+ const teachers=(await ctx.db.query('schoolTeachers').withIndex('by_school',q=>q.eq('schoolId',school._id)).collect()).filter(t=>t.isActive!==false&&key(t.fullName)===key(args.teacher));
+ const people=(await ctx.db.query('supervisors').withIndex('by_school',q=>q.eq('schoolId',school._id)).collect()).filter(p=>p.isActive&&p.role==='coordinator'&&key(p.fullName)===key(args.coordinator));
+ if(teachers.length!==1||people.length!==1)throw new ConvexError('الاسم غير موجود أو مكرر');
+ if(!people[0].subjects.map(s=>s.trim()).includes((teachers[0].department??'').trim()))throw new ConvexError('المنسق لا يغطي قسم المعلم');
+ await ctx.db.patch(teachers[0]._id,{coordinatorId:people[0]._id});
+ await ctx.db.insert('supervisionAuditLog',{schoolId:school._id,action:'coordinator_assigned',actorName:'مسؤول المنصة',details:`${teachers[0].fullName}: ${people[0].fullName}`,timestamp:Date.now()});
+ return `${teachers[0].fullName} -> ${people[0].fullName}`;
+}});
 // A visitor who has left: off the sign-in list and the forms, their visits kept
 export const retireVisitor=internalMutation({args:{fullName:v.string()},handler:async(ctx,{fullName})=>{
  const school=await ctx.db.query('schools').first();if(!school)throw new ConvexError('لا توجد مدرسة');

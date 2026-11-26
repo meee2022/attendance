@@ -77,18 +77,28 @@ export async function requireSession(ctx: any, token?: string, deputy = false) {
     }
     if (deputy && session.role !== "deputy" && session.role !== "admin") throw new ConvexError("هذه العملية متاحة للنائب الأكاديمي أو مسؤول المنصة");
     const settings = session.role === "deputy" ? await ctx.db.query("supervisionSettings").withIndex("by_school", (q: any) => q.eq("schoolId", school._id)).first() : null;
+    // teachers of this coordinator's departments who are assigned to a colleague
+    const elsewhere = new Set<string>();
+    if (session.role === "coordinator") for (const department of new Set<string>((visitor?.subjects ?? []).map((s: string) => s.trim()))) {
+        for (const t of await ctx.db.query("schoolTeachers").withIndex("by_dept", (q: any) => q.eq("schoolId", school._id).eq("department", department)).collect()) {
+            if (t.coordinatorId && t.coordinatorId !== session.visitorId) elsewhere.add(String(t._id));
+        }
+    }
     // the deputy and the admin still on their old code are asked for a password of their own
-    return { ...session, needsPassword: !account && (session.role === "deputy" || session.role === "admin"),
+    return { ...session, elsewhere, needsPassword: !account && (session.role === "deputy" || session.role === "admin"),
         name: session.role === "deputy" ? deputyNameOf(settings) : session.name, departments: (session.role === "deputy" || session.role === "admin") ? null : (visitor?.subjects ?? []).map((s: string) => s.trim()) };
 }
 
-export function canAccess(session: any, schoolId: any, department: string) {
-    return session.schoolId === schoolId && (session.departments === null || session.departments.includes(department.trim()));
+// A coordinator reaches the teachers of their departments, except one
+// assigned to another coordinator of the same department
+export function canAccess(session: any, schoolId: any, department: string, teacherId?: any) {
+    return session.schoolId === schoolId && (session.departments === null
+        || (session.departments.includes(department.trim()) && !(teacherId && session.elsewhere?.has(String(teacherId)))));
 }
 
 export async function requireVisit(ctx: any, session: any, id: any, write = false) {
     const visit = await ctx.db.get(id);
-    if (!visit || !canAccess(session, visit.schoolId, visit.teacherDepartment ?? "")) throw new ConvexError("الزيارة غير متاحة ضمن صلاحياتك");
+    if (!visit || !canAccess(session, visit.schoolId, visit.teacherDepartment ?? "", visit.teacherId)) throw new ConvexError("الزيارة غير متاحة ضمن صلاحياتك");
     // A colleague the visit was sent to for review may edit it until it is submitted or returned
     const reviewer = visit.status === "draft" && visit.reviewRequest?.toVisitorId && visit.reviewRequest.toVisitorId === session.visitorId;
     if (write && session.role !== "deputy" && session.role !== "admin" && !reviewer && visit.visitorId !== session.visitorId && visit.recordedByVisitorId !== session.visitorId) throw new ConvexError("يمكنك تعديل زياراتك فقط");

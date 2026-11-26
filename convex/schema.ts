@@ -360,6 +360,9 @@ export default defineSchema({
         phone: v.optional(v.string()),
         teachingClasses: v.optional(v.array(v.string())),
         isActive: v.boolean(),
+        // When two coordinators cover one department: the one who supervises
+        // this teacher. The other then sees neither the teacher nor their forms.
+        coordinatorId: v.optional(v.id("supervisors")),
     }).index("by_school", ["schoolId"])
       .index("by_dept", ["schoolId", "department"]),
 

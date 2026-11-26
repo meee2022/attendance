@@ -496,9 +496,16 @@ export const updateSchoolTeacher = mutation({
         phone: v.optional(v.string()),
         teachingClasses: v.optional(v.array(v.string())),
         isActive: v.optional(v.boolean()),
+        // null: back to every coordinator of the department
+        coordinatorId: v.optional(v.union(v.id("supervisors"), v.null())),
     },
     handler: async (ctx, args) => {
         const patch: any = {};
+        if (args.coordinatorId !== undefined) {
+            const person = args.coordinatorId ? await ctx.db.get(args.coordinatorId) : null;
+            if (args.coordinatorId && (!person || person.role !== "coordinator" || !person.isActive)) throw new ConvexError("المنسق غير موجود");
+            patch.coordinatorId = args.coordinatorId ?? undefined;
+        }
         if (args.fullName !== undefined) patch.fullName = args.fullName.trim();
         if (args.department !== undefined) patch.department = args.department.trim();
         if (args.email !== undefined) patch.email = args.email.trim() || undefined;

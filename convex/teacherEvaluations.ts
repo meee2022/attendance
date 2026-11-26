@@ -32,7 +32,7 @@ async function context(ctx: any) {
     const coordinators = new Set((await ctx.db.query("supervisors").withIndex("by_role", (q: any) => q.eq("schoolId", school._id).eq("role", "coordinator")).collect())
         .filter((p: any) => p.isActive !== false).map((p: any) => nameKey(p.fullName)));
     const allowed = (teacher: any) => !!teacher && teacher.schoolId === school._id
-        && (manager(session) || (canAccess(session, teacher.schoolId, teacher.department ?? "") && !coordinators.has(nameKey(teacher.fullName))));
+        && (manager(session) || (canAccess(session, teacher.schoolId, teacher.department ?? "", teacher._id) && !coordinators.has(nameKey(teacher.fullName))));
     return { session, school, settings, year: settings.academicYear as string, allowed, coordinators };
 }
 

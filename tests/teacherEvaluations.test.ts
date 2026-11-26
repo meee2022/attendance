@@ -105,4 +105,30 @@ describe("the yearly teacher appraisal", () => {
         expect((await get(f.tokens.deputy)).evaluation).toBeNull();
         expect((await f.t.query(A.teacherEvaluations.list, { sessionToken: f.tokens.science })).rows[0].status).toBe("none");
     });
+
+    it("splits one department between two coordinators, teacher by teacher", async () => {
+        const f = await fixture();
+        const { second, visitId } = await f.t.run(async ctx => {
+            await ctx.db.patch(f.maths, { subjects: ["الرياضيات", "العلوم"] });
+            await ctx.db.patch(f.scienceTeacher, { coordinatorId: f.science });
+            const second = await ctx.db.insert("schoolTeachers", { schoolId: f.schoolId, fullName: "معلم علوم ثان", department: "العلوم", isActive: true, coordinatorId: f.maths });
+            const visitId = await ctx.db.insert("supervisionVisits", { schoolId: f.schoolId, visitorId: f.maths, visitorRole: "coordinator", visitorName: "منسق الرياضيات",
+                teacherId: second, teacherName: "معلم علوم ثان", teacherDepartment: "العلوم", subjectName: "العلوم", className: "10", lessonTopic: "درس", visitDate: "2026-09-01",
+                followUpType: "full", visitNumber: 1, ratings: "{}", averageScore: 0.5, domainAverages: "{}", status: "submitted", createdAt: 1, updatedAt: 1 });
+            return { second, visitId };
+        });
+        const names = async (token: string) => (await f.t.query(A.teacherEvaluations.list, { sessionToken: token })).rows.map((r: any) => r.teacherName);
+        expect(await names(f.tokens.science)).toEqual(["معلم علوم"]);
+        expect(await names(f.tokens.maths)).toEqual(["معلم رياضيات", "معلم علوم ثان"]);
+        expect(await names(f.tokens.deputy)).toHaveLength(4);
+        // the colleague's teacher, visits and form are out of reach, by id too
+        const setup = await f.t.query(A.visits.getSetup, { sessionToken: f.tokens.science });
+        expect(setup.teachers.map((t: any) => t.fullName)).not.toContain("معلم علوم ثان");
+        expect(await f.t.query(A.visits.listVisits, { sessionToken: f.tokens.science })).toEqual([]);
+        expect(await f.t.query(A.visits.listVisits, { sessionToken: f.tokens.maths })).toHaveLength(1);
+        await expect(f.t.query(A.visits.getVisitForm, { sessionToken: f.tokens.science, id: visitId })).rejects.toThrow();
+        await expect(f.save(f.tokens.science, second, full(), false)).rejects.toThrow();
+        await expect(f.save(f.tokens.maths, f.scienceTeacher, full(), false)).rejects.toThrow();
+        expect((await f.save(f.tokens.maths, second, full(), false)).status).toBe("draft");
+    });
 });

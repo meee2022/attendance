@@ -94,9 +94,15 @@ describe("the yearly teacher appraisal", () => {
         expect((await f.t.query(A.evaluationLinks.readLink, { token })).signedAt).toBeTypeOf("number");
         await expect(f.t.mutation(A.evaluationLinks.sign, { token, storageId, comment: "" })).rejects.toThrow();
 
+        // only the deputy removes a form; the teacher is then back to «لم يبدأ»
+        await expect(f.t.mutation(A.teacherEvaluations.remove, { sessionToken: f.tokens.science, id })).rejects.toThrow();
+
         // reopening drops the signature and the link with it
         await f.t.mutation(A.teacherEvaluations.reopen, { sessionToken: f.tokens.deputy, id, reason: "تظلم" });
         expect(await f.t.query(A.evaluationLinks.readLink, { token })).toBeNull();
         expect((await get(f.tokens.deputy)).evaluation.signedAt).toBeNull();
+        await f.t.mutation(A.teacherEvaluations.remove, { sessionToken: f.tokens.deputy, id });
+        expect((await get(f.tokens.deputy)).evaluation).toBeNull();
+        expect((await f.t.query(A.teacherEvaluations.list, { sessionToken: f.tokens.science })).rows[0].status).toBe("none");
     });
 });

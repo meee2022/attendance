@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Award, CheckCircle2, FileSpreadsheet, Link2, Loader2, Pencil, Printer, RotateCcw, Save, Search, Send } from "lucide-react";
+import { ArrowRight, Award, CheckCircle2, FileSpreadsheet, Link2, Loader2, Pencil, Printer, RotateCcw, Save, Search, Send, Trash2 } from "lucide-react";
 import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 import { api } from "../../../convex/_generated/api";
 import { EmptyState, LoadingSpinner, StatusChip } from "../../components/ui";
@@ -165,7 +165,7 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
     const [error, setError] = useState("");
     const [link, setLink] = useState("");
     const [copied, setCopied] = useState(false);
-    const save = useMutation(A.save), approve = useMutation(A.approve), reopen = useMutation(A.reopen), createLink = useMutation(A.createLink);
+    const save = useMutation(A.save), approve = useMutation(A.approve), reopen = useMutation(A.reopen), createLink = useMutation(A.createLink), remove = useMutation(A.remove);
 
     const dirty = editable && JSON.stringify({ scores, penalties, courses }) !== JSON.stringify(initial);
     useUnsavedChanges(dirty, onDirtyChange);
@@ -341,7 +341,11 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
                         {data.manager && status === "approved" && <button className={ghost} disabled={!!busy} onClick={() => {
                             const reason = window.prompt("سبب إعادة فتح الاستمارة (يُلغى توقيع المعلم إن وُجد):");
                             if (reason?.trim()) void run("reopen", () => reopen({ id: e._id, reason }));
-                        }}><RotateCcw className="w-4 h-4"/>إعادة فتح</button>}
+                        }}><RotateCcw className="w-4 h-4"/>إعادة فتح للتعديل</button>}
+                        {data.manager && e && <button className={`${ghost} text-rose-700! hover:border-rose-400!`} disabled={!!busy} onClick={() => {
+                            if (window.confirm(`حذف تقييم ${data.teacherName} نهائيًا؟ تُمسح درجاته وتوقيع المعلم إن وُجد، ويعود «لم يبدأ». لا يمكن التراجع.`))
+                                void run("remove", async () => { await remove({ id: e._id }); onBack(); });
+                        }}><Trash2 className="w-4 h-4"/>حذف التقييم</button>}
                     </div>
                 </div>
                 {error && <p role="alert" className="max-w-7xl mx-auto px-4 pb-2 text-xs font-bold text-rose-700">{error}</p>}

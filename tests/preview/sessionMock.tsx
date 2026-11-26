@@ -81,6 +81,7 @@ export function useSupervisionMutation(ref: any) { return async (args: any) => {
         changed(); return { id: `e-${args.teacherId}`, status: evaluations[args.teacherId].status }; }
     if (name === "teacherEvaluations:approve" || name === "teacherEvaluations:reopen") { const e: any = Object.values(evaluations).find((x: any) => x._id === args.id);
         e.status = name.endsWith("approve") ? "approved" : "draft"; e.updatedAt = Date.now(); changed(); return null; }
+    if (name === "teacherEvaluations:remove") { for (const k of Object.keys(evaluations)) if (evaluations[k]._id === args.id) delete evaluations[k]; changed(); return null; }
     if (name === "teacherEvaluations:createLink" || name === "teacherEvaluations:saveProfile") return null;
     if (name === "visits:saveVisit") {
         const id = args.id || `v${Date.now()}`, teacher = setup.teachers.find(t => t._id === args.teacherId);

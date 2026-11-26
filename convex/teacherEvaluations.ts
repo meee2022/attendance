@@ -171,6 +171,19 @@ export const reopen = deputyMutation({ args: { id: v.id("teacherEvaluations"), r
         details: `إعادة فتح تقييم ${e.teacherName}: ${clean(args.reason)}`, timestamp: now });
 } });
 
+// Removing this year's form altogether: a trial entry, or one made for the
+// wrong teacher. The teacher goes back to «لم يبدأ»; past years' archive stays.
+export const remove = deputyMutation({ args: { id: v.id("teacherEvaluations") }, handler: async (ctx, args) => {
+    const session = (ctx as any).supervisionSession;
+    const e = await ctx.db.get(args.id);
+    if (!e || e.schoolId !== session.schoolId) throw new ConvexError("الاستمارة غير موجودة");
+    if (e.archived) throw new ConvexError("أرشيف الأعوام السابقة لا يُحذف من هنا");
+    for (const link of await ctx.db.query("evaluationLinks").withIndex("by_evaluation", q => q.eq("evaluationId", e._id)).collect()) await ctx.db.delete(link._id);
+    await ctx.db.delete(e._id);
+    await ctx.db.insert("supervisionAuditLog", { schoolId: e.schoolId, action: "evaluation_deleted", actorName: session.name,
+        details: `حذف تقييم ${e.teacherName} (${e.academicYear}) وكان ${e.status === "approved" ? "معتمدًا" : e.status === "sent" ? "عند النائب" : "مسودة"}`, timestamp: Date.now() });
+} });
+
 // The deputy keeps the personal details the form prints
 export const saveProfile = deputyMutation({
     args: { teacherId: v.id("schoolTeachers"), employeeNo: v.string(), personalNo: v.string(), hireDate: v.string(), jobTitle: v.string(), nationality: v.string() },

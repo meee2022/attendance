@@ -33,7 +33,9 @@ if (new URLSearchParams(location.search).has("evalprint")) {
         _id: "e1", teacherName: "معلم تجريبي باسم رباعي", academicYear: "2026 - 2027", schoolName: "مدرسة ابن تيمية الثانوية للبنين", principalName: "مدير تجريبي",
         profile: { employeeNo: "10001", personalNo: "29900000000", hireDate: "01/09/2015", jobTitle: "مدرس مادة تجريبية", nationality: "تجريبي" },
         penalties: [], courses: [{ name: "دورة تجريبية", place: "مركز التدريب", duration: "3 أيام", date: "10/2026" }],
-        scores, total: totalOf(scores), level: levelOf(totalOf(scores)), status: "approved", signedAt: null, signatureUrl: null }}/></div>);
+        scores, total: totalOf(scores), level: levelOf(totalOf(scores)), status: "approved", signedAt: null, signatureUrl: null,
+        // &coordinator: the coordinator's version as sent
+        version: new URLSearchParams(location.search).has("coordinator") ? { name: "منسق تجريبي", at: Date.UTC(2026, 10, 20) } : undefined }}/></div>);
 } else
 if (new URLSearchParams(location.search).has("gradesheet")) createRoot(document.getElementById("root")!).render(<GradeCheck/>);
 else

@@ -48,6 +48,9 @@ export default function EvaluationPages({ form }: { form: any }) {
     const { starts, bodyOf } = usePages(END + 1, BODY_HEIGHT, [0]);
 
     const intro = <>
+        {form.version && <p style={{ margin: "0 0 4pt", textAlign: "left", fontFamily: FONT, fontSize: "10pt", fontWeight: 700, color: "#555" }}>
+            نسخة المنسق كما أرسلها: {form.version.name} في <bdi>{dateOf(form.version.at)}</bdi> (قبل مراجعة النائب الأكاديمي)
+        </p>}
         <p style={{ margin: 0, textAlign: "center", fontFamily: FONT, fontWeight: 700, fontSize: "11pt", color: "#4A442A", lineHeight: 1.35 }}>
             استمارة تقييم أداء المعلم<br/>العام الاكاديمي ({yearOnForm(form.academicYear)})
         </p>

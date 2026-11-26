@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { levelOf, totalOf } from "../../convex/evaluationForm";
+import { INDICATORS, levelOf, totalOf } from "../../convex/evaluationForm";
 import { getFunctionName } from "convex/server";
 const asCoordinator = new URLSearchParams(location.search).get("as") === "coordinator";
 export const session: any = asCoordinator
@@ -39,7 +39,7 @@ export function useSupervisionQuery(ref: any, args: any = {}) {
     if (name === "teacherEvaluations:get") { const t: any = setup.teachers.find((x: any) => x._id === args.teacherId), e = evaluations[args.teacherId]; return {
         academicYear: "2026 - 2027", manager, teacherName: t.fullName, department: t.department,
         profile: { employeeNo: "10001", personalNo: "29900000000", hireDate: args.teacherId === "t1" ? "01/09/2015" : "", jobTitle: `مدرس ${t.department}`, nationality: "تجريبي" },
-        evaluation: e ? { ...e, total: totalOf(e.scores), approval: null, signedAt: null, signComment: "" } : null,
+        evaluation: e ? { ...e, total: totalOf(e.scores), approval: null, signedAt: null, signComment: "", review: e.review && (manager || e.status === "approved") ? e.review : null } : null,
         editable: !e || (e.status !== "approved" && (manager || e.status === "draft")),
         previous: args.teacherId === "t1" ? { academicYear: "2025 - 2026", total: 88, scores: { "1.1": 2, "1.2": 3 } } : null, principalName: "مدير تجريبي", schoolName: "مدرسة تجريبية" }; }
     return [];
@@ -56,6 +56,10 @@ const accountRows: any[] = [
 // the yearly appraisal, kept in the page's memory
 const manager = !new URLSearchParams(location.search).get("as")?.startsWith("coord");
 const evaluations: Record<string, any> = {};
+// ?reviewing: a form the coordinator sent with full marks, waiting for the deputy
+if (new URLSearchParams(location.search).has("reviewing")) { const s = Object.fromEntries(INDICATORS.map(i => [i.id, i.max]));
+    evaluations.t1 = { _id: "e-t1", evaluatorName: "منسق تجريبي", evaluatorRole: "coordinator", scores: s, penalties: [], courses: [], updatedAt: 1, status: "sent",
+        sent: { scores: s, total: 100, at: Date.UTC(2026, 10, 20), name: "منسق تجريبي", penalties: [], courses: [] }, review: null }; }
 let mySignature: string | null = new URLSearchParams(location.search).has("signed") ? "/forms/moe-logo.png" : null;
 const changed = () => window.dispatchEvent(new Event("preview-data"));
 const patchVisit = (id: string, patch: any) => { const i = visits.findIndex(v => v._id === id); if (i >= 0) visits[i] = { ...visits[i], ...patch }; changed(); };
@@ -77,7 +81,8 @@ export function useSupervisionMutation(ref: any) { return async (args: any) => {
     if (name === "accounts:retireSharedCode") { sharedCode = false; changed(); return null; }
     if (name === "teacherEvaluations:save") { const scores = JSON.parse(args.scores), old = evaluations[args.teacherId];
         evaluations[args.teacherId] = { _id: `e-${args.teacherId}`, evaluatorName: session.name, evaluatorRole: manager ? "deputy" : "coordinator", ...old, scores, penalties: args.penalties, courses: args.courses, updatedAt: Date.now(),
-            status: args.send && !manager ? "sent" : old?.status ?? "draft", sent: args.send && !manager ? { scores, total: totalOf(scores), at: Date.now(), name: session.name } : old?.sent ?? null };
+            status: args.send && !manager ? "sent" : old?.status ?? "draft", sent: args.send && !manager ? { scores, total: totalOf(scores), at: Date.now(), name: session.name, penalties: args.penalties, courses: args.courses } : old?.sent ?? null,
+            review: manager && args.review ? { note: args.review.note, items: JSON.parse(args.review.items) } : old?.review ?? null };
         changed(); return { id: `e-${args.teacherId}`, status: evaluations[args.teacherId].status }; }
     if (name === "teacherEvaluations:approve" || name === "teacherEvaluations:reopen") { const e: any = Object.values(evaluations).find((x: any) => x._id === args.id);
         e.status = name.endsWith("approve") ? "approved" : "draft"; e.updatedAt = Date.now(); changed(); return null; }

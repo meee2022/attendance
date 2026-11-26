@@ -97,7 +97,10 @@ export const get = sessionQuery({ args: { teacherId: v.id("schoolTeachers") }, h
         evaluation: e ? { _id: e._id, status: e.status, updatedAt: e.updatedAt, evaluatorName: e.evaluatorName, evaluatorRole: e.evaluatorRole,
             approval: e.approval ?? null, signedAt: e.teacherSign?.at ?? null, signComment: e.teacherSign?.comment ?? "", ...contentFor(session, e),
             // what the coordinator sent, for both of them to compare with the final form
-            sent: e.coordinatorVersion ? { scores: parseScores(e.coordinatorVersion.scores), total: e.coordinatorVersion.total, at: e.coordinatorVersion.at, name: e.coordinatorVersion.name } : null,
+            sent: e.coordinatorVersion ? { scores: parseScores(e.coordinatorVersion.scores), total: e.coordinatorVersion.total, at: e.coordinatorVersion.at, name: e.coordinatorVersion.name,
+                penalties: e.coordinatorVersion.penalties, courses: e.coordinatorVersion.courses } : null,
+            // the deputy's notes reach the coordinator with the approved form, as the marks do
+            review: e.review && (manager(session) || e.status === "approved") ? { note: e.review.note, items: notesOf(e.review.items) } : null,
         } : null,
         // may this visitor change the form now?
         editable: !e ? true : e.status === "approved" ? false : manager(session) ? true : mine && e.status === "draft",
@@ -107,9 +110,20 @@ export const get = sessionQuery({ args: { teacherId: v.id("schoolTeachers") }, h
 
 const clean = (s: string, max = 200) => s.replace(/\s+/g, " ").trim().slice(0, max);
 
+// { [indicatorId]: note }, keeping only real indicators and non-empty notes
+function notesOf(json: string): Record<string, string> {
+    let raw: any = {};
+    try { raw = JSON.parse(json); } catch { /* nothing kept */ }
+    const out: Record<string, string> = {};
+    for (const i of INDICATORS) if (typeof raw?.[i.id] === "string" && clean(raw[i.id], 300)) out[i.id] = clean(raw[i.id], 300);
+    return out;
+}
+
 export const save = sessionMutation({
     args: { teacherId: v.id("schoolTeachers"), scores: v.string(), penalties: penaltiesV, courses: coursesV,
-        send: v.boolean(), expectedUpdatedAt: v.optional(v.number()) },
+        send: v.boolean(), expectedUpdatedAt: v.optional(v.number()),
+        // the deputy's notes; a coordinator's are ignored
+        review: v.optional(v.object({ note: v.string(), items: v.string() })) },
     handler: async (ctx, args) => {
         const { session, school, year, allowed } = await context(ctx);
         const teacher = await ctx.db.get(args.teacherId);
@@ -135,6 +149,7 @@ export const save = sessionMutation({
             teacherName: teacher!.fullName.replace(/\s+/g, " ").trim(), department: (teacher!.department ?? "").trim(),
             profile: await profileOf(ctx, args.teacherId),
             ...(sending ? { status: "sent" as const, coordinatorVersion: { ...content, at: now, name: session.name } } : {}),
+            ...(manager(session) && args.review ? { review: { note: clean(args.review.note, 1000), items: JSON.stringify(notesOf(args.review.items)) } } : {}),
         };
         const id = e ? (await ctx.db.patch(e._id, fields), e._id) : await ctx.db.insert("teacherEvaluations", {
             schoolId: school._id, academicYear: year, teacherId: args.teacherId, status: "draft", createdAt: now,
@@ -198,13 +213,19 @@ export const saveProfile = deputyMutation({
 });
 
 // The forms to print: one teacher's, or everything the visitor may see in a department
-export const printForms = sessionQuery({ args: { teacherId: v.optional(v.id("schoolTeachers")), department: v.optional(v.string()) }, handler: async (ctx, args) => {
+// With version "coordinator": the forms as the coordinator sent them, before the deputy's review.
+export const printForms = sessionQuery({ args: { teacherId: v.optional(v.id("schoolTeachers")), department: v.optional(v.string()), version: v.optional(v.literal("coordinator")) }, handler: async (ctx, args) => {
     const { session, school, settings, year, allowed } = await context(ctx);
     const all = (await ctx.db.query("teacherEvaluations").withIndex("by_school_year", (q: any) => q.eq("schoolId", school._id).eq("academicYear", year)).collect())
         .filter((e: any) => e.teacherId && (args.teacherId ? e.teacherId === args.teacherId : e.department === args.department));
     const forms = [];
     for (const e of all.sort((a: any, b: any) => a.teacherName.localeCompare(b.teacherName, "ar"))) {
-        if (allowed(await ctx.db.get(e.teacherId as any))) forms.push(await formOf(ctx, e, contentFor(session, e), settings));
+        if (!allowed(await ctx.db.get(e.teacherId as any))) continue;
+        if (!args.version) { forms.push(await formOf(ctx, e, contentFor(session, e), settings)); continue; }
+        const c = e.coordinatorVersion;
+        if (!c) continue;
+        forms.push({ ...(await formOf(ctx, { ...e, teacherSign: undefined }, { scores: parseScores(c.scores), total: c.total, penalties: c.penalties, courses: c.courses }, settings)),
+            status: "sent", version: { name: c.name, at: c.at } });
     }
     return forms;
 } });

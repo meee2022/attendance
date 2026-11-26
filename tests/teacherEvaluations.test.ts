@@ -72,9 +72,12 @@ describe("the yearly teacher appraisal", () => {
 
         // the deputy lowers three marks: the coordinator still sees what they sent
         const review = await get(f.tokens.deputy);
-        await f.save(f.tokens.deputy, f.scienceTeacher, full(3), false, review.evaluation.updatedAt);
+        await f.t.mutation(A.teacherEvaluations.save, { sessionToken: f.tokens.deputy, teacherId: f.scienceTeacher, scores: full(3), penalties: [], courses: [], send: false,
+            expectedUpdatedAt: review.evaluation.updatedAt, review: { note: "راجعت الأدلة", items: JSON.stringify({ "1.1": "لا يوجد دليل", "9.9": "x", "1.2": " " }) } });
         expect((await get(f.tokens.science)).evaluation.total).toBe(100);
+        expect((await get(f.tokens.science)).evaluation.review).toBeNull();
         expect((await get(f.tokens.deputy)).evaluation.total).toBe(97);
+        expect((await get(f.tokens.deputy)).evaluation.review).toEqual({ note: "راجعت الأدلة", items: { "1.1": "لا يوجد دليل" } });
 
         // no link before approval; after it the coordinator sees the final form beside their own
         const id = review.evaluation._id, token = "d".repeat(64);
@@ -83,6 +86,13 @@ describe("the yearly teacher appraisal", () => {
         await f.t.mutation(A.teacherEvaluations.approve, { sessionToken: f.tokens.deputy, id });
         mine = await get(f.tokens.science);
         expect([mine.evaluation.total, mine.evaluation.sent.total]).toEqual([97, 100]);
+        expect(mine.evaluation.review.items).toEqual({ "1.1": "لا يوجد دليل" });
+        // both versions print: the final form, and the coordinator's as sent
+        const print = (sessionToken: string, version?: "coordinator") => f.t.query(A.teacherEvaluations.printForms, { sessionToken, teacherId: f.scienceTeacher, version });
+        expect((await print(f.tokens.science))[0].total).toBe(97);
+        expect((await print(f.tokens.science, "coordinator"))[0].total).toBe(100);
+        expect((await print(f.tokens.deputy, "coordinator"))[0].version.name).toBeTruthy();
+        expect(await f.t.query(A.teacherEvaluations.printForms, { sessionToken: f.tokens.maths, teacherId: f.scienceTeacher, version: "coordinator" })).toEqual([]);
         await expect(f.t.mutation(A.teacherEvaluations.createLink, { sessionToken: f.tokens.maths, id, token })).rejects.toThrow();
         await f.t.mutation(A.teacherEvaluations.createLink, { sessionToken: f.tokens.science, id, token });
         const form = await f.t.query(A.evaluationLinks.readLink, { token });

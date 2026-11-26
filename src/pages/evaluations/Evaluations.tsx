@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Award, CheckCircle2, FileSpreadsheet, Link2, Loader2, Pencil, Printer, RotateCcw, Save, Search, Send, Trash2 } from "lucide-react";
+import { ArrowRight, Award, CheckCircle2, Download, FileSpreadsheet, Link2, Loader2, Pencil, Printer, RotateCcw, Save, Search, Send, Trash2 } from "lucide-react";
 import { useSupervisionQuery as useQuery, useSupervisionMutation as useMutation } from "../../lib/supervisionSession";
 import { api } from "../../../convex/_generated/api";
 import { EmptyState, LoadingSpinner, StatusChip } from "../../components/ui";
@@ -157,21 +157,28 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
         scores: (e?.scores ?? {}) as Scores,
         penalties: three<Penalty>(e?.penalties ?? [], { type: "", reason: "", date: "" }),
         courses: three<Course>(e?.courses ?? [], { name: "", place: "", duration: "", date: "" }),
+        note: (e?.review?.note ?? "") as string, notes: (e?.review?.items ?? {}) as Record<string, string>,
     }), [e]);
     const [scores, setScores] = useState<Scores>(initial.scores);
     const [penalties, setPenalties] = useState(initial.penalties);
     const [courses, setCourses] = useState(initial.courses);
+    // the deputy's notes to the coordinator: on the whole form, and beside each changed mark
+    const [note, setNote] = useState(initial.note);
+    const [notes, setNotes] = useState(initial.notes);
     const [busy, setBusy] = useState("");
     const [error, setError] = useState("");
     const [link, setLink] = useState("");
     const [copied, setCopied] = useState(false);
     const save = useMutation(A.save), approve = useMutation(A.approve), reopen = useMutation(A.reopen), createLink = useMutation(A.createLink), remove = useMutation(A.remove);
 
-    const dirty = editable && JSON.stringify({ scores, penalties, courses }) !== JSON.stringify(initial);
+    const dirty = editable && JSON.stringify({ scores, penalties, courses, note, notes }) !== JSON.stringify(initial);
     useUnsavedChanges(dirty, onDirtyChange);
     const done = scoredCount(scores), total = totalOf(scores), complete = done === INDICATORS.length;
     const level = complete ? levelOf(total) : "";
     const status = e?.status ?? "none";
+    // before and after: the deputy sees it while reviewing, the coordinator once approved
+    const compare = !!e?.sent && (data.manager || status === "approved");
+    const changedIds = e?.sent ? INDICATORS.filter(i => e.sent.scores[i.id] !== undefined && scores[i.id] !== undefined && e.sent.scores[i.id] !== scores[i.id]).map(i => i.id) : [];
 
     // the teacher's classroom visits this year, as evidence beside the form
     const mine = submittedOnly(visits).filter(v => v.teacherId === teacherId && v.averageScore !== null);
@@ -181,7 +188,8 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
         setBusy(name); setError("");
         try { await work(); } catch (err) { setError(errorText(err, "تعذّر الحفظ؛ تحقق من الاتصال وأعد المحاولة")); } finally { setBusy(""); }
     };
-    const doSave = (send: boolean) => save({ teacherId, scores: JSON.stringify(scores), penalties: filled(penalties), courses: filled(courses), send, expectedUpdatedAt: e?.updatedAt });
+    const doSave = (send: boolean) => save({ teacherId, scores: JSON.stringify(scores), penalties: filled(penalties), courses: filled(courses), send, expectedUpdatedAt: e?.updatedAt,
+        review: data.manager && e?.sent ? { note, items: JSON.stringify(Object.fromEntries(changedIds.filter(id => notes[id]?.trim()).map(id => [id, notes[id]]))) } : undefined });
     const back = () => { if (!dirty || window.confirm("يوجد تعديل لم يُحفظ. هل تريد العودة للقائمة؟")) onBack(); };
 
     return (
@@ -226,6 +234,9 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
                 </div>
             </div>
 
+            {compare && <Compare sent={e.sent} scores={scores} penalties={filled(penalties)} courses={filled(courses)} approved={status === "approved"}
+                note={note} setNote={editable && data.manager ? setNote : null} notes={notes} changedIds={changedIds} teacherId={teacherId}/>}
+
             <Section title="الجزاءات التأديبية التي وقعت على الموظف خلال سنة التقييم">
                 <Rows rows={penalties} set={setPenalties} disabled={!editable} labels={{ type: "نوع الجزاء", reason: "سبب الجزاء", date: "تاريخ الجزاء" }}/>
             </Section>
@@ -265,6 +276,11 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
                                             {before !== undefined && <span>العام السابق {before}</span>}
                                             {sent !== undefined && current !== undefined && sent !== current && (data.manager || status === "approved") && <span className="text-amber-700">درجة المنسق {sent}</span>}
                                         </p>
+                                        {compare && changedIds.includes(ind.id) && (editable && data.manager
+                                            ? <input value={notes[ind.id] ?? ""} maxLength={300} onChange={ev => setNotes(n => ({ ...n, [ind.id]: ev.target.value }))}
+                                                placeholder="سبب تعديل الدرجة (اختياري، يراه المنسق بعد الاعتماد)" aria-label={`سبب تعديل درجة المؤشر ${ind.id}`}
+                                                className={`${inputCls} mt-1.5 py-1.5! text-xs border-amber-200 bg-amber-50/40`}/>
+                                            : notes[ind.id] && <p className="text-xs font-bold text-amber-800 mt-1 leading-5">ملاحظة النائب: {notes[ind.id]}</p>)}
                                     </div>
                                     {/* whole marks, and «+0.5» to add half a mark (2 then +0.5 = 2.5) */}
                                     <div className="flex gap-1 items-center">
@@ -351,6 +367,90 @@ function Form({ data, teacherId, visits, onBack, onDirtyChange }: { data: any; t
                 {error && <p role="alert" className="max-w-7xl mx-auto px-4 pb-2 text-xs font-bold text-rose-700">{error}</p>}
             </div>
         </div>
+    );
+}
+
+const signed = (n: number) => <bdi dir="ltr">{n > 0 ? `+${n}` : n}</bdi>;
+const rowText = (rows: Record<string, string>[]) => rows.length ? rows.map(r => Object.values(r).filter(Boolean).join(" · ")).join("؛ ") : "لا يوجد";
+const pdfOf = (teacherId: string, coordinator: boolean) => window.open(`/supervision/evaluation/print/${teacherId}?${coordinator ? "v=coordinator&" : ""}download=1`, "_blank");
+
+// The coordinator's form beside the reviewed one: domain by domain, the marks
+// that changed and why, and both versions as PDF files
+function Compare({ sent, scores, penalties, courses, approved, note, setNote, notes, changedIds, teacherId }: {
+    sent: any; scores: Scores; penalties: Penalty[]; courses: Course[]; approved: boolean;
+    note: string; setNote: ((s: string) => void) | null; notes: Record<string, string>; changedIds: string[]; teacherId: string;
+}) {
+    const after = approved ? "بعد الاعتماد" : "بعد المراجعة";
+    const total = totalOf(scores);
+    const otherRows = JSON.stringify(sent.penalties ?? []) !== JSON.stringify(penalties) || JSON.stringify(sent.courses ?? []) !== JSON.stringify(courses);
+    return (
+        <section className="ev-rise bg-white rounded-2xl p-4 sm:p-5 shadow-[0_1px_2px_rgba(0,0,0,.04),0_8px_24px_rgba(92,21,35,.07)] space-y-4">
+            <div className="flex items-start gap-2 flex-wrap">
+                <div className="ml-auto">
+                    <h4 className="font-black text-slate-800 text-sm">قبل وبعد مراجعة النائب الأكاديمي</h4>
+                    <p className="text-[11px] font-bold text-slate-500 mt-0.5">نسخة المنسق: {sent.name} · أرسلها {new Date(sent.at).toLocaleDateString("ar-QA", { timeZone: "Asia/Qatar" })}</p>
+                </div>
+                <button className={`${ghost} px-3! py-1.5! text-xs`} onClick={() => pdfOf(teacherId, true)}><Download className="w-4 h-4"/>نسخة المنسق (PDF)</button>
+                <button className={`${ghost} px-3! py-1.5! text-xs`} onClick={() => pdfOf(teacherId, false)}><Download className="w-4 h-4"/>{approved ? "النسخة المعتمدة (PDF)" : "النسخة الحالية (PDF)"}</button>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-xs sm:text-sm">
+                    <thead className="bg-slate-50 text-xs font-black text-slate-500">
+                        <tr><th className="text-start px-2 sm:px-3 py-2">المجال</th><th className="px-2 sm:px-3 py-2">نسخة المنسق</th><th className="px-2 sm:px-3 py-2">{after}</th><th className="px-2 sm:px-3 py-2">الفرق</th></tr>
+                    </thead>
+                    <tbody className="tabular-nums">
+                        {EVALUATION_DOMAINS.map((d, di) => {
+                            const a = domainTotal(sent.scores, di + 1), b = domainTotal(scores, di + 1);
+                            return (
+                                <tr key={d.title} className={`border-t border-slate-100 ${a !== b ? "bg-amber-50/60" : ""}`}>
+                                    <td className="px-2 sm:px-3 py-2 font-bold text-slate-700">{di + 1}. {d.title}</td>
+                                    <td className="px-2 sm:px-3 py-2 text-center font-bold text-slate-600">{a}</td>
+                                    <td className="px-2 sm:px-3 py-2 text-center font-black text-slate-800">{b}</td>
+                                    <td className={`px-2 sm:px-3 py-2 text-center font-black ${b < a ? "text-rose-700" : b > a ? "text-emerald-700" : "text-slate-400"}`}>{signed(b - a)}</td>
+                                </tr>
+                            );
+                        })}
+                        <tr className="border-t-2 border-slate-200 bg-slate-50 font-black">
+                            <td className="px-2 sm:px-3 py-2 text-slate-800">المجموع من 100</td>
+                            <td className="px-2 sm:px-3 py-2 text-center text-slate-700">{sent.total}</td>
+                            <td className="px-2 sm:px-3 py-2 text-center text-qatar-maroon">{total}</td>
+                            <td className={`px-2 sm:px-3 py-2 text-center ${total < sent.total ? "text-rose-700" : total > sent.total ? "text-emerald-700" : "text-slate-400"}`}>{signed(total - sent.total)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {changedIds.length > 0
+                ? <div className="space-y-1.5">
+                    <p className="text-xs font-black text-slate-600">المؤشرات التي تغيّرت ({changedIds.length})</p>
+                    {INDICATORS.filter(i => changedIds.includes(i.id)).map(i => (
+                        <div key={i.id} className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5">
+                            <div className="flex gap-2 items-start">
+                                <span className="font-black text-slate-400">{i.id}</span>
+                                <span className="flex-1 text-slate-700 line-clamp-2">{i.text}</span>
+                                <span className="font-black tabular-nums whitespace-nowrap text-slate-500">من {sent.scores[i.id]} إلى <span className="text-qatar-maroon">{scores[i.id]}</span></span>
+                            </div>
+                            {notes[i.id]?.trim() && <p className="font-bold text-amber-800 mt-1">ملاحظة النائب: {notes[i.id]}</p>}
+                        </div>
+                    ))}
+                </div>
+                : <p className="text-xs font-bold text-slate-500">لم تتغيّر أي درجة عن نسخة المنسق.</p>}
+
+            {otherRows && <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 leading-6">
+                تغيّرت الجزاءات أو الدورات. في نسخة المنسق: الجزاءات: {rowText(sent.penalties ?? [])}. الدورات: {rowText(sent.courses ?? [])}.
+            </p>}
+
+            {setNote
+                ? <label className="block text-xs font-black text-slate-600">ملاحظات النائب للمنسق (يراها بعد الاعتماد)
+                    <textarea value={note} maxLength={1000} rows={3} onChange={ev => setNote(ev.target.value)} placeholder="مثال: خُفّضت درجات التخطيط لعدم وجود أدلة في ملف الإنجاز."
+                        className={`${inputCls} mt-1 font-normal leading-6 resize-y`}/>
+                </label>
+                : note.trim() && <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+                    <p className="text-xs font-black text-amber-900">ملاحظات النائب الأكاديمي</p>
+                    <p className="text-sm text-amber-900 leading-7 whitespace-pre-line mt-0.5">{note}</p>
+                </div>}
+        </section>
     );
 }
 

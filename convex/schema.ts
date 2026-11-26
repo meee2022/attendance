@@ -425,6 +425,9 @@ export default defineSchema({
             penalties: v.array(v.object({ type: v.string(), reason: v.string(), date: v.string() })),
             courses: v.array(v.object({ name: v.string(), place: v.string(), duration: v.string(), date: v.string() })),
         })),
+        // The deputy's notes to the coordinator: one on the whole form, and one
+        // beside each mark they changed (JSON { [indicatorId]: note })
+        review: v.optional(v.object({ note: v.string(), items: v.string() })),
         approval: v.optional(v.object({ name: v.string(), at: v.number() })),
         teacherSign: v.optional(v.object({ at: v.number(), signatureId: v.id("_storage"), comment: v.optional(v.string()) })),
         archived: v.optional(v.boolean()),  // a past year's form, kept for comparison
